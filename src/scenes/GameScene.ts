@@ -74,6 +74,8 @@ const FINAL_HIT_STOP_MS = 80;
  * (TUNING.antiStuckNudges essais), sinon dissolution. Vitesse de l'impulsion :
  */
 const STUCK_NUDGE_SPEED = 3 * ORB_PHYSICS.slowdown;
+/** orbe_coincee part 0,7 s avant l'impulsion : le souffle de l'Astre est déployé (DA). */
+const STUCK_BLOW_LEAD_MS = 700;
 /** Marge de prudence de la prédiction du final (px retirés au rayon du dernier cœur). */
 const FINAL_PREDICT_MARGIN_PX = 3;
 /** Vitesse minimale (px/s) pour anticiper le final ; en dessous, seul le contact compte. */
@@ -134,6 +136,8 @@ export class GameScene extends Phaser.Scene {
   private stuckRef = { x: 0, y: 0, t: 0 };
   /** Impulsions anti-blocage déjà données sur ce tir. */
   private stuckNudges = 0;
+  /** orbe_coincee envoyé, en attente de orbe_debloquee. */
+  private stuckAnnounced = false;
   private chain = 0;
   private ending = false;
   private tracker = new ShotTracker();
@@ -760,6 +764,7 @@ export class GameScene extends Phaser.Scene {
     this.slowmoUntil = 0;
     this.stuckRef = { x: start.x, y: start.y, t: this.time.now };
     this.stuckNudges = 0;
+    this.stuckAnnounced = false;
     this.companion?.setPhase('flight');
     this.reveal.fire();
     this.lanternShots = Math.max(0, this.lanternShots - 1);
@@ -863,15 +868,28 @@ export class GameScene extends Phaser.Scene {
     if (!orb) return;
     if (Math.hypot(orb.x - this.stuckRef.x, orb.y - this.stuckRef.y) > 12) {
       this.stuckRef = { x: orb.x, y: orb.y, t: time };
+      if (this.stuckAnnounced) {
+        this.stuckAnnounced = false;
+        gameEvents.emit('orbe_debloquee', {});
+      }
       return;
     }
-    if (time - this.stuckRef.t < TUNING.antiStuckSeconds * 1000) return;
-    this.stuckRef.t = time;
+    const still = time - this.stuckRef.t;
+    const limit = TUNING.antiStuckSeconds * 1000;
+    if (still < limit - STUCK_BLOW_LEAD_MS) return;
     const near = this.level.crystals.filter((c) => {
       const w = toWorld(c);
       const reach = c.shape?.type === 'brick' ? Math.max(c.shape.w, c.shape.h) / 2 : 10;
       return Math.hypot(w.x - orb.x, w.y - orb.y) < reach + ORB_RADIUS + 12;
     });
+    // Rien de cassable autour : l'Astre prend la pose (il gonfle les joues) un peu avant
+    // l'impulsion, pour que son souffle tombe au moment où l'orbe repart.
+    if (!this.stuckAnnounced && !near.some((c) => c.lit)) {
+      this.stuckAnnounced = true;
+      gameEvents.emit('orbe_coincee', { attempt: this.stuckNudges + 1 });
+    }
+    if (still < limit) return;
+    this.stuckRef.t = time;
     // 1. Le classique du genre : les cristaux allumés qui la retiennent se brisent.
     const broken = breakLitNow(
       this.level,
@@ -883,7 +901,6 @@ export class GameScene extends Phaser.Scene {
     }
     // 2. Rien de cassable (mur incassable, cristal éteint) : petite impulsion, 2 essais.
     this.stuckNudges += 1;
-    gameEvents.emit('orbe_coincee', { attempt: this.stuckNudges });
     if (this.stuckNudges <= TUNING.antiStuckNudges) {
       // Vers l'extérieur du plus proche obstacle, ou vers le centre du terrain.
       const ref = near
@@ -898,6 +915,10 @@ export class GameScene extends Phaser.Scene {
     }
     // 3. Toujours coincée : elle se dissout en particules, le tir se termine normalement.
     this.dissolveOrb(orb.x, orb.y);
+    if (this.stuckAnnounced) {
+      this.stuckAnnounced = false;
+      gameEvents.emit('orbe_debloquee', {});
+    }
     // Tir final : l'orbe n'est tombée dans aucune zone, elle vaut la plus faible (la plus proche).
     this.finishShot(
       false,

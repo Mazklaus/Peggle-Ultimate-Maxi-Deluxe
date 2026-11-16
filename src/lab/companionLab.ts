@@ -108,6 +108,7 @@ class CompanionLab extends Phaser.Scene {
       'echec',
       'inactivite',
       'orbe_coincee',
+      'orbe_debloquee',
     ];
     for (const e of events) {
       add(e, () =>

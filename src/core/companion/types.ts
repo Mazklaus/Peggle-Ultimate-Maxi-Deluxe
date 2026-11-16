@@ -91,6 +91,8 @@ export interface Keyframe {
   glow?: number;
   /** Rougeur 0..1 (retient son souffle). */
   flush?: number;
+  /** Ce que l'Astre tend vers l'orbe (0..1), orienté par le regard (DA, orbe coincée). */
+  reach?: number;
 }
 
 export interface ReactionDef {
@@ -134,7 +136,11 @@ export type ReactionTrigger =
   | 'tir_moyen'
   | 'proche_coeur'
   | 'orbe_coincee'
+  | 'orbe_debloquee'
   | 'reveil';
+
+/** Accessoire tendu vers l'orbe coincée : souffle, brume, ressort, plume. */
+export type ReachKind = 'blow' | 'mist' | 'spring' | 'feather';
 
 export interface CompanionDef {
   id: string;
@@ -142,6 +148,8 @@ export interface CompanionDef {
   color: number;
   colorLight: number;
   colorDark: number;
+  /** Ce que l'Astre tend vers une orbe coincée (DA specs-astres.md §6). */
+  reach?: ReachKind;
   reactions: Partial<Record<ReactionTrigger, ReactionDef[]>>;
   idleShort: ReactionDef[];
   idleLong: ReactionDef[];
@@ -169,6 +177,8 @@ export interface Pose {
   shake: number;
   glow: number;
   flush: number;
+  /** Accessoire « reach » déployé (0..1), voir CompanionDef.reach. */
+  reach: number;
   excitement: number;
   /** Événements ponctuels de cette frame. */
   bursts: Burst[];
