@@ -84,6 +84,12 @@ export class CompanionView {
   private time = 0;
   private unsubscribe: Array<() => void> = [];
   private lastPose: Pose | null = null;
+  private scene: Phaser.Scene;
+  /** Position de la loge (retour après une sortie). */
+  private home: { x: number; y: number };
+  /** Hors de la loge (overlays de fin) : plus bridé à la marge. */
+  private outside = false;
+  private travel?: Phaser.Tweens.Tween;
 
   /** anchor = position des « pieds » de l'Astre dans sa loge (UI/UX : 100, 270). */
   constructor(
@@ -93,7 +99,9 @@ export class CompanionView {
     rng?: () => number,
   ) {
     this.def = def;
-    this.anchor = anchor;
+    this.scene = scene;
+    this.anchor = { ...anchor };
+    this.home = { ...anchor };
     this.brain = new CompanionBrain(def, rng);
     this.fx = scene.add.graphics().setDepth(20);
     this.gfx = scene.add.graphics().setDepth(21);
@@ -131,6 +139,72 @@ export class CompanionView {
 
   get pose(): Pose | null {
     return this.lastPose;
+  }
+
+  /** Position actuelle des pieds de l'Astre (pour animer une entrée dans un overlay). */
+  get position(): { x: number; y: number } {
+    return { ...this.anchor };
+  }
+
+  /**
+   * Sortie de la loge (validé GD, specs UI/UX 5 et 6) : l'Astre rejoint (x, y) = pieds, en
+   * trois bonds, puis joue « victoire » (danse) ou « consolation » (réaction d'échec,
+   * jamais moqueuse). Le dessin reste dans la scène de l'Astre : un overlay dessiné dans
+   * une autre scène passe par-dessus (voir setDepth, ou une CompanionView dans l'overlay).
+   */
+  exitTo(x: number, y: number, mode: 'victoire' | 'consolation'): Promise<void> {
+    this.outside = true;
+    this.brain.setPhase('over');
+    return this.hopTo(x, y).then(() => {
+      this.brain.onEvent(mode === 'victoire' ? 'victoire' : 'echec');
+    });
+  }
+
+  /** Retour dans la loge (rejouer, niveau suivant). */
+  returnHome(): Promise<void> {
+    return this.hopTo(this.home.x, this.home.y).then(() => {
+      this.outside = false;
+    });
+  }
+
+  /** Profondeur d'affichage (au-dessus d'un panneau d'overlay dessiné dans la même scène). */
+  setDepth(depth: number): void {
+    this.fx.setDepth(depth);
+    this.gfx.setDepth(depth + 1);
+    this.symbolText.setDepth(depth + 2);
+  }
+
+  setVisible(on: boolean): void {
+    this.fx.setVisible(on);
+    this.gfx.setVisible(on);
+    this.symbolText.setVisible(on);
+  }
+
+  /** Déplacement en bonds (le corps garde ses réactions pendant le trajet). */
+  private hopTo(x: number, y: number): Promise<void> {
+    this.travel?.stop();
+    const from = { ...this.anchor };
+    const dist = Math.hypot(x - from.x, y - from.y);
+    const hops = Math.max(1, Math.min(4, Math.round(dist / 140)));
+    const t = { u: 0 };
+    return new Promise((resolve) => {
+      this.travel = this.scene.tweens.add({
+        targets: t,
+        u: 1,
+        duration: 260 * hops,
+        ease: 'Linear',
+        onUpdate: () => {
+          const arc = Math.abs(Math.sin(t.u * Math.PI * hops)) * 46;
+          this.anchor.x = from.x + (x - from.x) * t.u;
+          this.anchor.y = from.y + (y - from.y) * t.u - arc;
+        },
+        onComplete: () => {
+          this.anchor.x = x;
+          this.anchor.y = y;
+          resolve();
+        },
+      });
+    });
   }
 
   update(dtSeconds: number, input: CompanionWorldInput = {}): void {
@@ -173,6 +247,7 @@ export class CompanionView {
 
   /** Garde toute la silhouette (corps étiré + bras) dans la marge, jamais sur la zone de jeu. */
   private clampX(x: number, sx: number): number {
+    if (this.outside) return x;
     const half = BODY_R * Math.max(1, sx) + ARM_OVERHANG;
     return Phaser.Math.Clamp(x, MARGIN.minX + half, MARGIN.maxX - half);
   }
@@ -494,7 +569,10 @@ export class CompanionView {
     const s = pose.symbol ? 0.4 + 0.6 * easeOutBack(this.symbolPop) : 0;
     const bob = pose.symbol === 'zzz' ? Math.sin(this.time * 2) * 4 : 0;
     this.symbolText
-      .setPosition(Phaser.Math.Clamp(c.x + 26, 20, MARGIN.maxX - 14), c.y - BODY_R - 34 + bob)
+      .setPosition(
+        this.outside ? c.x + 26 : Phaser.Math.Clamp(c.x + 26, 20, MARGIN.maxX - 14),
+        c.y - BODY_R - 34 + bob,
+      )
       .setScale(s)
       .setVisible(Boolean(pose.symbol));
   }
@@ -562,7 +640,8 @@ export class CompanionView {
       const gravity =
         p.kind === 'confetti' || p.kind === 'sweat' ? 260 : p.kind === 'sparkle' ? 120 : 0;
       p.vy += gravity * dt;
-      p.x = Phaser.Math.Clamp(p.x + p.vx * dt, MARGIN.minX, MARGIN.maxX);
+      p.x += p.vx * dt;
+      if (!this.outside) p.x = Phaser.Math.Clamp(p.x, MARGIN.minX, MARGIN.maxX);
       p.y += p.vy * dt;
       switch (p.kind) {
         case 'sparkle':
