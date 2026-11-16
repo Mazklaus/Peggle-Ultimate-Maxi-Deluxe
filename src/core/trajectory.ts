@@ -71,6 +71,8 @@ export interface PredictInput extends TrajectoryInput {
   target?: Circle;
   /** Sous-pas par pas de référence (la physique du jeu tourne à 120 pas/s : 2). */
   substeps?: number;
+  /** Champ de force du décor (aimants), en px par pas de référence au carré. */
+  field?: (x: number, y: number) => { ax: number; ay: number };
 }
 
 /**
@@ -97,6 +99,11 @@ export function predictPath(input: PredictInput): {
     for (let k = 0; k < n; k++) {
       // Sous-pas : vitesses en px par pas de référence, déplacement divisé par n.
       vy += g;
+      if (input.field) {
+        const f = input.field(x, y);
+        vx += f.ax / n;
+        vy += f.ay / n;
+      }
       x += vx / n;
       y += vy / n;
       if (x - input.radius <= input.minX && vx < 0) {

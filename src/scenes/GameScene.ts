@@ -416,6 +416,7 @@ export class GameScene extends Phaser.Scene {
     this.trackOrb(orb);
     this.updateCrazyBounce(delta / 1000);
     this.updateMagnet(delta / 1000);
+    this.applyMagnets(delta / 1000);
     this.updateTwin(time);
     this.hud.setPowerActivity(this.crazyLeft > 0 ? this.crazyLeft / VOLTE.seconds : 0, !!this.twin);
     const caught = this.inBucket(orb);
@@ -566,6 +567,23 @@ export class GameScene extends Phaser.Scene {
       if (!t) continue;
       g.lineStyle(2, PALETTE.success, 0.25 + 0.6 * pull.strength).lineBetween(o.x, o.y, t.x, t.y);
       g.strokeCircle(t.x, t.y, 14 + 4 * Math.sin(this.time.now / 90));
+    }
+  }
+
+  /** Aimants du décor : chaque orbe du tir est attirée (même conversion que Mousse). */
+  private applyMagnets(dt: number): void {
+    const orbs = this.shotOrbs();
+    this.decor.setOrbs(orbs);
+    if (!this.decor.hasMagnets || dt <= 0 || this.pierceLeft > 0) return;
+    const k = (dt * 60) / 3600;
+    for (const o of orbs) {
+      const a = this.decor.magnetAt(o.x, o.y);
+      if (a.ax === 0 && a.ay === 0) continue;
+      const v = this.orbVelocity(o);
+      (o as unknown as Phaser.Physics.Matter.Components.Velocity).setVelocity(
+        v.x + a.ax * k,
+        v.y + a.ay * k,
+      );
     }
   }
 
@@ -875,6 +893,7 @@ export class GameScene extends Phaser.Scene {
       obstacles: this.obstacles(heart.id),
       restitution: ORB_RESTITUTION,
       wallRestitution: ORB_PHYSICS.wallRestitution,
+      field: this.decor.field,
       maxBounces: 99,
       maxSteps: steps,
       substeps: Math.round(ORB_PHYSICS.stepsPerSecond / 60),
@@ -1296,6 +1315,7 @@ export class GameScene extends Phaser.Scene {
     this.endTimeWarp();
     this.endBolt();
     this.hud.setPowerActivity(0, false);
+    this.decor.setOrbs([]);
     this.hud.endShot();
     this.applyGameScale(1);
     const result = endShot(this.level, catches);
@@ -1514,6 +1534,7 @@ export class GameScene extends Phaser.Scene {
       maxY: GAME_HEIGHT,
       obstacles: this.obstacles(),
       wallRestitution: ORB_PHYSICS.wallRestitution,
+      field: this.decor.field,
     };
     if (this.companionId === 'pip' && this.reveal.armed) {
       // Pouvoir de Pip : trajectoire révélée jusqu'au 3e rebond ou 1,5 s.

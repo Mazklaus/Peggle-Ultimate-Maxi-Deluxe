@@ -5,7 +5,8 @@
  * Un peg rejoint un élément par "group" ; ses x, y sont sa position à t = 0.
  * Le temps est celui du jeu (ralenti et pause compris), en secondes.
  */
-import type { DecorOrbit, DecorRotate } from './levelFormat';
+import type { DecorMagnet, DecorOrbit, DecorRotate } from './levelFormat';
+import { ORB_PHYSICS } from './physics';
 
 export type RotateDecor = DecorRotate;
 export type OrbitDecor = DecorOrbit;
@@ -50,4 +51,45 @@ export function pegTravel(d: MovingDecor, x0: number, y0: number, seconds: numbe
   const r = d.type === 'rotate' ? Math.hypot(x0 - d.cx, y0 - d.cy) : Math.max(d.rx, d.ry);
   // Corde de l'arc balayé (au plus un demi-tour : au-delà la distance redescend).
   return 2 * r * Math.sin(sweep / 2);
+}
+
+/**
+ * Aimant (GD reglages-jalon2 §2) : champ radial qui attire l'orbe, maximal juste hors de la
+ * zone morte (20 px, anti-collage), nul au bord du rayon. strength 1 = 300 px/s² du
+ * prototype (milieu de 250-400), mis à l'échelle du ralenti global (×k², comme la gravité).
+ */
+export const MAGNET = {
+  accel: 300 * ORB_PHYSICS.slowdown * ORB_PHYSICS.slowdown,
+  deadZone: 20,
+};
+
+export function isMagnet(d: { type?: unknown }): d is DecorMagnet {
+  return d.type === 'magnet';
+}
+
+/** Accélération (px/s² de temps de jeu) des aimants sur l'orbe en (x, y), coordonnées du niveau. */
+export function magnetAccel(
+  magnets: ReadonlyArray<DecorMagnet>,
+  x: number,
+  y: number,
+): { ax: number; ay: number } {
+  let ax = 0;
+  let ay = 0;
+  for (const m of magnets) {
+    const dx = m.x - x;
+    const dy = m.y - y;
+    const d = Math.hypot(dx, dy);
+    const w = magnetWeight(m, d);
+    if (w <= 0) continue;
+    const a = MAGNET.accel * m.strength * w;
+    ax += (dx / d) * a;
+    ay += (dy / d) * a;
+  }
+  return { ax, ay };
+}
+
+/** Force relative (0..1) d'un aimant à la distance d de son centre. */
+export function magnetWeight(m: DecorMagnet, d: number): number {
+  if (d <= MAGNET.deadZone || d >= m.radius) return 0;
+  return 1 - (d - MAGNET.deadZone) / Math.max(1, m.radius - MAGNET.deadZone);
 }
