@@ -4,7 +4,12 @@
  */
 import { TUNING, type Tuning } from './tuning';
 
-export type CrystalKind = 'heart' | 'common' | 'bonus';
+/** wall = incassable (rebond seulement), power = déclenche le pouvoir de l'Astre. */
+export type CrystalKind = 'heart' | 'common' | 'bonus' | 'power' | 'wall';
+
+/** Forme physique du cristal (défaut : cercle de rayon 10). */
+export type CrystalShape =
+  { type: 'circle'; r: number } | { type: 'brick'; w: number; h: number; angle: number };
 export type Phase = 'aiming' | 'shooting' | 'won' | 'lost';
 export type Rng = () => number;
 
@@ -14,6 +19,7 @@ export interface Crystal {
   y: number;
   kind: CrystalKind;
   lit: boolean;
+  shape?: CrystalShape;
 }
 
 export interface LevelState {
@@ -121,7 +127,7 @@ export function startShot(s: LevelState): boolean {
 export function hitCrystal(s: LevelState, id: number): number {
   if (s.phase !== 'shooting') return 0;
   const c = s.crystals.find((k) => k.id === id);
-  if (!c || c.lit) return 0;
+  if (!c || c.lit || c.kind === 'wall') return 0;
   c.lit = true;
   const gained = s.tuning.points[c.kind] * multiplier(s);
   s.shotHits += 1;

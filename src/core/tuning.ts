@@ -7,7 +7,7 @@ export const TUNING = {
   heartCrystals: 20,
   commonCrystals: 60,
   bonusCrystals: 1,
-  points: { common: 10, heart: 100, bonus: 500 },
+  points: { common: 10, heart: 100, bonus: 500, power: 10, wall: 0 },
   /** Multiplicateurs, débloqués à 25 / 50 / 75 / 90 % de cœurs brisés. */
   multiplierSteps: [1, 2, 3, 5, 10],
   multiplierThresholds: [0.25, 0.5, 0.75, 0.9],
