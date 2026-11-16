@@ -31,7 +31,7 @@ import { bell, celesta, cymbal, playInstrument, woodTick } from './instruments';
 import { MusicPlayer } from './music';
 import { VoicePlayer } from './voicePlayer';
 
-export type CrystalKind = 'heart' | 'common' | 'bonus' | 'power';
+export type CrystalKind = 'heart' | 'common' | 'bonus' | 'power' | 'wall';
 
 /** Données facultatives portées par les événements du bus. */
 export interface GameEventData {
@@ -123,8 +123,9 @@ export class AudioDirector {
   }
 
   /** Point d'entrée unique : à brancher sur le bus d'événements (`gameEvents.onAny`). */
-  onGameEvent(name: string, data: GameEventData = {}): void {
+  onGameEvent(name: string, payload: unknown = {}): void {
     if (!this.engine.ctx) return;
+    const data = (payload ?? {}) as GameEventData;
     switch (name) {
       case 'niveau_debut':
         return this.levelStart();
@@ -195,6 +196,8 @@ export class AudioDirector {
   crystalHit(kind: CrystalKind): void {
     const eng = this.engine;
     if (!eng.ctx) return;
+    // Cristal-mur indestructible : simple tic, il ne fait pas monter la mélodie.
+    if (kind === 'wall') return this.wallHit();
     const t = eng.now() + 0.005;
     const note = chainNote(this.chain);
     this.chain += 1;
