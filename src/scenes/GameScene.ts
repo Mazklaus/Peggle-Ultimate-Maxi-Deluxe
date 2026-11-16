@@ -101,9 +101,10 @@ const VOLTE = { restitution: 1.05, maxSpeed: 900 * ORB_PHYSICS.slowdown, seconds
 /**
  * Ralenti du temps d'Horloge (GD reglages-jalon1, durée de reglages-jalon2 §5) : tir chargé
  * à l'échelle 0,5, 6,5 s réelles au plus ; le réceptacle suit le pointeur, 1,5 fois plus large.
- * follow : vitesse de rattrapage du pointeur (fraction de l'écart par seconde de jeu).
+ * follow : vitesse de rattrapage du pointeur (fraction de l'écart par seconde de jeu) ;
+ * keySpeed : au clavier, vitesse de la cible en multiple de la vitesse normale du réceptacle.
  */
-const HORLOGE = { scale: 0.5, realMs: 6500, bucketScale: 1.5, follow: 14 };
+const HORLOGE = { scale: 0.5, realMs: 6500, bucketScale: 1.5, follow: 14, keySpeed: 3 };
 /**
  * Orbe éclair de Grelot (GD reglages-jalon1, charges de reglages-jalon2 §4 bis) : tir chargé
  * en ligne droite sans gravité, à 1,3 fois la vitesse ; perce 3 cristaux (allumés sans
@@ -184,6 +185,9 @@ export class GameScene extends Phaser.Scene {
   private crazyLeft = 0;
   /** Fin (horloge réelle) du ralenti d'Horloge ; 0 = inactif. */
   private warpUntil = 0;
+  /** Cible du réceptacle pendant Horloge (pointeur ou flèches), dernière position du pointeur. */
+  private warpTargetX = 0;
+  private warpPointerX = 0;
   /** Orbe éclair de Grelot : cristaux restant à percer (0 = inactif), déjà percés, durée. */
   private pierceLeft = 0;
   private pierced = new Set<number>();
@@ -200,6 +204,8 @@ export class GameScene extends Phaser.Scene {
   private hudDimmed = false;
   /** Pause : jeu figé, scène active (l'Astre continue de s'animer). */
   private paused = false;
+  /** Instant (horloge réelle) de la mise en pause : les minuteries réelles sont décalées. */
+  private pausedAt = 0;
   private stuckRef = { x: 0, y: 0, t: 0 };
   private decor!: DecorLayer;
   /** Astre en jeu (id de la liste), null sans Astre. */
@@ -1019,6 +1025,8 @@ export class GameScene extends Phaser.Scene {
   /** Pouvoir d'Horloge : tout le jeu ralentit, le réceptacle s'élargit et suit le pointeur. */
   private startTimeWarp(): void {
     this.warpUntil = this.time.now + HORLOGE.realMs;
+    this.warpTargetX = this.bucket.x;
+    this.warpPointerX = this.input.activePointer.worldX;
     this.bucket.setScale(HORLOGE.bucketScale, 1).setStrokeStyle(2, PALETTE.success, 0.95);
     if (this.slowmoUntil <= 0) this.applyGameScale(HORLOGE.scale);
   }
@@ -1428,6 +1436,7 @@ export class GameScene extends Phaser.Scene {
   private openPause(): void {
     if (this.ending || this.paused) return;
     this.paused = true;
+    this.pausedAt = this.time.now;
     this.matter.world.pause();
     this.tweens.pauseAll();
     this.input.enabled = false;
@@ -1441,6 +1450,10 @@ export class GameScene extends Phaser.Scene {
   resumeFromPause(): void {
     if (!this.paused) return;
     this.paused = false;
+    // Le ralenti d'Horloge et celui du final comptent en temps réel : la pause ne les use pas.
+    const away = this.time.now - this.pausedAt;
+    if (this.warpUntil > 0) this.warpUntil += away;
+    if (this.slowmoUntil > 0) this.slowmoUntil += away;
     this.matter.world.resume();
     this.tweens.resumeAll();
     this.input.enabled = true;
@@ -1459,8 +1472,14 @@ export class GameScene extends Phaser.Scene {
     const min = PLAYFIELD.x + half;
     const max = PLAYFIELD.x + PLAYFIELD.w - half;
     if (this.warpUntil > 0) {
-      // Ralenti d'Horloge : le réceptacle rattrape le pointeur.
-      const target = Phaser.Math.Clamp(this.input.activePointer.worldX, min, max);
+      // Ralenti d'Horloge : le réceptacle rattrape le pointeur, ou suit les flèches (clavier).
+      const px = this.input.activePointer.worldX;
+      if (px !== this.warpPointerX) this.warpTargetX = this.warpPointerX = px;
+      const keys = this.input.keyboard?.createCursorKeys();
+      const dir = (keys?.right.isDown ? 1 : 0) - (keys?.left.isDown ? 1 : 0);
+      this.warpTargetX += dir * speed * HORLOGE.keySpeed * (delta / 1000);
+      this.warpTargetX = Phaser.Math.Clamp(this.warpTargetX, min, max);
+      const target = this.warpTargetX;
       const k = Math.min(1, HORLOGE.follow * (delta / 1000));
       this.bucket.x += (target - this.bucket.x) * k;
       return;
