@@ -29,7 +29,7 @@ import {
 } from '../core/shotEvents';
 import { aimGuide, predictPath } from '../core/trajectory';
 import { TUNING } from '../core/tuning';
-import { REGISTRY, SCENES } from './keys';
+import { REGISTRY, SCENES, STORY_LEVELS } from './keys';
 import { CompanionView } from './CompanionView';
 import type { ResultsData } from './ResultsScene';
 import { CRYSTAL_COLORS, CRYSTAL_COLORS_CB, PALETTE, textStyle, TEXT } from './theme';
@@ -117,7 +117,7 @@ export class GameScene extends Phaser.Scene {
     const firstSave = this.registry.get(REGISTRY.save) as SaveData | undefined;
     if (
       !this.sceneData.test &&
-      this.sceneData.level.id === 'ch1-1' &&
+      this.sceneData.level.id === STORY_LEVELS.ch1First &&
       firstSave &&
       markSeen(firstSave, 'reveil_pip')
     ) {

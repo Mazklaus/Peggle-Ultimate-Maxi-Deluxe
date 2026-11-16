@@ -27,6 +27,7 @@ export interface CutsceneData {
 }
 
 const FADE_MS = 300;
+/** Scripts du DA, dans l'ordre (vignettes.js, le dernier, définit window.Vignettes). */
 const SCRIPTS = ['astres-rig', 'astres-reactions-j2', 'gardienne', 'vignettes'] as const;
 
 export class CutsceneScene extends Phaser.Scene {
@@ -50,9 +51,9 @@ export class CutsceneScene extends Phaser.Scene {
 
   preload(): void {
     // Scripts classiques du DA (globals AstresRig, Gardienne, Vignettes), chargés une fois.
-    for (const name of SCRIPTS) {
-      if (!this.cache.text.exists(`da:${name}`)) this.load.script(`da:${name}`, `da/${name}.js`);
-    }
+    // Déjà exécutés lors d'une cinématique précédente : on ne les recharge pas.
+    if ((window as unknown as { Vignettes?: unknown }).Vignettes) return;
+    for (const name of SCRIPTS) this.load.script(`da:${name}`, `da/${name}.js`);
   }
 
   create(): void {
