@@ -55,7 +55,7 @@ describe('éditeur de niveaux : modèle', () => {
     expect(at(0)).toBe(1);
     expect(at(-5)).toBe(1);
     expect(at(175)).toBe(1);
-    expect(at(87)).toBe(1); // face courte horizontale
+    expect(at(90)).toBe(0); // mur vertical (rampe) : autorisé
     expect(at(10)).toBe(0);
     expect(at(45)).toBe(0);
     expect(at(0, 'common')).toBe(0); // cassable : pas concerné
