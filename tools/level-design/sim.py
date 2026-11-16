@@ -36,9 +36,24 @@ def group_motion(decor):
             out[d['id']] = f
     return out
 
-def simulate_shot(pegs, alive, angle, bucket_x0, bucket_dir, max_steps=4000, motion=None, t0=0.0, max_contacts=None):
+LAST_POWER = {}  # état de l'orbe au 1er contact avec un cristal pouvoir (x, y, vx, vy, t)
+
+VOLTE_REST, VOLTE_VMAX, VOLTE_FRAMES = 1.15, 675/60, 10*60      # Volte : rebond fou
+MOUSSE_R, MOUSSE_A, MOUSSE_DEAD = 220, 900/3600, 20                             # Mousse : aimant à cœurs (px/frame²)
+CLOCK_FRAMES, CLOCK_W = int(10*60*0.5), 2.0                      # Horloge : tout le tir, plafond 10 s réelles à x0,5
+GRELOT_K, GRELOT_N = 1.3, 3                                     # Grelot : éclair
+NUAGE_VY, NUAGE_W = 450/60, 2.0                                              # Nuage-Lune : vy min
+SHOT = {}  # infos du dernier tir : relance Nuage-Lune consommée
+
+def simulate_shot(pegs, alive, angle, bucket_x0, bucket_dir, max_steps=4000, motion=None, t0=0.0, max_contacts=None, start=None, mode=None):
+    """mode : {'volte', 'mousse', 'clock', 'grelot', 'relaunch'} (pouvoirs actifs pendant ce tir)."""
+    mode = mode or {}
     x = CANNON[0] + math.cos(angle)*MUZZLE; y = CANNON[1] + math.sin(angle)*MUZZLE
     vx, vy = math.cos(angle)*SPEED, math.sin(angle)*SPEED
+    if start: x, y, vx, vy = start
+    LAST_POWER.clear(); SHOT.clear()
+    volte_until = -1; wide = 1.0; bolt = GRELOT_N if mode.get('grelot') else 0; relaunch = bool(mode.get('relaunch'))
+    if bolt: vx, vy = vx*GRELOT_K, vy*GRELOT_K
     hits = []; hitset = set(); bx, bd = bucket_x0, bucket_dir
     bspeed = W / BUCKET_CROSS_S / 60
     stuck_ref = (x, y, 0); t = 0
@@ -59,8 +74,18 @@ def simulate_shot(pegs, alive, angle, bucket_x0, bucket_dir, max_steps=4000, mot
         if bx < BUCKET_W/2: bd = 1
         for i in movers:
             pegs[i]['x'], pegs[i]['y'] = motion[pegs[i]['group']](*home[i], t0 + t/60)
+        clock = mode.get('clock') and t <= CLOCK_FRAMES
+        if clock: bx = max(BUCKET_W*CLOCK_W/2, min(W - BUCKET_W*CLOCK_W/2, x))  # le réceptacle suit le pointeur
+        if mode.get('mousse'):
+            tgt = [(math.hypot(pegs[i]['x']-x, pegs[i]['y']-y), i) for i in alive
+                   if pegs[i].get('kind') == 'heart' and i not in hitset]
+            tgt = [c for c in tgt if c[0] < MOUSSE_R]
+            if tgt:
+                d, i = min(tgt); a = MOUSSE_A*(1 - d/MOUSSE_R) if d > MOUSSE_DEAD else 0; d = d or 1
+                vx += a*(pegs[i]['x']-x)/d; vy += a*(pegs[i]['y']-y)/d
+        rest = VOLTE_REST if t <= volte_until else REST
         for _ in range(SUB):
-            vy += G / SUB
+            if not bolt: vy += G / SUB
             x += vx / SUB; y += vy / SUB
             if x < ORB_R: x = ORB_R; vx = abs(vx)*WALL_REST
             if x > W-ORB_R: x = W-ORB_R; vx = -abs(vx)*WALL_REST
@@ -74,17 +99,39 @@ def simulate_shot(pegs, alive, angle, bucket_x0, bucket_dir, max_steps=4000, mot
                     cx, cy = p['x'], p['y']; rr = ORB_R + p.get('r', 10)
                 dx, dy = x-cx, y-cy; d2 = dx*dx+dy*dy
                 if d2 < rr*rr:
+                    if bolt and p.get('kind') != 'wall':  # l'éclair perce sans rebondir
+                        if i not in hitset:
+                            hitset.add(i); hits.append(i); bolt -= 1
+                            if p.get('kind') == 'power' and not LAST_POWER: LAST_POWER.update(x=x, y=y, vx=vx, vy=vy, t=t)
+                            if max_contacts and len(hits) >= max_contacts: return hits, False, bx, bd, t/60
+                        continue
                     d = math.sqrt(d2) or 0.001; nx, ny = dx/d, dy/d
                     x, y = cx + nx*rr, cy + ny*rr
                     vn = vx*nx + vy*ny
                     if vn < 0:
-                        vx -= (1+REST)*vn*nx; vy -= (1+REST)*vn*ny
+                        vx -= (1+rest)*vn*nx; vy -= (1+rest)*vn*ny
+                        if rest > 1:
+                            sp = math.hypot(vx, vy)
+                            if sp > VOLTE_VMAX: vx, vy = vx*VOLTE_VMAX/sp, vy*VOLTE_VMAX/sp
                     if i not in hitset and p.get('kind') != 'wall':
                         hitset.add(i); hits.append(i)
+                        if p.get('kind') == 'power' and not LAST_POWER: LAST_POWER.update(x=x, y=y, vx=vx, vy=vy, t=t)
+                        if p.get('kind') == 'power' and mode.get('volte') and volte_until < 0: volte_until = t + VOLTE_FRAMES
                         if max_contacts and len(hits) >= max_contacts: return hits, False, bx, bd, t/60
-        if y + ORB_R >= BUCKET_Y - 9 and y < H and abs(x - bx) <= BUCKET_W/2:
+        bw = BUCKET_W*max(CLOCK_W if clock else 1.0, wide)
+        if y + ORB_R >= BUCKET_Y - 9 and y < H and abs(x - bx) <= bw/2:
             return hits, True, bx, bd, t/60
         if y > H + 16:
+            if relaunch:  # Nuage-Lune : l'orbe remonte du bas
+                relaunch = False; SHOT['relaunched'] = True
+                y = H; wide = NUAGE_W
+                hs = [pegs[i] for i in alive if pegs[i].get('kind') == 'heart' and i not in hitset]
+                if hs:  # remontée calée sur le cœur restant le plus bas
+                    hp = max(hs, key=lambda p: p['y'])
+                    vy = -max(math.sqrt(2*G*max(1, H - hp['y'] + 10)), NUAGE_VY); tt = -vy/G
+                    vx = (hp['x'] - x)/tt
+                else: vy = -max(0.8*abs(vy), NUAGE_VY)
+                continue
             return hits, False, bx, bd, t/60
         if math.hypot(x-stuck_ref[0], y-stuck_ref[1]) > 12: stuck_ref = (x, y, t)
         elif t - stuck_ref[2] > 180:
@@ -115,7 +162,7 @@ def play(level, policy='greedy', rng=None, samples=48):
         commons = [i for i in alive if pegs[i]['kind'] == 'common']
         for _ in range(a.get('bonus', 1)):
             if commons: pegs[commons.pop(rng.randrange(len(commons)))]['kind'] = 'bonus'
-    place_bonus(); pip = 0
+    place_bonus(); pip = 0; charge = 0; reserve = 0
     while orbs > 0:
         orbs -= 1; shots += 1
         if policy == 'random':
@@ -125,15 +172,29 @@ def play(level, policy='greedy', rng=None, samples=48):
             left = sum(1 for i in alive if pegs[i]['kind'] == 'heart')
             # joueur « correct » : il ne voit que le guide de visée (1er contact), ou 3 contacts avec Pip
             cands = [math.radians(8 + 0.5*k) for k in range(329)]
-            seen = 3 if pip else 1
+            seen = 3 if (pip or (comp == 'grelot' and charge)) else 1
+            gm = {'grelot': True} if (comp == 'grelot' and charge) else None  # le guide montre la ligne de l'éclair
             for ang_c in cands:
-                h, c, _, _, _ = simulate_shot(pegs, set(alive), ang_c, bx, bd, motion=motion, t0=T, max_contacts=seen)
+                h, c, _, _, _ = simulate_shot(pegs, set(alive), ang_c, bx, bd, motion=motion, t0=T, max_contacts=seen, mode=gm)
                 val = sum((6 if pegs[i]['kind'] == 'heart' else 1) for i in h) + rng.random()*0.5
                 if best is None or val > best[0]: best = (val, ang_c)
             ang = best[1] + math.radians(rng.gauss(0, 0.3))  # imprécision humaine
             if pip: pip -= 1
-        hits, caught, bx, bd, dt = simulate_shot(pegs, alive, ang, bx, bd, motion=motion, t0=T)
+        mode = {}
+        if comp == 'volte': mode['volte'] = True
+        if comp in ('mousse', 'horloge', 'grelot') and charge:
+            mode[{'mousse': 'mousse', 'horloge': 'clock', 'grelot': 'grelot'}[comp]] = True; charge -= 1
+        if comp == 'nuage-lune' and reserve: mode['relaunch'] = True
+        hits, caught, bx, bd, dt = simulate_shot(pegs, alive, ang, bx, bd, motion=motion, t0=T, mode=mode)
+        if SHOT.get('relaunched'): reserve -= 1
         T += dt + 1.5
+        if comp == 'jumelles' and LAST_POWER:
+            # Twi & Nkl : 2e orbe au point d'impact, vitesse horizontale inversée à 90 %
+            lp = dict(LAST_POWER)
+            h2, c2, _, _, _ = simulate_shot(pegs, alive - set(hits), 0, bx, bd, motion=motion, t0=T - dt - 1.5 + lp['t']/60,
+                                            start=(lp['x'], lp['y'], -lp['vx']*0.9, lp['vy']*0.9))
+            hits += [i for i in h2 if i not in hits]
+            if c2: orbs += 1
         if comp == 'bourdon':
             for i in [i for i in hits if i in alive and pegs[i]['kind'] == 'power']:
                 for j in alive:
@@ -154,7 +215,10 @@ def play(level, policy='greedy', rng=None, samples=48):
             if not free_given and shot >= FREE_ORB: free_given = True; orbs += 1
         shot = int(shot * (1 + min(1.0, max(0, len(hits)-10)*0.1)))
         score += shot
-        if comp == 'pip' and any(pegs[i]['kind'] == 'power' for i in hits if i in alive): pip = 2
+        got = any(pegs[i]['kind'] == 'power' for i in hits if i in alive)
+        if comp == 'pip' and got: pip = min(4, pip + 2)
+        if comp in ('mousse', 'horloge', 'grelot') and got: charge = min(2, charge + 1)
+        if comp == 'nuage-lune' and got: reserve = min(2, reserve + 1)
         for i in hits: alive.discard(i)
         if caught: orbs += 1
         if not any(pegs[i]['kind'] == 'heart' for i in alive):
