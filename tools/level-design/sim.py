@@ -38,11 +38,13 @@ def group_motion(decor):
 
 LAST_POWER = {}  # état de l'orbe au 1er contact avec un cristal pouvoir (x, y, vx, vy, t)
 
-VOLTE_REST, VOLTE_VMAX, VOLTE_FRAMES = 1.15, 675/60, 10*60      # Volte : rebond fou
+VOLTE_REST, VOLTE_VMAX, VOLTE_FRAMES = 1.10, 675/60, 10*60      # Volte : rebond fou
 MOUSSE_R, MOUSSE_A, MOUSSE_DEAD = 220, 900/3600, 20                             # Mousse : aimant à cœurs (px/frame²)
 CLOCK_FRAMES, CLOCK_W = int(10*60*0.5), 2.0                      # Horloge : tout le tir, plafond 10 s réelles à x0,5
-GRELOT_K, GRELOT_N = 1.3, 3                                     # Grelot : éclair
+GRELOT_K, GRELOT_N = 1.15, 3                                     # Grelot : éclair
 NUAGE_VY, NUAGE_W = 450/60, 2.0                                              # Nuage-Lune : vy min
+MAGNET_A, MAGNET_DEAD = 300*0.75**2/3600, 20                     # aimants (decor.ts) : px/frame² pour strength 1
+MAGNETS = []  # aimants du niveau en cours (x, y, radius, strength)
 SHOT = {}  # infos du dernier tir : relance Nuage-Lune consommée
 
 def simulate_shot(pegs, alive, angle, bucket_x0, bucket_dir, max_steps=4000, motion=None, t0=0.0, max_contacts=None, start=None, mode=None):
@@ -76,6 +78,10 @@ def simulate_shot(pegs, alive, angle, bucket_x0, bucket_dir, max_steps=4000, mot
             pegs[i]['x'], pegs[i]['y'] = motion[pegs[i]['group']](*home[i], t0 + t/60)
         clock = mode.get('clock') and t <= CLOCK_FRAMES
         if clock: bx = max(BUCKET_W*CLOCK_W/2, min(W - BUCKET_W*CLOCK_W/2, x))  # le réceptacle suit le pointeur
+        for mx, my, mr, ms in MAGNETS:
+            ddx, ddy = mx - x, my - y; dd = math.hypot(ddx, ddy)
+            if MAGNET_DEAD < dd < mr:
+                a = MAGNET_A*ms*(1 - (dd - MAGNET_DEAD)/max(1, mr - MAGNET_DEAD)); vx += a*ddx/dd; vy += a*ddy/dd
         if mode.get('mousse'):
             tgt = [(math.hypot(pegs[i]['x']-x, pegs[i]['y']-y), i) for i in alive
                    if pegs[i].get('kind') == 'heart' and i not in hitset]
@@ -146,6 +152,7 @@ def play(level, policy='greedy', rng=None, samples=48):
     pegs = [dict(p) for p in level['pegs']]
     for p in pegs: p['x0'], p['y0'] = p['x'], p['y']
     motion = group_motion(level.get('decor')); T = 0.0
+    MAGNETS[:] = [(d['x'], d['y'], d['radius'], d['strength']) for d in level.get('decor') or [] if d.get('type') == 'magnet']
     comp = level.get('companion')
     free = [i for i, p in enumerate(pegs) if 'kind' not in p]
     rng.shuffle(free)
