@@ -354,3 +354,12 @@ export function generateDaily(key: string = localDateKey()): DailyLevel {
   }
   throw new Error(`aucun niveau valide pour ${key}`);
 }
+
+/**
+ * Tirage des cœurs, pouvoirs et bonus du niveau du jour (QA M2) : même graine pour tous
+ * les joueurs, sinon les pegs sont identiques mais les cœurs changent à chaque chargement.
+ * Sert aussi au déplacement du bonus à chaque tir.
+ */
+export function dailyAssignRng(key: string): Rng {
+  return mulberry32(hashSeed(`assign:${key}`));
+}

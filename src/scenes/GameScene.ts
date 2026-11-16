@@ -21,6 +21,7 @@ import {
 } from '../core/level';
 import type { LevelData } from '../core/levelFormat';
 import { levelFromData } from '../core/levelSetup';
+import { dailyAssignRng } from '../core/daily';
 import { FINAL_ZONES, finalZoneAt } from '../core/finalZones';
 import {
   GRAVITY_PER_STEP,
@@ -299,6 +300,8 @@ export class GameScene extends Phaser.Scene {
   /** Fin (horloge réelle) du gel d'image du final ; 0 = pas de gel. */
   private hitStopUntil = 0;
   private gameScale = 1;
+  /** Hasard du niveau (tirage des cœurs, bonus qui se déplace) : graine en mode jour. */
+  private levelRng: () => number = Math.random;
   /** Vitesse des Options (0,8 / 1 / 1,2) : multiplie toute l'échelle de temps du jeu. */
   private speed = 1;
   /** Charges du pouvoir « tir suivant » de l'Astre (Pip, Mousse...). */
@@ -366,7 +369,10 @@ export class GameScene extends Phaser.Scene {
     this.reveal = new RevealCharges();
     const save = this.registry.get(REGISTRY.save) as SaveData | undefined;
     this.colors = save?.options.colorblind ? CRYSTAL_COLORS_CB : CRYSTAL_COLORS;
-    this.level = levelFromData(this.sceneData.level);
+    // Constellation du jour : tirage graine par la date, identique pour tous les joueurs.
+    const daily = this.sceneData.daily;
+    this.levelRng = daily ? dailyAssignRng(daily) : Math.random;
+    this.level = levelFromData(this.sceneData.level, this.levelRng);
     const challenge = this.activeChallenge();
     this.challenge = challenge ? new ChallengeTracker(challenge) : undefined;
     this.challengeLine = undefined;
@@ -1564,7 +1570,7 @@ export class GameScene extends Phaser.Scene {
     this.hud.endShot();
     this.applyGameScale(1);
     const bounces = this.tracker.shotBounces;
-    const result = endShot(this.level, catches);
+    const result = endShot(this.level, catches, this.levelRng);
     // Défi devenu impossible : le niveau se termine sur l'écran d'échec (specs UI/UX 2.4).
     this.challengeStep((t, snap) => t.shotEnded(bounces, snap));
     if (result.phase === 'aiming' && this.challenge?.state === 'failed') {
