@@ -13,6 +13,7 @@ import {
   type LevelCatalog,
 } from '../core/levelCatalog';
 import { generateDaily, localDateKey } from '../core/daily';
+import { BUNDLE_FILE, isLevelBundle } from '../core/levelBundle';
 import { parseLevel } from '../core/levelFormat';
 import { parseSequence } from '../core/story';
 import { browserStorage, loadSave } from '../core/save';
@@ -36,6 +37,22 @@ export class BootScene extends Phaser.Scene {
     // Fonds de la carte : rasterisés ici, sous l'écran de chargement, pas au fondu titre -> carte.
     for (const { key, file } of MAP_BACKGROUNDS)
       this.load.svg(key, file, { width: 1280, height: 720 });
+    // Paquet unique produit au build (une requête) ; sinon (dev, paquet absent ou illisible)
+    // on retombe sur index.json + un fichier par niveau.
+    this.load.json('level-bundle', `${LEVELS_DIR}/${BUNDLE_FILE}`);
+    this.load.once('filecomplete-json-level-bundle', () => {
+      const bundle: unknown = this.cache.json.get('level-bundle');
+      if (!isLevelBundle(bundle)) return;
+      this.cache.json.add('level-index', bundle.index);
+      for (const [name, raw] of Object.entries(bundle.extras))
+        this.cache.json.add(`index:${name}`, raw);
+      for (const [id, raw] of Object.entries(bundle.levels))
+        this.cache.json.add(`level:${id}`, raw);
+    });
+  }
+
+  /** Chargement historique : index.json, défis, duel, puis un fichier par niveau. */
+  private loadSeparateFiles(): void {
     this.load.json('level-index', `${LEVELS_DIR}/index.json`);
     this.load.once('filecomplete-json-level-index', () => {
       const { index } = parseIndex(this.cache.json.get('level-index'));
@@ -52,6 +69,8 @@ export class BootScene extends Phaser.Scene {
     }
   }
 
+  private separateTried = false;
+
   /** Ids déjà mis en file (un niveau peut figurer dans plusieurs index). */
   private readonly queued = new Set<string>();
 
@@ -62,6 +81,15 @@ export class BootScene extends Phaser.Scene {
   }
 
   create(): void {
+    // Pas de paquet (serveur de dev, paquet absent ou illisible) : second passage du
+    // chargeur avec les fichiers séparés, puis on reprend ici.
+    if (!this.cache.json.exists('level-index') && !this.separateTried) {
+      this.separateTried = true;
+      this.loadSeparateFiles();
+      this.load.once(Phaser.Loader.Events.COMPLETE, () => this.create());
+      this.load.start();
+      return;
+    }
     this.registry.set(REGISTRY.save, loadSave());
 
     const parsed = parseIndex(this.cache.json.get('level-index'));
