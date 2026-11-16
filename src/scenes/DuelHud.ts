@@ -11,6 +11,9 @@ import { PALETTE, TEXT, textStyle } from './theme';
 const CART = { y: 8, h: 50, xs: [16, 840] as const, w: 360 };
 /** Cartouche du joueur qui attend : sa couleur à 35 %. */
 const IDLE_ALPHA = 0.35;
+/** Cœurs partagés : centrés entre les deux cartouches (376 et 840), validé UI/UX. */
+const HEARTS_X = 608;
+const HEART_D = 13;
 const BANNER_MS = 600;
 
 /** Forme du joueur (daltonisme) : J1 rond, J2 carré arrondi. */
@@ -35,6 +38,7 @@ export class DuelHud {
   private scoreTexts: [Phaser.GameObjects.Text, Phaser.GameObjects.Text];
   private labels: [Phaser.GameObjects.Text, Phaser.GameObjects.Text];
   private heartsText: Phaser.GameObjects.Text;
+  private heartIcon: Phaser.GameObjects.Polygon;
   private active: PlayerIndex = 0;
   private scores: [number, number] = [0, 0];
 
@@ -63,10 +67,12 @@ export class DuelHud {
     this.scoreTexts = [a.score, b.score];
     this.labels = [a.label, b.label];
     // Au centre : cœurs restants du niveau, partagés.
-    const d = 13;
-    scene.add.polygon(590, 33, [0, -d, d, 0, 0, d, -d, 0], heartColor).setDepth(5);
+    const d = HEART_D;
+    this.heartIcon = scene.add
+      .polygon(HEARTS_X, 33, [d, 0, 2 * d, d, d, 2 * d, 0, d], heartColor)
+      .setDepth(5);
     this.heartsText = scene.add
-      .text(610, 33, '', textStyle(30, colorHex(heartColor)))
+      .text(HEARTS_X, 33, '', textStyle(30, colorHex(heartColor)))
       .setOrigin(0, 0.5)
       .setDepth(5);
     this.draw();
@@ -87,6 +93,12 @@ export class DuelHud {
 
   setHearts(n: number): void {
     this.heartsText.setText(String(n));
+    // Losange + chiffre centrés ensemble sur HEARTS_X.
+    const gap = 8;
+    const w = HEART_D * 2 + gap + this.heartsText.width;
+    const x0 = HEARTS_X - w / 2;
+    this.heartIcon.setX(x0 + HEART_D);
+    this.heartsText.setX(x0 + HEART_D * 2 + gap);
   }
 
   /** Change le tireur ; `announce` montre la bannière centrale (600 ms). */
