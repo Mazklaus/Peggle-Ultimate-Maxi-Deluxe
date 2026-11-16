@@ -64,7 +64,14 @@ export interface DailyRecord {
   streak: number;
   /** Jour joué précédent (avant `date`). */
   lastDate?: string;
+  /** Meilleur score des derniers jours joués (AAAAMMJJ -> score), 7 au plus (classement local). */
+  history?: Record<string, number>;
+  /** Record personnel, tous jours confondus. */
+  record?: number;
 }
+
+/** Jours gardés dans l'historique du jour (barres des 7 derniers jours). */
+export const DAILY_HISTORY_DAYS = 7;
 
 export interface KeyValueStorage {
   getItem(key: string): string | null;
@@ -197,7 +204,11 @@ function isDailyRecord(v: unknown): v is DailyRecord {
     typeof d.best === 'number' &&
     Number.isFinite(d.best) &&
     Number.isInteger(d.streak) &&
-    (d.lastDate === undefined || typeof d.lastDate === 'string')
+    (d.lastDate === undefined || typeof d.lastDate === 'string') &&
+    (d.history === undefined ||
+      (typeof d.history === 'object' &&
+        d.history !== null &&
+        Object.values(d.history).every((v) => typeof v === 'number')))
   );
 }
 
@@ -221,8 +232,24 @@ export function recordDaily(save: SaveData, key: string, score: number): DailyRe
     const streak = prev && prev.date === previousDayKey(key) ? prev.streak + 1 : 1;
     rec = { date: key, best: score, streak, ...(prev ? { lastDate: prev.date } : {}) };
   }
+  rec.record = Math.max(prev?.record ?? 0, rec.best);
+  const history = { ...(prev?.history ?? {}), [key]: rec.best };
+  const keep = Object.keys(history).sort().slice(-DAILY_HISTORY_DAYS);
+  rec.history = Object.fromEntries(keep.map((k) => [k, history[k] ?? 0]));
   save.daily = rec;
   return rec;
+}
+
+/** Les `n` derniers jours jusqu'à `todayKey` inclus (le plus ancien d'abord), avec leur score. */
+export function dailyBars(
+  save: SaveData,
+  todayKey: string,
+  n = DAILY_HISTORY_DAYS,
+): Array<{ key: string; best: number | null }> {
+  const keys = [todayKey];
+  while (keys.length < n) keys.unshift(previousDayKey(keys[0]!));
+  const h = save.daily?.history ?? {};
+  return keys.map((key) => ({ key, best: h[key] ?? null }));
 }
 
 /** Série affichable aujourd'hui : 0 si le dernier jour joué n'est ni aujourd'hui ni hier. */

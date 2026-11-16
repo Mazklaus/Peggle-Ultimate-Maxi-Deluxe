@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   currentStreak,
+  dailyBars,
   previousDayKey,
   recordDaily,
   emptySave,
@@ -142,7 +143,7 @@ describe('Constellation du jour (save.daily)', () => {
     const save = emptySave();
     recordDaily(save, '20261116', 30000);
     recordDaily(save, '20261116', 12000);
-    expect(recordDaily(save, '20261116', 41000)).toEqual({
+    expect(recordDaily(save, '20261116', 41000)).toMatchObject({
       date: '20261116',
       best: 41000,
       streak: 1,
@@ -152,7 +153,7 @@ describe('Constellation du jour (save.daily)', () => {
   it('série : +1 si la veille a été jouée, sinon on repart à 1', () => {
     const save = emptySave();
     recordDaily(save, '20261130', 100);
-    expect(recordDaily(save, '20261201', 50)).toEqual({
+    expect(recordDaily(save, '20261201', 50)).toMatchObject({
       date: '20261201',
       best: 50,
       streak: 2,
@@ -174,7 +175,7 @@ describe('Constellation du jour (save.daily)', () => {
     const save = emptySave();
     recordDaily(save, '20261116', 999);
     writeSave(save, storage);
-    expect(loadSave(storage).daily).toEqual({ date: '20261116', best: 999, streak: 1 });
+    expect(loadSave(storage).daily).toMatchObject({ date: '20261116', best: 999, streak: 1 });
     storage.setItem(
       'k',
       JSON.stringify({ ...emptySave(), daily: { date: 'hier', best: 1, streak: 1 } }),
@@ -196,5 +197,27 @@ describe('vitesse du jeu (jalon 3)', () => {
     expect(loadSave(storage).options.speed).toBe(1);
     store.set('ricochet:save', JSON.stringify({ ...s, options: { ...s.options, speed: 0.8 } }));
     expect(loadSave(storage).options.speed).toBe(0.8);
+  });
+});
+
+describe('historique du jour (classement local)', () => {
+  it('garde le meilleur score des 7 derniers jours joués', () => {
+    const save = emptySave();
+    for (let d = 10; d <= 19; d++) recordDaily(save, `202611${d}`, d * 100);
+    recordDaily(save, '20261119', 500); // moins bon : le meilleur reste
+    expect(Object.keys(save.daily?.history ?? {})).toHaveLength(7);
+    expect(save.daily?.history?.['20261119']).toBe(1900);
+    expect(save.daily?.history?.['20261112']).toBeUndefined();
+    const bars = dailyBars(save, '20261121');
+    expect(bars.map((b) => b.key)).toEqual([
+      '20261115',
+      '20261116',
+      '20261117',
+      '20261118',
+      '20261119',
+      '20261120',
+      '20261121',
+    ]);
+    expect(bars.map((b) => b.best)).toEqual([1500, 1600, 1700, 1800, 1900, null, null]);
   });
 });

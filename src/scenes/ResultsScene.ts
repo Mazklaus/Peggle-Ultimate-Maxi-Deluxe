@@ -4,7 +4,7 @@ import { audio } from '../audio';
 import { GAME_HEIGHT, GAME_WIDTH } from '../config';
 import { nextLevelId, type LevelCatalog } from '../core/levelCatalog';
 import type { LevelData } from '../core/levelFormat';
-import { markSeen, recordResult, writeSave, type SaveData } from '../core/save';
+import { markSeen, recordDaily, recordResult, writeSave, type SaveData } from '../core/save';
 import type { Breakdown } from '../core/scoreBreakdown';
 import { starsFor } from '../core/stars';
 import type { GameScene } from './GameScene';
@@ -27,6 +27,8 @@ export interface ResultsData {
   test?: boolean;
   /** Mode de jeu (jalon 3) : ResultsScene choisit ses boutons. */
   mode?: GameMode;
+  /** Constellation du jour : clé AAAAMMJJ (meilleur score et série enregistrés ici). */
+  daily?: string;
   /** Défi : objectif et médaille (succès = objectif atteint et niveau gagné). */
   challenge?: { goal: string; success: boolean };
   /** Duel : scores J1/J2, gagnant (0 = J1, 1 = J2, null = égalité -> manche décisive). */
@@ -89,8 +91,16 @@ export class ResultsScene extends Phaser.Scene {
     const save = this.registry.get(REGISTRY.save) as SaveData;
     const stars = starsFor(data.score, data.level.stars, data.won);
     let newRecord = false;
-    // Un duel ne touche pas à la progression de l'aventure.
-    if (!data.test && data.mode?.kind !== 'duel') {
+    let streak: number | null = null;
+    if (!data.test && data.daily) {
+      // Constellation du jour : meilleur score du jour et série, hors progression de l'aventure.
+      const before = save.daily?.date === data.daily ? save.daily.best : null;
+      const rec = recordDaily(save, data.daily, data.score);
+      writeSave(save);
+      streak = rec.streak;
+      newRecord = before !== null && data.score > before;
+    } else if (!data.test && data.mode?.kind !== 'duel') {
+      // Un duel ne touche pas à la progression de l'aventure.
       const before = save.levels[data.level.id];
       recordResult(save, {
         id: data.level.id,
@@ -103,7 +113,7 @@ export class ResultsScene extends Phaser.Scene {
       newRecord = data.won && !!before?.completed && data.score > before.bestScore;
     }
 
-    if (data.won) this.showVictory(data, stars, newRecord);
+    if (data.won) this.showVictory(data, stars, newRecord, streak);
     else this.showDefeat(data);
 
     // L'Astre sort APRÈS le lancement de l'overlay (son calque passe alors au premier plan).
@@ -119,7 +129,19 @@ export class ResultsScene extends Phaser.Scene {
   // --- Navigation -----------------------------------------------------------
 
   private replay(data: ResultsData): void {
-    this.scene.start(SCENES.game, { level: data.level, test: data.test });
+    this.scene.start(SCENES.game, {
+      level: data.level,
+      test: data.test,
+      mode: data.mode,
+      daily: data.daily,
+    });
+  }
+
+  /** Mode hors aventure : le bouton « carte » ramène à l'écran du mode. */
+  private toHub(data: ResultsData): void {
+    if (!data.daily) return this.toMap();
+    this.scene.stop(SCENES.game);
+    this.scene.start(SCENES.daily);
   }
 
   private play(level: LevelData): void {
@@ -159,7 +181,9 @@ export class ResultsScene extends Phaser.Scene {
     root.add(again);
     const focus = [again];
     if (!data.test) {
-      const map = iconButton(this, cx, top + 200, 'map', () => this.toMap(), { diameter: 48 });
+      const map = iconButton(this, cx, top + 200, 'map', () => this.toHub(data), {
+        diameter: 48,
+      });
       root.add(map);
       focus.push(map);
     }
@@ -172,7 +196,12 @@ export class ResultsScene extends Phaser.Scene {
 
   // --- Victoire ---------------------------------------------------------------
 
-  private showVictory(data: ResultsData, stars: number, newRecord: boolean): void {
+  private showVictory(
+    data: ResultsData,
+    stars: number,
+    newRecord: boolean,
+    streak: number | null,
+  ): void {
     const cx = GAME_WIDTH / 2;
     const cy = GAME_HEIGHT / 2;
     const shade = veil(this, 0.6).setAlpha(0);
@@ -275,6 +304,16 @@ export class ResultsScene extends Phaser.Scene {
       });
     }
 
+    // Constellation du jour : ligne « série » (flamme + jours d'affilée) à côté des étoiles.
+    if (streak !== null) {
+      const line = this.add.container(-196, starY).setAlpha(0);
+      if (this.textures.exists('icone-flamme'))
+        line.add(this.add.image(-14, 0, 'icone-flamme').setDisplaySize(30, 30));
+      line.add(this.add.text(6, 0, String(streak), textStyle(26)).setOrigin(0, 0.5));
+      box.add(line);
+      this.step(WIN_TIMES.stars + 3 * WIN_TIMES.starStep, (instant) => this.pop(line, instant));
+    }
+
     // Boutons : SUIVANT (Espace), rejouer, carte.
     this.step(WIN_TIMES.buttons, (instant) => {
       this.finished = true;
@@ -308,7 +347,7 @@ export class ResultsScene extends Phaser.Scene {
       };
       out.push(primaryButton(this, 0, y, 'Suite', toEnding, { icon: 'next', width: 240 }));
       main = true;
-    } else if (!data.test) {
+    } else if (!data.test && !data.daily && (data.mode?.kind ?? 'aventure') === 'aventure') {
       const next = nextLevelId(catalog.levels, data.level.id);
       const nextLevel = next ? catalog.levels.find((l) => l.id === next) : undefined;
       if (nextLevel) {
@@ -326,7 +365,7 @@ export class ResultsScene extends Phaser.Scene {
         }),
       );
     else out.push(iconButton(this, -210, y, 'replay', () => this.replay(data)));
-    if (!data.test) out.push(iconButton(this, 210, y, 'map', () => this.toMap()));
+    if (!data.test) out.push(iconButton(this, 210, y, 'map', () => this.toHub(data)));
 
     for (const btn of out) btn.setAlpha(0);
     box.add(out);

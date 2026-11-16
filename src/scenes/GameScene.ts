@@ -1620,6 +1620,7 @@ export class GameScene extends Phaser.Scene {
       breakdown: this.breakdown.finish(score, orbBonus),
       test: this.sceneData.test,
       mode: this.sceneData.mode,
+      daily: this.sceneData.daily,
       challenge: this.challenge
         ? { goal: this.challenge.challenge.goal, success: this.challenge.state === 'success' }
         : undefined,
