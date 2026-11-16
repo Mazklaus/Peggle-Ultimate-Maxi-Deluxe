@@ -132,30 +132,44 @@ export const TEMPLATES: Record<string, (rng: Rng) => Layout> = {
     return { points, walls: [] };
   },
   bols: (rng) => {
-    const n = 3;
+    // Arcs concentriques (comme thick() de levels.py) : l'orbe roule dans le bol.
+    // 3 bols en haut, 2 en quinconce dessous ; 2 à 3 arcs de 10 à 170°, espacés de 40 px.
     const points: Pt[] = [];
-    for (let i = 0; i < n; i++) {
-      const cx = 160 + 280 * i;
-      const cy = between(rng, 300, 380);
-      points.push(...arc(cx, cy, 110, 15, 165, 11), ...arc(cx, cy, 70, 25, 155, 7));
-      points.push(...grid(cx - 100, cx + 100, 140, cy - 20, 46, 42, true));
+    const bowls: Pt[] = [
+      [160, between(rng, 170, 200)],
+      [440, between(rng, 170, 200)],
+      [720, between(rng, 170, 200)],
+      [300, between(rng, 340, 370)],
+      [580, between(rng, 340, 370)],
+    ];
+    for (const [cx, cy] of bowls) {
+      const outer = between(rng, 100, 130);
+      const arcs = rng() < 0.3 ? 2 : 3;
+      for (let k = 0; k < arcs; k++) {
+        const r = outer - 40 * k;
+        points.push(...arc(cx, cy, r, 10, 170, Math.max(3, Math.round((rad(160) * r) / 29) + 1)));
+      }
     }
     const tilt = between(rng, 20, 35);
     return {
       points,
       walls: [
-        { x: 300, y: 520, w: 90, angle: Math.round(tilt) },
-        { x: 580, y: 520, w: 90, angle: -Math.round(tilt) },
+        { x: 300, y: 535, w: 90, angle: Math.round(tilt) },
+        { x: 580, y: 535, w: 90, angle: -Math.round(tilt) },
       ],
     };
   },
   colonnes: (rng) => {
-    const cols = 8 + Math.floor(rng() * 2);
+    // 15 colonnes fines (57 px) à phase verticale tirée par colonne, pas de 56 px.
+    // Au simulateur, des colonnes plus espacées (7 à 9) restaient à ~0,2 de victoire :
+    // l'orbe filait entre sans rien toucher. Nombre impair : une colonne sous le canon.
+    const cols = 15;
+    const step = 56;
+    const sp = 800 / (cols - 1);
     const points: Pt[] = [];
     for (let c = 0; c < cols; c++) {
-      const x = 70 + (740 * c) / (cols - 1);
-      const y0 = 120 + (c % 2 ? 16 : 0);
-      for (let y = y0, k = 0; y <= 565; y += 32, k++) points.push([x + (k % 2 ? 12 : -12), y]);
+      const x = 40 + sp * c;
+      for (let y = between(rng, 120, 120 + step); y <= 565; y += step) points.push([x, y]);
     }
     return { points, walls: [] };
   },
@@ -178,18 +192,19 @@ export const TEMPLATES: Record<string, (rng: Rng) => Layout> = {
         ]
       : [[440, 340]];
     const shape = twin
-      ? { r0: 25, r1: 200, sx: 1, turns: 3 }
-      : { r0: 30, r1: 225, sx: 1.6, turns: 3.6 };
+      ? { r0: 25, r1: 200, sx: 1, turns: 2.4 }
+      : { r0: 30, r1: 225, sx: 1.75, turns: 2.8 };
     const points: Pt[] = [];
     for (const [cx, cy] of centers) {
-      // Points espacés de ~42 px le long de la courbe, échantillonnée finement.
+      // Écart entre spires (r1 - r0) / turns >= 65 px : >= 50 px même avec le jitter.
+      // Points espacés de ~31 px le long de la courbe, échantillonnée finement.
       let last: Pt | null = null;
       for (let i = 0; i <= 4000; i++) {
         const t = i / 4000;
         const r = shape.r0 + (shape.r1 - shape.r0) * t;
         const a = rad(phase + 360 * shape.turns * t);
         const p: Pt = [cx + shape.sx * r * Math.cos(a), cy + r * Math.sin(a)];
-        if (!last || Math.hypot(p[0] - last[0], p[1] - last[1]) >= 42) {
+        if (!last || Math.hypot(p[0] - last[0], p[1] - last[1]) >= 31) {
           points.push(p);
           last = p;
         }
@@ -198,10 +213,11 @@ export const TEMPLATES: Record<string, (rng: Rng) => Layout> = {
     return { points, walls: [] };
   },
   damier: (rng) => {
-    const cell = 4 + Math.floor(rng() * 2);
-    const points = grid(60, 820, 130, 560, 44, 40, true).filter(([x, y]) => {
-      const cx = Math.floor((x - 60) / (44 * cell));
-      const cy = Math.floor((y - 130) / (40 * cell));
+    // Diagonales à ~55 px (hypot(25, 50)) au lieu de 45 : l'orbe passe entre les cases.
+    const cell = 3 + Math.floor(rng() * 2);
+    const points = grid(60, 820, 130, 560, 50, 50, true).filter(([x, y]) => {
+      const cx = Math.floor((x - 60) / (50 * cell));
+      const cy = Math.floor((y - 130) / (50 * cell));
       return (cx + cy) % 2 === 0 || rng() < 0.45;
     });
     return { points, walls: [] };
