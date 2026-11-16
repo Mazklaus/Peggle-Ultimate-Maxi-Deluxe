@@ -102,6 +102,15 @@ const VOLTE = { restitution: 1.05, maxSpeed: 900 * ORB_PHYSICS.slowdown, seconds
  * follow : vitesse de rattrapage du pointeur (fraction de l'écart par seconde de jeu).
  */
 const HORLOGE = { scale: 0.5, realMs: 6500, bucketScale: 1.5, follow: 14 };
+/**
+ * Orbe éclair de Grelot (GD reglages-jalon1, charges de reglages-jalon2 §4 bis) : tir chargé
+ * en ligne droite sans gravité, à 1,3 fois la vitesse ; perce 3 cristaux (allumés sans
+ * rebond), puis physique normale. Les murs renvoient l'orbe normalement pendant l'éclair.
+ * maxSeconds : filet de sécurité (temps de jeu) si l'orbe ne trouve pas 3 cristaux.
+ */
+const GRELOT = { speed: 1.3, pierce: 3, maxSeconds: 4 };
+/** Catégorie de collision des cristaux cassables (l'orbe éclair les traverse). */
+const CRYSTAL_CATEGORY = 0x0002;
 /** Les orbes d'un même tir se traversent (groupe de collision négatif commun). */
 const ORB_COLLISION_GROUP = -1;
 /**
@@ -173,6 +182,11 @@ export class GameScene extends Phaser.Scene {
   private crazyLeft = 0;
   /** Fin (horloge réelle) du ralenti d'Horloge ; 0 = inactif. */
   private warpUntil = 0;
+  /** Orbe éclair de Grelot : cristaux restant à percer (0 = inactif), déjà percés, durée. */
+  private pierceLeft = 0;
+  private pierced = new Set<number>();
+  private boltLeft = 0;
+  private boltPrev = { x: 0, y: 0 };
   private aimAngle = Math.PI / 2;
   private guide!: Phaser.GameObjects.Graphics;
   /** Effets des pouvoirs en zone de jeu (menthe), redessinés chaque frame. */
@@ -389,6 +403,7 @@ export class GameScene extends Phaser.Scene {
       return;
     }
     audio.flight(Phaser.Math.Clamp((orb.y - PLAYFIELD.y) / PLAYFIELD.h, 0, 1));
+    this.updateBolt(delta / 1000);
     this.trackOrb(orb);
     this.updateCrazyBounce(delta / 1000);
     this.updateMagnet(delta / 1000);
@@ -680,7 +695,7 @@ export class GameScene extends Phaser.Scene {
     const label = `crystal:${c.id}`;
     if (shape.type === 'brick') {
       const view = this.add.rectangle(x, y, shape.w, shape.h, color);
-      this.matter.add.gameObject(view, { isStatic: true, label });
+      this.matter.add.gameObject(view, { isStatic: true, label, ...crystalFilter(c) });
       view.setRotation(Phaser.Math.DegToRad(shape.angle));
       return view;
     }
@@ -695,6 +710,7 @@ export class GameScene extends Phaser.Scene {
       isStatic: true,
       label,
       shape: { type: 'circle', radius: r },
+      ...crystalFilter(c),
     });
     return view;
   }
@@ -827,6 +843,8 @@ export class GameScene extends Phaser.Scene {
     // Orbe lente (roule ou tressaute sur un cristal) : Matter n'est plus prévisible ici,
     // on laisse le vrai contact déclencher le ralenti.
     if (Math.hypot(o.vx, o.vy) < FINAL_MIN_SPEED) return null;
+    // Orbe éclair de Grelot : ni gravité ni rebond, la prédiction ne s'applique pas.
+    if (this.pierceLeft > 0) return null;
     // Cœur porté par le décor : cible mobile, seul le vrai contact déclenche le ralenti.
     if (this.decor.isMoving(heart.id)) return null;
     const steps = Math.ceil(EVENT_THRESHOLDS.finalSlowmoLeadSeconds * 60);
@@ -1009,6 +1027,66 @@ export class GameScene extends Phaser.Scene {
     if (this.slowmoUntil <= 0) this.applyGameScale(1);
   }
 
+  /** Pouvoir de Grelot : l'orbe part en éclair, droit et rapide, à travers les cristaux. */
+  private startBolt(): void {
+    const orb = this.orb;
+    if (!orb) return;
+    const v = this.orbVelocity(orb);
+    const mo = orb as unknown as Phaser.Physics.Matter.Components.Velocity &
+      Phaser.Physics.Matter.Components.Gravity;
+    mo.setIgnoreGravity(true);
+    mo.setVelocity(v.x * GRELOT.speed, v.y * GRELOT.speed);
+    const body = orb.body as MatterJS.BodyType;
+    body.collisionFilter.mask = 0xffffffff & ~CRYSTAL_CATEGORY;
+    orb.setStrokeStyle(3, PALETTE.success, 0.95);
+    this.pierceLeft = GRELOT.pierce;
+    this.pierced.clear();
+    this.boltLeft = GRELOT.maxSeconds;
+    this.boltPrev = { x: orb.x, y: orb.y };
+  }
+
+  /** Éclair : les cristaux balayés depuis la frame précédente s'allument, sans rebond. */
+  private updateBolt(dt: number): void {
+    const orb = this.orb;
+    if (this.pierceLeft <= 0 || !orb) return;
+    const from = this.boltPrev;
+    const to = { x: orb.x, y: orb.y };
+    this.boltPrev = to;
+    const hits = this.level.crystals
+      .filter((c) => c.kind !== 'wall' && !this.pierced.has(c.id))
+      .map((c) => ({ c, t: sweepHit(from, to, c, ORB_RADIUS) }))
+      .filter((h): h is { c: Crystal; t: number } => h.t !== null)
+      .sort((a, b) => a.t - b.t);
+    for (const { c } of hits) {
+      if (this.pierceLeft <= 0) break;
+      this.pierced.add(c.id);
+      this.pierceLeft -= 1;
+      this.onCrystalHit(c.id);
+    }
+    const spark = this.add.circle(to.x, to.y, 4, PALETTE.success, 0.7).setDepth(orb.depth - 1);
+    this.tweens.add({
+      targets: spark,
+      alpha: 0,
+      scale: 0.3,
+      duration: 260,
+      onComplete: () => spark.destroy(),
+    });
+    this.boltLeft -= dt;
+    if (this.pierceLeft <= 0 || this.boltLeft <= 0) this.endBolt();
+  }
+
+  /** Fin de l'éclair : gravité et collisions avec les cristaux reviennent. */
+  private endBolt(): void {
+    if (this.pierceLeft <= 0 && this.boltLeft <= 0) return;
+    this.pierceLeft = 0;
+    this.boltLeft = 0;
+    const orb = this.orb;
+    if (!orb?.body) return;
+    (orb as unknown as Phaser.Physics.Matter.Components.Gravity).setIgnoreGravity(false);
+    (orb.body as MatterJS.BodyType).collisionFilter.mask = 0xffffffff;
+    orb.setStrokeStyle();
+  }
+
   /** Échelle de temps de tout le jeu : physique, réceptacle, tweens, Astre. */
   private applyGameScale(scale: number): void {
     this.gameScale = scale;
@@ -1056,6 +1134,7 @@ export class GameScene extends Phaser.Scene {
     this.companion?.setPhase('flight');
     this.reveal.fire();
     if (this.companionId === 'horloge' && this.reveal.shotIsPowered) this.startTimeWarp();
+    if (this.companionId === 'grelot' && this.reveal.shotIsPowered) this.startBolt();
     this.lanternShots = Math.max(0, this.lanternShots - 1);
     this.refreshPower();
     this.emitAll(this.tracker.shotFired());
@@ -1159,6 +1238,7 @@ export class GameScene extends Phaser.Scene {
     this.crazyLeft = 0;
     this.powerGfx.clear();
     this.endTimeWarp();
+    this.endBolt();
     this.hud.endShot();
     this.applyGameScale(1);
     const result = endShot(this.level, catches);
@@ -1470,4 +1550,45 @@ function chargesFor(id: string | null): ShotCharges {
     maxCharges: info?.power.kind === 'next' ? info.power.maxCharges : 0,
   };
   return new ShotCharges(rule);
+}
+
+/** Les cristaux cassables sont dans leur propre catégorie ; les murs restent solides. */
+function crystalFilter(c: Crystal): { collisionFilter?: { category: number } } {
+  return c.kind === 'wall' ? {} : { collisionFilter: { category: CRYSTAL_CATEGORY } };
+}
+
+/**
+ * Premier instant (0..1) où un orbe de rayon `r` allant de `a` à `b` touche le cristal,
+ * ou null. Cercles exacts ; briques échantillonnées tous les 3 px dans leur repère.
+ */
+function sweepHit(
+  a: { x: number; y: number },
+  b: { x: number; y: number },
+  c: Crystal,
+  r: number,
+): number | null {
+  const w = toWorld(c);
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const len = Math.hypot(dx, dy);
+  const shape = c.shape ?? { type: 'circle' as const, r: 10 };
+  if (shape.type !== 'brick') {
+    const reach = shape.r + r;
+    if (len < 1e-6) return Math.hypot(a.x - w.x, a.y - w.y) <= reach ? 0 : null;
+    const t = Phaser.Math.Clamp(((w.x - a.x) * dx + (w.y - a.y) * dy) / (len * len), 0, 1);
+    return Math.hypot(a.x + dx * t - w.x, a.y + dy * t - w.y) <= reach ? t : null;
+  }
+  const ang = -Phaser.Math.DegToRad(shape.angle);
+  const cos = Math.cos(ang);
+  const sin = Math.sin(ang);
+  const n = Math.max(1, Math.ceil(len / 3));
+  for (let i = 0; i <= n; i++) {
+    const t = i / n;
+    const px = a.x + dx * t - w.x;
+    const py = a.y + dy * t - w.y;
+    const lx = px * cos - py * sin;
+    const ly = px * sin + py * cos;
+    if (Math.abs(lx) <= shape.w / 2 + r && Math.abs(ly) <= shape.h / 2 + r) return t;
+  }
+  return null;
 }

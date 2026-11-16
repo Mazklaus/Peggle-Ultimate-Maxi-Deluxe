@@ -8,7 +8,7 @@
  */
 import type { CompanionDef } from '../core/companion/types';
 import type { Companion } from '../core/levelFormat';
-import { BOURDON, HORLOGE, JUMELLES, MOUSSE, VOLTE } from './astres';
+import { BOURDON, GRELOT, HORLOGE, JUMELLES, MOUSSE, VOLTE } from './astres';
 import { PIP } from './pip';
 
 /** next = s'applique au tir suivant (charges), immediate = agit pendant le tir, reserve = charge gardée. */
@@ -84,7 +84,7 @@ export const COMPANION_ROSTER: readonly CompanionInfo[] = [
     id: 'grelot',
     name: 'Grelot',
     color: 0xa8f06a,
-    def: null,
+    def: GRELOT,
     power: { name: 'Orbe éclair', kind: 'next', maxCharges: 2 },
     wakesAtChapter: 7,
   },
