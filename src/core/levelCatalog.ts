@@ -75,3 +75,10 @@ export function nextLevelId(levels: readonly LevelData[], id: string): string | 
   const i = levels.findIndex((l) => l.id === id);
   return i >= 0 && i + 1 < levels.length ? (levels[i + 1] as LevelData).id : null;
 }
+
+/** Étiquette courte d'un niveau : « P-2 » (prologue), « 1-7 » (chapitre 1). */
+export function levelLabel(id: string): string {
+  const m = /^(ch(\d+)|pro)-0*(\d+)$/.exec(id);
+  if (!m) return '';
+  return `${m[2] ?? 'P'}-${m[3]}`;
+}

@@ -1,12 +1,20 @@
 import Phaser from 'phaser';
 import { audio } from '../audio';
 import { GAME_HEIGHT, GAME_WIDTH } from '../config';
+import type { CrystalKind } from '../core/level';
 import { writeSave, type Options, type SaveData } from '../core/save';
 import { OPTIONS_CHANGED, REGISTRY, SCENES } from './keys';
-import { PALETTE, textStyle, TEXT } from './theme';
-import { button } from './widgets';
-
-const VOLUMES = [0, 0.4, 0.8, 1];
+import { CRYSTAL_COLORS, CRYSTAL_COLORS_CB, textStyle } from './theme';
+import { panel, veil } from './ui';
+import {
+  enableKeyboardFocus,
+  icon,
+  iconButton,
+  label,
+  slider,
+  toggle,
+  type IconName,
+} from './widgets';
 
 /** Applique les options qui agissent hors des scènes (volumes). */
 export function applyAudioOptions(o: Options): void {
@@ -15,9 +23,25 @@ export function applyAudioOptions(o: Options): void {
   audio.setVolume('voice', o.sfxVolume);
 }
 
+/** Change une ou plusieurs options : sauvegarde immédiate, son, et signal aux scènes ouvertes. */
+export function updateOptions(scene: Phaser.Scene, patch: Partial<Options>): Options {
+  const save = scene.registry.get(REGISTRY.save) as SaveData;
+  Object.assign(save.options, patch);
+  writeSave(save);
+  applyAudioOptions(save.options);
+  scene.game.events.emit(OPTIONS_CHANGED, save.options);
+  return save.options;
+}
+
+export function currentOptions(scene: Phaser.Scene): Options {
+  return (scene.registry.get(REGISTRY.save) as SaveData).options;
+}
+
+const PANEL = { w: 560, h: 420 };
+
 /**
- * Options provisoires (le design final vient de l'UI/UX), ouvertes par-dessus le titre ou la pause.
- * Chaque changement est sauvegardé tout de suite et signalé via game.events (OPTIONS_CHANGED).
+ * Écran Options (specs UI/UX 6 ter) : overlay par-dessus le titre, la carte ou la pause.
+ * Son et musique en curseurs, daltonien et animations en bascules, sauvegarde à chaque changement.
  */
 export class OptionsScene extends Phaser.Scene {
   private from: string = SCENES.title;
@@ -28,69 +52,107 @@ export class OptionsScene extends Phaser.Scene {
 
   create(data: { from?: string }): void {
     this.from = data?.from ?? SCENES.title;
-    const save = this.registry.get(REGISTRY.save) as SaveData;
-    const o = save.options;
+    const o = currentOptions(this);
     const cx = GAME_WIDTH / 2;
+    const cy = GAME_HEIGHT / 2;
+    const left = cx - PANEL.w / 2;
+    const top = cy - PANEL.h / 2;
 
-    this.add
-      .rectangle(cx, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, PALETTE.night, 0.85)
-      .setInteractive();
-    this.add.text(cx, 130, 'Options', textStyle(44)).setOrigin(0.5);
-
-    const rows: Array<{ label: string; value: () => string; next: () => void }> = [
-      {
-        label: 'Mode daltonien',
-        value: () => (o.colorblind ? 'Oui' : 'Non'),
-        next: () => (o.colorblind = !o.colorblind),
-      },
-      {
-        label: 'Musique',
-        value: () => `${Math.round(o.musicVolume * 100)} %`,
-        next: () => (o.musicVolume = cycle(o.musicVolume)),
-      },
-      {
-        label: 'Effets et voix',
-        value: () => `${Math.round(o.sfxVolume * 100)} %`,
-        next: () => (o.sfxVolume = cycle(o.sfxVolume)),
-      },
-      {
-        label: 'Réduire les animations',
-        value: () => (o.reducedMotion ? 'Oui' : 'Non'),
-        next: () => (o.reducedMotion = !o.reducedMotion),
-      },
-    ];
-
-    rows.forEach((row, i) => {
-      const y = 230 + i * 80;
-      this.add.text(cx - 40, y, row.label, textStyle(24, TEXT.dim)).setOrigin(1, 0.5);
-      const btn = button(
-        this,
-        cx + 110,
-        y,
-        row.value(),
-        () => {
-          row.next();
-          (btn.list[1] as Phaser.GameObjects.Text).setText(row.value());
-          writeSave(save);
-          applyAudioOptions(o);
-          this.game.events.emit(OPTIONS_CHANGED, o);
-        },
-        { width: 180, size: 22 },
-      );
+    veil(this, 0.7).on('pointerup', () => this.close()); // clic hors panneau = fermer
+    panel(this, cx, cy, PANEL.w, PANEL.h, 24);
+    this.add.text(cx, top + 44, 'Options', textStyle(32)).setOrigin(0.5);
+    const back = iconButton(this, left + 44, top + 44, 'back', () => this.close(), {
+      diameter: 48,
     });
 
-    const close = () => this.close();
-    button(this, cx, 590, 'Retour', close, { primary: true });
-    this.input.keyboard?.once('keydown-ESC', close);
+    const rowY = (i: number) => top + 120 + i * 72;
+    const row = (i: number, name: IconName, text: string) => {
+      icon(this, left + 60, rowY(i), name, 32);
+      label(this, left + 150, rowY(i), text, 16).setOrigin(0, 0.5);
+    };
+    const ctrlX = left + PANEL.w - 170;
+
+    row(0, 'sound', 'Effets et voix');
+    const sfx = slider(
+      this,
+      ctrlX,
+      rowY(0),
+      o.sfxVolume,
+      (v) => updateOptions(this, { sfxVolume: v }),
+      {
+        width: 200,
+      },
+    );
+    row(1, 'music', 'Musique');
+    const music = slider(
+      this,
+      ctrlX,
+      rowY(1),
+      o.musicVolume,
+      (v) => updateOptions(this, { musicVolume: v }),
+      {
+        width: 200,
+      },
+    );
+    row(2, 'colorblind', 'Daltonien');
+    const preview = this.add.graphics();
+    const drawPreview = (cb: boolean) => {
+      const colors = cb ? CRYSTAL_COLORS_CB : CRYSTAL_COLORS;
+      preview.clear();
+      (['heart', 'common', 'bonus', 'power'] as CrystalKind[]).forEach((k, i) => {
+        drawMiniCrystal(preview, ctrlX - 96 + i * 26, rowY(2), k, colors[k]);
+      });
+    };
+    drawPreview(o.colorblind);
+    const cb = toggle(this, ctrlX + 70, rowY(2), o.colorblind, (v) => {
+      updateOptions(this, { colorblind: v });
+      drawPreview(v);
+    });
+    row(3, 'motion', 'Réduire les animations');
+    const motion = toggle(this, ctrlX + 70, rowY(3), o.reducedMotion, (v) =>
+      updateOptions(this, { reducedMotion: v }),
+    );
+
+    enableKeyboardFocus(this, [sfx, music, cb, motion, back], 0);
+    this.input.keyboard?.on('keydown-ESC', () => this.close());
   }
 
   private close(): void {
+    if (!this.scene.isActive()) return;
     this.scene.stop();
     this.scene.resume(this.from);
   }
 }
 
-function cycle(v: number): number {
-  const i = VOLUMES.findIndex((x) => Math.abs(x - v) < 0.01);
-  return VOLUMES[(i + 1) % VOLUMES.length] as number;
+/** Mini-cristal (formes de la DA : cœur losange, standard rond, bonus étoile 4 branches, pouvoir hexagone). */
+export function drawMiniCrystal(
+  g: Phaser.GameObjects.Graphics,
+  x: number,
+  y: number,
+  kind: CrystalKind,
+  color: number,
+  r = 8,
+): void {
+  g.fillStyle(color, 1);
+  const ring = (n: number, radius: (i: number) => number, start = -Math.PI / 2) =>
+    Array.from({ length: n }, (_, i) => {
+      const a = start + (i * Math.PI * 2) / n;
+      return new Phaser.Math.Vector2(x + Math.cos(a) * radius(i), y + Math.sin(a) * radius(i));
+    });
+  if (kind === 'heart')
+    g.fillPoints(
+      ring(4, () => r * 1.3),
+      true,
+    );
+  else if (kind === 'bonus')
+    g.fillPoints(
+      ring(8, (i) => (i % 2 === 0 ? r * 1.45 : r * 0.5)),
+      true,
+    );
+  else if (kind === 'power')
+    g.fillPoints(
+      ring(6, () => r * 1.1, 0),
+      true,
+    );
+  else g.fillCircle(x, y, r);
 }

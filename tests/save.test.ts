@@ -104,3 +104,25 @@ describe('cinématiques vues (seen)', () => {
     expect(loadSave({ getItem: () => stored, setItem: () => undefined }).seen.intro).toBe(true);
   });
 });
+
+import { ScoreBreakdown } from '../src/core/scoreBreakdown';
+
+describe('ScoreBreakdown', () => {
+  it('répartit le score et déduit la zone finale', () => {
+    const b = new ScoreBreakdown();
+    b.add('heart', 100);
+    b.add('common', 10);
+    b.add('power', 10);
+    b.add('bonus', 500);
+    expect(b.finish(2120, 1000)).toEqual({
+      hearts: 100,
+      others: 20,
+      bonus: 500,
+      orbs: 1000,
+      finalZone: 500,
+      total: 2120,
+    });
+    b.reset();
+    expect(b.finish(0, 0).total).toBe(0);
+  });
+});

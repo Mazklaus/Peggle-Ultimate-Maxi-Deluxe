@@ -35,6 +35,8 @@ import {
   type HeartTarget,
 } from '../core/shotEvents';
 import { aimGuide, predictPath } from '../core/trajectory';
+import { levelLabel } from '../core/levelCatalog';
+import { ScoreBreakdown } from '../core/scoreBreakdown';
 import { TUNING } from '../core/tuning';
 import { OPTIONS_CHANGED, REGISTRY, SCENES, STORY_LEVELS } from './keys';
 import { CompanionView } from './CompanionView';
@@ -57,8 +59,10 @@ const BUCKET = { width: 100, height: 18, y: GAME_HEIGHT - 14 };
 const MIN_AIM = Phaser.Math.DegToRad(8);
 const MAX_AIM = Phaser.Math.DegToRad(172);
 const WALL_THICKNESS = 40;
-/** Délai entre la fin du dernier tir et l'écran de résultats (laisse l'Astre réagir). */
+/** Délai entre la fin du dernier tir et l'overlay de victoire (laisse l'Astre réagir). */
 const RESULTS_DELAY_MS = 1400;
+/** Échec : overlay « Encore » 400 ms après la sortie du dernier orbe (specs UI/UX 6). */
+const FAIL_DELAY_MS = 400;
 /** Final au ralenti (GD) : tout le jeu à 0,25 pendant 1,5 s réelles au maximum. */
 const SLOWMO = { scale: 0.25, maxRealMs: 1500 };
 /** Marge de prudence de la prédiction du final (px retirés au rayon du dernier cœur). */
@@ -118,6 +122,8 @@ export class GameScene extends Phaser.Scene {
   private chain = 0;
   private ending = false;
   private tracker = new ShotTracker();
+  /** Décompte du score par type de cristal, pour l'overlay de victoire. */
+  private breakdown = new ScoreBreakdown();
   private companion?: CompanionView;
   private slowmoUntil = 0;
   private gameScale = 1;
@@ -166,6 +172,7 @@ export class GameScene extends Phaser.Scene {
     this.setTimeScale(1);
     this.setupPhysics();
     this.tracker = new ShotTracker();
+    this.breakdown.reset();
     this.reveal = new RevealCharges();
     const save = this.registry.get(REGISTRY.save) as SaveData | undefined;
     this.colors = save?.options.colorblind ? CRYSTAL_COLORS_CB : CRYSTAL_COLORS;
@@ -234,8 +241,12 @@ export class GameScene extends Phaser.Scene {
       }
     };
     this.game.events.on(OPTIONS_CHANGED, onOptions);
+    // Perte de focus de la fenêtre : pause automatique (specs UI/UX 4).
+    const onBlur = () => this.openPause();
+    this.game.events.on(Phaser.Core.Events.BLUR, onBlur);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.game.events.off(OPTIONS_CHANGED, onOptions);
+      this.game.events.off(Phaser.Core.Events.BLUR, onBlur);
       this.companion?.destroy();
       this.companion = undefined;
       this.scene.stop(SCENES.companionLayer);
@@ -636,6 +647,14 @@ export class GameScene extends Phaser.Scene {
       forceFinal: () => {
         this.debugForceFinal = true;
       },
+      endNow: (won) => {
+        if (this.ending || this.orb) return;
+        if (won) {
+          this.level.score += this.level.orbs * this.level.tuning.points.bonus;
+          gameEvents.emit('victoire', { score: this.level.score });
+        } else gameEvents.emit('echec', { score: this.level.score });
+        this.endLevel(won);
+      },
       status: () => {
         const s = this.companion?.brain.state;
         const astre = s
@@ -734,6 +753,7 @@ export class GameScene extends Phaser.Scene {
     }
     this.chain += 1;
     this.views.get(id)?.setFillStyle(PALETTE.lit);
+    this.breakdown.add(crystal.kind, points);
     gameEvents.emit('cristal_allume', { kind: crystal.kind, chain: this.chain, points });
     this.emitAll(this.tracker.crystalLit(crystal.kind, this.level.shotScore, crystal.id));
     if (isFinalHeartLit(this.level)) {
@@ -784,14 +804,20 @@ export class GameScene extends Phaser.Scene {
 
   private endLevel(won: boolean): void {
     this.ending = true;
+    const score = this.level.score;
+    const orbBonus = won ? this.level.orbs * this.level.tuning.points.bonus : 0;
     const payload: ResultsData = {
       level: this.sceneData.level,
-      score: this.level.score,
+      score,
       won,
       orbsLeft: this.level.orbs,
+      heartsLeft: heartsRemaining(this.level),
+      breakdown: this.breakdown.finish(score, orbBonus),
       test: this.sceneData.test,
     };
-    this.time.delayedCall(RESULTS_DELAY_MS, () => this.scene.start(SCENES.results, payload));
+    // Overlay par-dessus le jeu, qui n'est PAS mis en pause : l'Astre continue de vivre.
+    const delay = won ? RESULTS_DELAY_MS : FAIL_DELAY_MS;
+    this.time.delayedCall(delay, () => this.scene.launch(SCENES.results, payload));
   }
 
   /** Anti-blocage : orbe presque immobile depuis 3 s -> les cristaux allumés autour se brisent. */
@@ -938,8 +964,3 @@ export class GameScene extends Phaser.Scene {
 }
 
 /** « ch1-04 » -> « 1-4 », « pro-02 » -> « P-2 » (numéro de niveau du bandeau). */
-function levelLabel(id: string): string {
-  const m = /^(ch(\d+)|pro)-0*(\d+)$/.exec(id);
-  if (!m) return '';
-  return `${m[2] ?? 'P'}-${m[3]}`;
-}
