@@ -5,7 +5,8 @@ W, H = 880, 656
 G = 0.001 * (1000/60)**2
 SPEED = 11.0
 ORB_R = 8
-REST = 0.75
+REST = 0.75       # cristaux
+WALL_REST = 0.9   # murs (PR 20)
 CANNON = (440, 0)
 MUZZLE = 36
 BUCKET_W, BUCKET_Y = 100, H - 14
@@ -43,9 +44,9 @@ def simulate_shot(pegs, alive, angle, bucket_x0, bucket_dir, max_steps=3000):
         for _ in range(SUB):
             vy += G / SUB
             x += vx / SUB; y += vy / SUB
-            if x < ORB_R: x = ORB_R; vx = abs(vx)*REST
-            if x > W-ORB_R: x = W-ORB_R; vx = -abs(vx)*REST
-            if y < ORB_R: y = ORB_R; vy = abs(vy)*REST
+            if x < ORB_R: x = ORB_R; vx = abs(vx)*WALL_REST
+            if x > W-ORB_R: x = W-ORB_R; vx = -abs(vx)*WALL_REST
+            if y < ORB_R: y = ORB_R; vy = abs(vy)*WALL_REST
             for i in grid.get((int(x//40), int(y//40)), ()):
                 if i not in alive: continue
                 p = pegs[i]

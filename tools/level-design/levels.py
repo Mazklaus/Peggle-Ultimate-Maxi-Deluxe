@@ -61,6 +61,7 @@ def build(pts, imposed=(), walls=()):
         return math.hypot(px - (x + t*c), py - (y + t*s_))
     pegs = [p for p in pegs if all(seg_d(p['x'], p['y'], x, y, w, a) >= 26 for x, y, w, a in walls)]
     for x, y, w, ang in walls:
+        if min(abs(ang) % 180, 180 - abs(ang) % 180) < 8: raise SystemExit(f'mur trop plat ({ang}°) : 8° minimum')
         pegs.append({'x': round(x), 'y': round(y), 'shape': 'brick', 'w': w, 'h': 12, 'angle': ang, 'kind': 'wall'})
     return pegs
 
@@ -172,7 +173,7 @@ L.append(level('ch1-09', 1, 9, 'La cascade', 'combinaison', 10, 24, 70, 1, 2, bu
 
 # 1-10 maîtrise : grande roue pleine, rampe sous le moyeu.
 pts = arc(440, 300, 240, 5, 175, 22) + arc(440, 300, 195, 10, 170, 18) + arc(440, 300, 150, 12, 168, 14) + arc(440, 300, 105, 15, 165, 10) + arc(440, 300, 60, 20, 160, 6) + arc(440, 300, 240, 200, 340, 13) + line(440, 130, 440, 250, 4) + line(40, 260, 40, 560, 8) + line(840, 260, 840, 560, 8) + [(120, 150), (760, 150), (200, 130), (680, 130), (40, 200), (840, 200)]
-L.append(level('ch1-10', 1, 10, 'La roue du phare', 'maitrise', 10, 25, 70, 1, 2, build(pts, walls=[(440, 560, 120, 0)]), **PIP))
+L.append(level('ch1-10', 1, 10, 'La roue du phare', 'maitrise', 10, 25, 70, 1, 2, build(pts, walls=[(412, 562, 62, -12), (468, 562, 62, 12)]), **PIP))
 
 # 1-11 maîtrise : voûte d'étoiles dense, deux coupes gardées par des rampes tournées vers le centre.
 walls = [(330, 520, 120, -25), (550, 520, 120, 25)]
