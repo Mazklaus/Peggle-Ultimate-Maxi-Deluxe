@@ -24,7 +24,7 @@ DEFIS = [
     ('def-3-2', 'ch3-03', 'nettoyage', 100, None, None, 'leger:44:14', 'Place nette'),
     ('def-3-3', 'ch3-09', 'tir_unique', 6, 'orbes_reduits', None, None, 'Trois de moins'),
     ('def-4-1', 'ch4-04', 'score', 20500, None, None, None, 'Haute tension'),
-    ('def-4-2', 'ch4-09', 'chaine', 38, None, None, None, 'Court-circuit'),
+    ('def-4-2', 'ch4-09', 'chaine', 30, None, None, None, 'Court-circuit'),
     ('def-4-3', 'ch4-07', 'economie', 4, 'chrono', None, None, 'Contre la montre'),
     ('def-5-1', 'ch5-05', 'score', 21000, None, None, None, 'Mousse dorée'),
     ('def-5-2', 'ch5-10', 'tir_unique', 7, None, None, None, 'Le grand coup'),
