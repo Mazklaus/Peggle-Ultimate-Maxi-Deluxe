@@ -83,6 +83,12 @@ const SHOCKWAVE = { radius: 110, seconds: 0.3 };
  * minSideShare : part horizontale minimale du 2e orbe (une chute verticale se scinde en Y).
  */
 const TWIN = { speed: 0.9, maxCatches: 2, minSideShare: 0.35 };
+/**
+ * Rebond fou de Volte (GD reglages-jalon1 et jalon2 §5) : au contact d'un cristal pouvoir,
+ * restitution 1,05 pour le reste du tir, 8 s de jeu au plus ; vitesse plafonnée (900 px/s du
+ * prototype, mise à l'échelle du ralenti global) pour rester lisible.
+ */
+const VOLTE = { restitution: 1.05, maxSpeed: 900 * ORB_PHYSICS.slowdown, seconds: 8 };
 /** Les orbes d'un même tir se traversent (groupe de collision négatif commun). */
 const ORB_COLLISION_GROUP = -1;
 /**
@@ -150,6 +156,8 @@ export class GameScene extends Phaser.Scene {
   private twinRef = { x: 0, y: 0, t: 0 };
   /** Orbes attrapés pendant ce tir (2 au plus comptent, orbe scindé). */
   private shotCatches = 0;
+  /** Temps de jeu restant (s) du rebond fou de Volte ; 0 = inactif. */
+  private crazyLeft = 0;
   private aimAngle = Math.PI / 2;
   private guide!: Phaser.GameObjects.Graphics;
   private cannon!: Phaser.GameObjects.Rectangle;
@@ -362,6 +370,7 @@ export class GameScene extends Phaser.Scene {
     }
     audio.flight(Phaser.Math.Clamp((orb.y - PLAYFIELD.y) / PLAYFIELD.h, 0, 1));
     this.trackOrb(orb);
+    this.updateCrazyBounce(delta / 1000);
     this.updateTwin(time);
     const caught = this.inBucket(orb);
     if (caught || orb.y > GAME_HEIGHT + ORB_RADIUS * 2) {
@@ -427,6 +436,56 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  private shotOrbs(): Phaser.GameObjects.Arc[] {
+    return [this.orb, this.twin].filter((o): o is Phaser.GameObjects.Arc => !!o);
+  }
+
+  /** Pouvoir de Volte : les orbes du tir rebondissent plus fort qu'ils n'arrivent. */
+  private startCrazyBounce(): void {
+    if (this.crazyLeft <= 0) {
+      for (const o of this.shotOrbs()) this.setCrazy(o, true);
+    }
+    this.crazyLeft = VOLTE.seconds;
+  }
+
+  private setCrazy(o: Phaser.GameObjects.Arc, on: boolean): void {
+    const body = o.body as MatterJS.BodyType | null;
+    if (body) body.restitution = on ? VOLTE.restitution : ORB_RESTITUTION;
+    if (on) o.setStrokeStyle(3, PALETTE.success, 0.95);
+    else if (o !== this.twin) o.setStrokeStyle();
+    else o.setStrokeStyle(2, PALETTE.success, 0.9);
+  }
+
+  /** Durée et plafond de vitesse du rebond fou, plus une traînée menthe en zigzag. */
+  private updateCrazyBounce(dt: number): void {
+    if (this.crazyLeft <= 0) return;
+    this.crazyLeft -= dt;
+    const done = this.crazyLeft <= 0;
+    for (const o of this.shotOrbs()) {
+      if (done) {
+        this.setCrazy(o, false);
+        continue;
+      }
+      const v = this.orbVelocity(o);
+      const speed = Math.hypot(v.x, v.y) * 60;
+      if (speed > VOLTE.maxSpeed) {
+        const k = VOLTE.maxSpeed / speed;
+        (o as unknown as Phaser.Physics.Matter.Components.Velocity).setVelocity(v.x * k, v.y * k);
+      }
+      if (Math.random() < 0.5) {
+        const spark = this.add.circle(o.x, o.y, 2.5, PALETTE.success, 0.8).setDepth(o.depth - 1);
+        this.tweens.add({
+          targets: spark,
+          alpha: 0,
+          scale: 0.2,
+          duration: 300,
+          onComplete: () => spark.destroy(),
+        });
+      }
+    }
+    if (done) this.crazyLeft = 0;
+  }
+
   /** Crée un orbe de tir (corps Matter compris), à la vitesse donnée (px par pas Matter). */
   private spawnOrb(x: number, y: number, vx: number, vy: number): Phaser.GameObjects.Arc {
     const orb = this.add.circle(x, y, ORB_RADIUS, PALETTE.orb);
@@ -449,8 +508,7 @@ export class GameScene extends Phaser.Scene {
   private splitOrb(by?: MatterJS.BodyType): void {
     const src = this.orb;
     if (!src || this.twin || (by && by !== src.body)) return;
-    const body = src.body as MatterJS.BodyType;
-    const { x: vx, y: vy } = body.velocity;
+    const { x: vx, y: vy } = this.orbVelocity(src);
     const speed = Math.hypot(vx, vy) * TWIN.speed;
     if (speed <= 0) return;
     // Une orbe qui tombe tout droit se scinde quand même en Y : part horizontale minimale.
@@ -460,6 +518,7 @@ export class GameScene extends Phaser.Scene {
     const twin = this.spawnOrb(src.x, src.y, side * sx, sy);
     twin.setStrokeStyle(2, PALETTE.success, 0.9);
     this.twin = twin;
+    if (this.crazyLeft > 0) this.setCrazy(twin, true);
     this.twinRef = { x: src.x, y: src.y, t: this.time.now };
     // Petit éclat menthe au point de scission.
     const flash = this.add.circle(src.x, src.y, ORB_RADIUS, PALETTE.success, 0.5).setDepth(6);
@@ -916,6 +975,7 @@ export class GameScene extends Phaser.Scene {
       Math.sin(this.aimAngle) * LAUNCH_SPEED,
     );
     this.shotCatches = 0;
+    this.crazyLeft = 0;
     this.chain = 0;
     this.slowmoUntil = 0;
     this.stuckRef = { x: start.x, y: start.y, t: this.time.now };
@@ -966,6 +1026,7 @@ export class GameScene extends Phaser.Scene {
     this.emitAll(this.tracker.crystalLit(crystal.kind, this.level.shotScore, crystal.id));
     if (crystal.kind === 'power' && this.companionId === 'bourdon') this.shockwave(crystal);
     if (crystal.kind === 'power' && this.companionId === 'jumelles' && by) this.splitOrb(by);
+    if (crystal.kind === 'power' && this.companionId === 'volte') this.startCrazyBounce();
     if (isFinalHeartLit(this.level)) {
       // Filet de sécurité : le dernier cœur touché sans prédiction préalable.
       // Pas encore de ralenti, ou un ralenti déjà terminé pendant ce tir : petit gel
@@ -1022,6 +1083,7 @@ export class GameScene extends Phaser.Scene {
     this.orb = undefined;
     this.twin?.destroy();
     this.twin = undefined;
+    this.crazyLeft = 0;
     this.hud.endShot();
     this.applyGameScale(1);
     const result = endShot(this.level, catches);
