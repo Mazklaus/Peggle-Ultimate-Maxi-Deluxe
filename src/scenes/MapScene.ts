@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { PLAYFIELD } from '../config';
+import { GAME_HEIGHT, GAME_WIDTH, PLAYFIELD } from '../config';
 import { levelLabel, type LevelCatalog } from '../core/levelCatalog';
 import type { LevelData } from '../core/levelFormat';
 import {
@@ -342,12 +342,13 @@ export class MapScene extends Phaser.Scene {
   // --- Vue ciel ---------------------------------------------------------------
 
   private buildSky(from?: number, unlock?: number): void {
-    if (this.textures.exists(SKY.bg.key)) this.add.image(0, 0, SKY.bg.key).setOrigin(0);
     const save = this.save();
     const reduced = currentOptions(this).reducedMotion;
+    // Perf (jalon 3) : fond et Observatoire fusionnés en une texture (un seul plein écran) ;
+    // la Veilleuse, entre les deux, passe donc devant l'Observatoire (elle ne le chevauche pas).
+    const bg = bakeLayers(this, 'carte-ciel-fixe', [SKY.bg.key, SKY.observatory.key]);
+    if (bg) this.add.image(0, 0, bg).setOrigin(0);
     this.drawVeilleuse(chaptersDone(save), reduced);
-    if (this.textures.exists(SKY.observatory.key))
-      this.add.image(0, 0, SKY.observatory.key).setOrigin(0);
 
     // Prologue en arc autour de l'Observatoire (clic = vue du chapitre 1).
     const pro = chapterLevelIds(0);
@@ -399,11 +400,12 @@ export class MapScene extends Phaser.Scene {
     const k = done / CHAPTER_COUNT;
     const r = v.r[0] + (v.r[1] - v.r[0]) * k;
     const a = v.alpha[0] + (v.alpha[1] - v.alpha[0]) * k;
-    const glow = this.add.graphics({ x: v.x, y: v.y });
-    // Dégradé radial quasi continu : beaucoup de couches très légères (pas de paliers visibles).
-    const layers = 40;
-    for (let i = layers; i >= 1; i--)
-      glow.fillStyle(0xffe9c2, (a / layers) * 1.4).fillCircle(0, 0, (r * i) / layers);
+    // Dégradé radial en texture (un seul quad) : les 40 cercles superposés d'avant
+    // coûtaient 40 remplissages par image en rendu logiciel.
+    const glow = this.add
+      .image(v.x, v.y, veilleuseGlowTexture(this))
+      .setDisplaySize(r * 2, r * 2)
+      .setAlpha(1 - Math.pow(1 - (a * 1.4) / 40, 40));
     const body = this.add.graphics({ x: v.x, y: v.y });
     body.fillStyle(0xffe9c2, 0.95).fillPoints(starPoints8(0, 0, 30, 18), true);
     // Yeux fermés.
@@ -417,8 +419,8 @@ export class MapScene extends Phaser.Scene {
     if (reduced) return;
     this.tweens.add({
       targets: glow,
-      scale: 1.08,
-      alpha: 0.8,
+      scale: glow.scale * 1.08,
+      alpha: glow.alpha * 0.8,
       duration: 2000,
       yoyo: true,
       repeat: -1,
@@ -876,4 +878,41 @@ function dotted(
   const n = Math.max(1, Math.floor(len / 10));
   g.fillStyle(color, alpha);
   for (let i = 1; i < n; i++) g.fillCircle(x1 + ((x2 - x1) * i) / n, y1 + ((y2 - y1) * i) / n, 1.5);
+}
+
+/** Texture de lueur de la Veilleuse : opacité 1 au centre, pente linéaire jusqu'au bord. */
+function veilleuseGlowTexture(scene: Phaser.Scene): string {
+  const key = 'carte-veilleuse-lueur';
+  if (scene.textures.exists(key)) return key;
+  const size = 256;
+  const tex = scene.textures.createCanvas(key, size, size);
+  const ctx = tex?.getContext();
+  if (!tex || !ctx) return key;
+  const grad = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  // Profil de l'ancien empilement de couches très légères : presque linéaire (pic par setAlpha).
+  for (let i = 0; i <= 10; i++) grad.addColorStop(i / 10, `rgba(255,233,194,${1 - i / 10})`);
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, size, size);
+  tex.refresh();
+  return key;
+}
+
+/** Fusionne des textures plein écran (déjà chargées) en une seule, une fois par session. */
+function bakeLayers(scene: Phaser.Scene, key: string, sources: string[]): string | null {
+  if (scene.textures.exists(key)) return key;
+  const present = sources.filter((s) => scene.textures.exists(s));
+  if (present.length === 0) return null;
+  const tex = scene.textures.createCanvas(key, GAME_WIDTH, GAME_HEIGHT);
+  const ctx = tex?.getContext();
+  if (!tex || !ctx) return present[0] ?? null;
+  for (const s of present)
+    ctx.drawImage(
+      scene.textures.get(s).getSourceImage() as CanvasImageSource,
+      0,
+      0,
+      GAME_WIDTH,
+      GAME_HEIGHT,
+    );
+  tex.refresh();
+  return key;
 }

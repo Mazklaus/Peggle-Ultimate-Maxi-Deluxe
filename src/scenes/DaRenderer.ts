@@ -27,6 +27,8 @@ export class DaRenderer {
   private lastDef: ReactionDef | null = null;
   private lastElapsed = 0;
   private sleeping = false;
+  /** Résolution du canvas (1 = 320 px) : moitié pour les petits Astres (carte, sélecteur). */
+  private res = 1;
 
   constructor(scene: Phaser.Scene, astreKey: string) {
     this.actor = new DA_RIG.AstreActor(astreKey);
@@ -103,11 +105,20 @@ export class DaRenderer {
     a.target = look;
     a.exc = Math.max(a.exc ?? 0, excitement);
     a.update(this.now, dt);
+    // Perf (jalon 3) : un Astre affiché à moins de la moitié de sa taille n'a pas besoin d'un
+    // canvas de 320 px, rafraîchi et renvoyé au GPU à chaque image (8 sur la vue ciel).
+    const res = scale <= 0.5 ? 0.5 : 1;
+    if (res !== this.res) {
+      this.res = res;
+      this.texture.setSize(CANVAS * res, CANVAS * res);
+    }
     const ctx = this.texture.context;
-    ctx.clearRect(0, 0, CANVAS, CANVAS);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, CANVAS * res, CANVAS * res);
+    ctx.setTransform(res, 0, 0, res, 0, 0);
     a.draw(ctx, CENTER.x, CENTER.y, 1);
     this.texture.refresh();
-    this.image.setPosition(x, y).setScale(scale);
+    this.image.setPosition(x, y).setScale(scale / res);
   }
 
   destroy(): void {
