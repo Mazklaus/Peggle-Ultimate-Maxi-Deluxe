@@ -746,11 +746,11 @@ L.append(level('ch8-11', 8, 11, 'Les passages du ciel', 'maitrise', 13, 27, 75, 
 
 # 8-12 Grande Constellation : la Grande Veilleuse, roue + lunes + aimant, deux auvents.
 walls = [(170, 250, 130, 20), (710, 250, 130, -20)]
-g = [('veilleuse', 440, 340, ring(440, 340, 120, 16) + ring(440, 340, 65, 9), None)]; dec = [rot('veilleuse', 440, 340, 16), mag('coeur', 440, 340, 50, 1.0)]
+g = [('veilleuse', 440, 340, ring(440, 340, 120, 16) + ring(440, 340, 65, 9), None)]; dec = [rot('veilleuse', 440, 340, 16), mag('coeur', 440, 340, 90, 1.0)]
 pts = hole(rows(60, 820, 140, 2, 40, 18) + thick(150, 460, 100, 2) + thick(730, 460, 100, 2) + rows(80, 800, 568, 1, 0, 18), 440, 340, 30)
 for k, cx in enumerate((150, 730)):
     gg, dd = moons(f'lune{k+1}', cx, 360, 60, 2, 6, 1 if k == 0 else -1); g.append(gg); dec.append(dd)
-L.append(level('ch8-12', 8, 12, 'La Grande Veilleuse', 'grande-constellation', 13, 28, 77, 1, 2, build(pts, GUARD_IMP_LIGHT, walls=walls, groups=g), decor=dec, **NUA))
+L.append(level('ch8-12', 8, 12, 'La Grande Veilleuse', 'grande-constellation', 14, 28, 77, 1, 2, build(pts, GUARD_IMP_LIGHT, walls=walls, groups=g), decor=dec, **NUA))
 
 out = sys.argv[1] if len(sys.argv) > 1 else 'out'
 os.makedirs(out, exist_ok=True)
