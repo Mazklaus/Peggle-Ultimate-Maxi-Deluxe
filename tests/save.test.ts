@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  challengeMedals,
   currentStreak,
   dailyBars,
   previousDayKey,
+  recordChallenge,
   recordDaily,
   emptySave,
   failsBeforeFirstWin,
@@ -219,5 +221,22 @@ describe('historique du jour (classement local)', () => {
       '20261121',
     ]);
     expect(bars.map((b) => b.best)).toEqual([1500, 1600, 1700, 1800, 1900, null, null]);
+  });
+});
+
+describe('médailles des défis', () => {
+  it('une médaille par défi réussi, gardée par loadSave', () => {
+    const save = emptySave();
+    expect(recordChallenge(save, 'def-1-1', false)).toBe(false);
+    expect(recordChallenge(save, 'def-1-1', true)).toBe(true);
+    expect(recordChallenge(save, 'def-1-1', true)).toBe(false);
+    expect(challengeMedals(save, ['def-1-1', 'def-1-2'])).toBe(1);
+    const store = new Map<string, string>();
+    const storage = {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => void store.set(k, v),
+    };
+    writeSave(save, storage);
+    expect(loadSave(storage).challenges).toEqual({ 'def-1-1': true });
   });
 });

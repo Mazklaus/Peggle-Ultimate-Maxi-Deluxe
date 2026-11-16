@@ -4,7 +4,14 @@ import { audio } from '../audio';
 import { GAME_HEIGHT, GAME_WIDTH } from '../config';
 import { nextLevelId, type LevelCatalog } from '../core/levelCatalog';
 import type { LevelData } from '../core/levelFormat';
-import { markSeen, recordDaily, recordResult, writeSave, type SaveData } from '../core/save';
+import {
+  markSeen,
+  recordChallenge,
+  recordDaily,
+  recordResult,
+  writeSave,
+  type SaveData,
+} from '../core/save';
 import type { Breakdown } from '../core/scoreBreakdown';
 import { starsFor } from '../core/stars';
 import type { GameScene } from './GameScene';
@@ -99,6 +106,9 @@ export class ResultsScene extends Phaser.Scene {
       writeSave(save);
       streak = rec.streak;
       newRecord = before !== null && data.score > before;
+    } else if (!data.test && data.mode?.kind === 'defi') {
+      // Défi : médaille si l'objectif est atteint et le niveau gagné, hors aventure.
+      if (recordChallenge(save, data.level.id, !!data.challenge?.success)) writeSave(save);
     } else if (!data.test && data.mode?.kind !== 'duel') {
       // Un duel ne touche pas à la progression de l'aventure.
       const before = save.levels[data.level.id];
@@ -139,9 +149,10 @@ export class ResultsScene extends Phaser.Scene {
 
   /** Mode hors aventure : le bouton « carte » ramène à l'écran du mode. */
   private toHub(data: ResultsData): void {
-    if (!data.daily) return this.toMap();
+    const hub = data.daily ? SCENES.daily : data.mode?.kind === 'defi' ? SCENES.challenges : null;
+    if (!hub) return this.toMap();
     this.scene.stop(SCENES.game);
-    this.scene.start(SCENES.daily);
+    this.scene.start(hub);
   }
 
   private play(level: LevelData): void {
@@ -291,7 +302,28 @@ export class ResultsScene extends Phaser.Scene {
 
     // Étoiles une par une (300 ms chacune, note montante).
     const starY = 112;
-    for (let i = 0; i < 3; i++) {
+    // Défi : une ligne « défi » (médaille pleine ou creuse) à la place des étoiles.
+    const medal = data.mode?.kind === 'defi' ? !!data.challenge?.success : null;
+    if (medal !== null) {
+      const m = this.add.container(0, starY).setScale(0);
+      const g = this.add.graphics();
+      if (medal) g.fillStyle(PALETTE.accent, 1).fillCircle(0, 0, 26);
+      else g.lineStyle(3, PALETTE.starDim, 0.8).strokeCircle(0, 0, 26);
+      m.add(g);
+      if (this.textures.exists('icone-medaille-defi'))
+        m.add(
+          this.add
+            .image(0, 0, 'icone-medaille-defi')
+            .setDisplaySize(34, 34)
+            .setAlpha(medal ? 1 : 0.35),
+        );
+      box.add(m);
+      this.step(WIN_TIMES.stars, (instant) => {
+        this.pop(m, instant);
+        if (medal && !instant) audio.crystalHit('bonus');
+      });
+    }
+    for (let i = 0; medal === null && i < 3; i++) {
       const lit = i < stars;
       const s = this.add
         .text((i - 1) * 64, starY, '★', textStyle(44, lit ? '#B9A6FF' : '#2E3870'))

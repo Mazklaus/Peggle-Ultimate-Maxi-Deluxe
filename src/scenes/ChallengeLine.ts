@@ -14,7 +14,7 @@ import type {
 import { goalTarget } from '../core/challenge';
 import { PALETTE, TEXT, textStyle } from './theme';
 
-const GOAL_ICON: Record<ChallengeGoal, string> = {
+export const GOAL_ICON: Record<ChallengeGoal, string> = {
   score: 'defi-score',
   nettoyage: 'defi-nettoyage',
   tir_unique: 'defi-tir-parfait',
@@ -22,7 +22,7 @@ const GOAL_ICON: Record<ChallengeGoal, string> = {
   pouvoir: 'defi-pouvoir',
   chaine: 'defi-chaine',
 };
-const CONSTRAINT_ICON: Record<ChallengeConstraint, string> = {
+export const CONSTRAINT_ICON: Record<ChallengeConstraint, string> = {
   sans_receptacle: 'defi-sans-receptacle',
   orbes_reduits: 'defi-orbes-reduits',
   astre_impose: 'cadenas',

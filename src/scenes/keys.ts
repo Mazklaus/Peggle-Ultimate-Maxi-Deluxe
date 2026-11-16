@@ -12,6 +12,8 @@ export const SCENES = {
   memories: 'Memories',
   /** Constellation du jour : panneau avant de jouer (jalon 3). */
   daily: 'Daily',
+  /** Liste des défis et panneau du défi (jalon 3). */
+  challenges: 'Challenges',
   /** Calque de l'Astre au-dessus des overlays de fin. */
   companionLayer: 'CompanionLayer',
   /** Sélecteur de compagnon, par-dessus la carte (jalon 2). */

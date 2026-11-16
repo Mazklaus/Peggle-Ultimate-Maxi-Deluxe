@@ -5,6 +5,7 @@ import { gameEvents } from './core/events';
 import { ORB_PHYSICS } from './core/physics';
 import { loadSave } from './core/save';
 import { BootScene } from './scenes/BootScene';
+import { ChallengesScene } from './scenes/ChallengesScene';
 import { CompanionLayer } from './scenes/CompanionLayer';
 import { CompanionSelectScene } from './scenes/CompanionSelectScene';
 import { CutsceneScene } from './scenes/CutsceneScene';
@@ -65,6 +66,7 @@ function startGame(): void {
       CompanionSelectScene,
       MemoriesScene,
       DailyScene,
+      ChallengesScene,
     ],
   });
 }
