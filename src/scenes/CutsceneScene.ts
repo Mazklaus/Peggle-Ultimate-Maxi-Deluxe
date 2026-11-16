@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { GAME_HEIGHT, GAME_WIDTH } from '../config';
+import { sequenceChapter, type CutsceneSequence } from '../core/story';
 import { SCENES } from './keys';
 
 /**
@@ -18,7 +19,12 @@ interface VignettesApi {
   create(ctx: CanvasRenderingContext2D): { A: Shot[]; B: Shot[] };
 }
 
-export type CutsceneSequence = 'intro' | 'reveil_pip' | 'fin_ch1';
+/** Vignettes du jalon 2 : CH2..CH8 = [R0 réveil, F1..F6 fin], FINAL = V1..V8. */
+interface VignettesJ2Api {
+  create(ctx: CanvasRenderingContext2D): Record<string, Shot[]> & { resetActors(): void };
+}
+
+export type { CutsceneSequence };
 
 export interface CutsceneData {
   sequence: CutsceneSequence;
@@ -28,7 +34,35 @@ export interface CutsceneData {
 
 const FADE_MS = 300;
 /** Scripts du DA, dans l'ordre (vignettes.js, le dernier, définit window.Vignettes). */
-const SCRIPTS = ['astres-rig', 'astres-reactions-j2', 'gardienne', 'vignettes'] as const;
+const SCRIPTS = [
+  'astres-rig',
+  'astres-reactions-j2',
+  'gardienne',
+  'veilleuse',
+  'elements-decor',
+  'vignettes',
+  'vignettes-j2',
+] as const;
+
+/**
+ * Plans de la séquence. Fin des ch. 2 à 7 : le plan F6 (retour carte) est laissé à la vraie
+ * carte, dont la séquence de déblocage trace déjà le chemin (pas de doublon). Fin du ch. 8 :
+ * suivie du final V1-V8.
+ */
+export function pickShots(
+  seq: CutsceneSequence,
+  j1: { A: Shot[]; B: Shot[] },
+  j2: Record<string, Shot[]> | null,
+): Shot[] {
+  if (seq === 'intro') return j1.A;
+  if (seq === 'reveil_pip') return j1.B.slice(0, 1);
+  if (seq === 'fin_ch1') return j1.B.slice(1);
+  const n = sequenceChapter(seq);
+  const all = (n && j2?.[`CH${n}`]) || [];
+  if (seq.startsWith('reveil_')) return all.slice(0, 1);
+  const end = all.slice(1).filter((s) => s.id !== 'F6');
+  return n === 8 ? [...end, ...(j2?.FINAL ?? [])] : end;
+}
 
 export class CutsceneScene extends Phaser.Scene {
   private shots: Shot[] = [];
@@ -38,6 +72,8 @@ export class CutsceneScene extends Phaser.Scene {
   private texture?: Phaser.Textures.CanvasTexture;
   private payload!: CutsceneData;
   private leaving = false;
+  /** Remise à zéro des acteurs du DA entre deux plans (comme le lecteur du DA). */
+  private resetActors: () => void = () => {};
 
   constructor() {
     super(SCENES.cutscene);
@@ -52,7 +88,7 @@ export class CutsceneScene extends Phaser.Scene {
   preload(): void {
     // Scripts classiques du DA (globals AstresRig, Gardienne, Vignettes), chargés une fois.
     // Déjà exécutés lors d'une cinématique précédente : on ne les recharge pas.
-    if ((window as unknown as { Vignettes?: unknown }).Vignettes) return;
+    if ((window as unknown as { VignettesJ2?: unknown }).VignettesJ2) return;
     // load.scripts (et non load.script en boucle) : exécution dans l'ordre de la liste,
     // les scripts dépendent les uns des autres (AstresRig d'abord).
     this.load.scripts(
@@ -70,9 +106,12 @@ export class CutsceneScene extends Phaser.Scene {
     if (!tex) return this.finish();
     this.texture = tex;
     this.ctx = tex.getContext();
-    const { A, B } = api.create(this.ctx);
     const seq = this.payload.sequence;
-    this.shots = seq === 'intro' ? A : seq === 'reveil_pip' ? B.slice(0, 1) : B.slice(1);
+    const j2api = (window as unknown as { VignettesJ2?: VignettesJ2Api }).VignettesJ2;
+    const j2 = sequenceChapter(seq) && j2api ? j2api.create(this.ctx) : null;
+    this.resetActors = j2 ? () => j2.resetActors() : () => {};
+    this.shots = pickShots(seq, sequenceChapter(seq) ? { A: [], B: [] } : api.create(this.ctx), j2);
+    if (this.shots.length === 0) return this.finish();
     this.add.image(0, 0, key).setOrigin(0);
     this.start = this.time.now;
 
@@ -110,6 +149,7 @@ export class CutsceneScene extends Phaser.Scene {
         this.index += 1;
         this.start = time;
         t = 0;
+        this.resetActors();
       } else {
         this.finish();
         return;
@@ -134,6 +174,7 @@ export class CutsceneScene extends Phaser.Scene {
     if (this.index < this.shots.length - 1) {
       this.index += 1;
       this.start = this.time.now;
+      this.resetActors();
     } else this.finish();
   }
 

@@ -7,7 +7,8 @@ import { markSeen, recordResult, writeSave, type SaveData } from '../core/save';
 import type { Breakdown } from '../core/scoreBreakdown';
 import { starsFor } from '../core/stars';
 import type { GameScene } from './GameScene';
-import { REGISTRY, SCENES, STORY_LEVELS } from './keys';
+import { REGISTRY, SCENES } from './keys';
+import { endSequenceFor } from '../core/story';
 import { currentOptions, drawMiniCrystal } from './OptionsScene';
 import { CRYSTAL_COLORS, CRYSTAL_COLORS_CB, PALETTE, textStyle, TEXT } from './theme';
 import { panel, veil } from './ui';
@@ -284,12 +285,13 @@ export class ResultsScene extends Phaser.Scene {
     const out: Phaser.GameObjects.Container[] = [];
     let main = false;
 
-    if (!data.test && data.level.id === STORY_LEVELS.ch1Last && markSeen(save, 'fin_ch1')) {
-      // Fin du chapitre 1 : vignettes B1-B6 (une fois), puis retour à la carte.
+    const ending = endSequenceFor(data.level.id);
+    if (!data.test && ending && markSeen(save, ending)) {
+      // Fin de chapitre : vignettes (une fois), puis retour à la carte.
       writeSave(save);
       const toEnding = () => {
         this.scene.stop(SCENES.game);
-        this.scene.start(SCENES.cutscene, { sequence: 'fin_ch1', next: { scene: SCENES.map } });
+        this.scene.start(SCENES.cutscene, { sequence: ending, next: { scene: SCENES.map } });
       };
       out.push(primaryButton(this, 0, y, 'Suite', toEnding, { icon: 'next', width: 240 }));
       main = true;

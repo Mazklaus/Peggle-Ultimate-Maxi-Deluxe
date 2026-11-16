@@ -43,7 +43,7 @@
      ====================================================================== */
   const ASTRES = {
     pip: {
-      nom: 'Pip', color: '#FFE45C', light: '#FFF6B8', shade: '#E0B92E',
+      nom: 'Pip', reach: 'blow', color: '#FFE45C', light: '#FFF6B8', shade: '#E0B92E',
       shape: { type: 'star', n: 5, rOut: 38, rIn: 29, round: 11 }, meche: true,
       size: .82, tempo: 1.45, amp: 1.25,
       eyes: { y: -2, gap: 10, rx: 5, ry: 7 }, mouthY: 11, arms: { len: 12, w: 6, y: 6, x: 22 },
@@ -51,7 +51,7 @@
       voix: 'piccolo / sifflet vif',
     },
     bourdon: {
-      nom: 'Bourdon', color: '#FFA98A', light: '#FFD3C2', shade: '#D9785A',
+      nom: 'Bourdon', reach: 'blow', color: '#FFA98A', light: '#FFD3C2', shade: '#D9785A',
       shape: { type: 'ball', r: 40, bumps: 6, bumpR: 6, wide: 1.18 }, nightcap: true,
       size: .95, tempo: .6, amp: .8,
       eyes: { y: -4, gap: 13, rx: 5, ry: 6, lid: .55 }, mouthY: 14, arms: { len: 10, w: 8, y: 14, x: 36 },
@@ -78,7 +78,7 @@
       voix: 'trompette bouchée',
     },
     mousse: {
-      nom: 'Mousse', color: '#7EE0C6', light: '#C4F5E7', shade: '#46B39A', alpha: .92,
+      nom: 'Mousse', reach: 'mist', color: '#7EE0C6', light: '#C4F5E7', shade: '#46B39A', alpha: .92,
       shape: { type: 'cloud', r: 30 }, fan: true,
       size: 1, tempo: .85, amp: .7,
       eyes: { y: -2, gap: 9, rx: 4, ry: 5.5 }, mouthY: 9, arms: { len: 7, w: 5, y: 8, x: 26 },
@@ -86,7 +86,7 @@
       voix: 'harmonica de verre',
     },
     horloge: {
-      nom: 'Horloge', color: '#E8D9B0', light: '#FFF4D6', shade: '#B9A574',
+      nom: 'Horloge', reach: 'spring', color: '#E8D9B0', light: '#FFF4D6', shade: '#B9A574',
       shape: { type: 'star', n: 4, rOut: 42, rIn: 34, round: 12, lean: .785 }, clock: true, mech: true, cuckoo: true,
       size: 1, tempo: .9, amp: .7,
       eyes: { y: -3, gap: 9, rx: 3.6, ry: 4.6, glasses: true, brow: 'hands' }, mouthY: 10, arms: { len: 12, w: 5, y: 8, x: 34 },
@@ -102,7 +102,7 @@
       voix: 'clochettes / glockenspiel',
     },
     nuagelune: {
-      nom: 'Nuage-Lune', color: '#D6DCFF', light: '#F2F4FF', shade: '#9EA8E0',
+      nom: 'Nuage-Lune', reach: 'feather', color: '#D6DCFF', light: '#F2F4FF', shade: '#9EA8E0',
       shape: { type: 'crescent', r: 38 }, seatCloud: true,
       size: 1.05, tempo: .7, amp: .8,
       eyes: { y: -2, gap: 0, rx: 4.5, ry: 6, lid: .35, dx: -24, single: true }, mouthY: 13, mouthDx: -22, arms: { len: 10, w: 5, y: 10, x: 26 },
@@ -352,6 +352,15 @@
       ctx.fillStyle = '#FFB23F'; ctx.beginPath(); ctx.moveTo(7, -1); ctx.lineTo(13, 1); ctx.lineTo(7, 3); ctx.fill();
       ctx.fillStyle = INK; ctx.beginPath(); ctx.arc(3, -2, 1.3, 0, Math.PI * 2); ctx.fill(); ctx.restore();
     }
+    if (d.reach && st.reach > 0) { // orbe_coincee : ce que l'Astre tend vers l'orbe (direction = regard)
+      const r = st.reach, ax = Math.abs(st.lookX) + Math.abs(st.lookY) > .1 ? Math.atan2(st.lookY, st.lookX) : 0, tt = (st.t || 0);
+      ctx.save(); ctx.rotate(ax); ctx.lineCap = 'round';
+      if (d.reach === 'blow') { ctx.strokeStyle = 'rgba(244,241,255,.95)'; ctx.lineWidth = 3.4; for (let i = 0; i < 3; i++) { const o = ((tt / 160) + i / 3) % 1, x = 58 + o * 50 * r; ctx.globalAlpha = (1 - o) * r; ctx.beginPath(); ctx.moveTo(x, (i - 1) * 9); ctx.lineTo(x + 16 * r, (i - 1) * 11); ctx.stroke(); } }
+      if (d.reach === 'mist') { ctx.strokeStyle = 'rgba(126,224,198,.8)'; ctx.lineWidth = 2; ctx.beginPath(); for (let x = 0; x <= 60 * r; x += 4) ctx[x ? 'lineTo' : 'moveTo'](30 + x, Math.sin(x / 9 + tt / 120) * 3); ctx.stroke(); ctx.fillStyle = 'rgba(196,245,231,.9)'; ctx.beginPath(); ctx.arc(30 + 60 * r, 0, 3, 0, Math.PI * 2); ctx.fill(); }
+      if (d.reach === 'spring') { ctx.rotate(-Math.PI / 2 - ax * .5); ctx.strokeStyle = '#B9A574'; ctx.lineWidth = 2.6; ctx.beginPath(); const L = 70 * r; for (let i = 0; i <= 10; i++) ctx[i ? 'lineTo' : 'moveTo'](40 + L * i / 10, i % 2 ? -7 : 7); ctx.stroke(); ctx.fillStyle = '#FFE45C'; ctx.beginPath(); ctx.arc(46 + L, 0, 6, 0, Math.PI * 2); ctx.fill(); }
+      if (d.reach === 'feather') { ctx.translate(30 + 45 * r, Math.sin(tt / 70) * 5 * r); ctx.rotate(Math.sin(tt / 90) * .5 * r); ctx.fillStyle = '#F2F4FF'; ctx.beginPath(); ctx.ellipse(10, 0, 18, 6, 0, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = '#9EA8E0'; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.moveTo(-10, 0); ctx.lineTo(28, 0); ctx.stroke(); }
+      ctx.restore();
+    }
   }
 
   function drawAstre(ctx, d, st, px) {
@@ -509,6 +518,15 @@
     { dur: 550, then: 'suivi', tracks: { dx: [k(0, 0), k(120, -8, 'Quad.out'), k(550, 0)], sy: [k(0, 1), k(120, 1.15, 'Back.out'), k(550, 1)], armL: [k(0, 30), k(120, 150, 'Back.out'), k(550, 40)], armR: [k(0, 30), k(120, 150, 'Back.out'), k(550, 40)] },
       face: [[0, { eyes: 'wide', mouth: 'o', brow: 'up' }]], fx: [[0, 'excl']], track: true },
   ];
+  // Orbe coincée (le jeu la débloque) : le moteur envoie orbe_coincee, puis orbe_debloquee quand elle repart
+  R.orbe_coincee = [
+    { dur: 1200, hold: true, track: true, tracks: { sx: [k(0, 1), k(350, 1.5, 'Back.out'), k(600, 1.6), k(1200, 1.55)], sy: [k(0, 1), k(350, 1.45, 'Back.out'), k(600, 1.55), k(1200, 1.5)], cheeks: [k(0, 0), k(350, 1)], shake: [k(500, 0), k(650, 1.2), k(1200, 1.2)], reach: [k(0, 0), k(600, 0), k(700, 1, 'Quad.out'), k(1200, 1)], armL: [k(0, 10), k(300, 60), k(1200, 60)], armR: [k(0, 10), k(300, 60), k(1200, 60)] },
+      face: [[0, { eyes: 'squint', mouth: 'puff', brow: 'stern' }], [650, { eyes: 'squint', mouth: 'o' }]], fx: [] },
+  ];
+  R.orbe_debloquee = [
+    { dur: 1300, then: 'suivi', tracks: { sx: [k(0, 1.55), k(500, .85, 'Quad.out'), k(800, .9), k(1000, 1.1, 'Back.out'), k(1300, 1)], sy: [k(0, 1.5), k(500, .85, 'Quad.out'), k(800, .9), k(1000, 1.15, 'Back.out'), k(1300, 1)], rot: [k(0, 0), k(500, 540, 'Quad.out'), k(501, 180), k(800, 360), k(801, 0)], dx: [k(0, 0), k(150, 14), k(300, -12), k(450, 10), k(600, 0)], dy: [k(0, 0), k(300, -24, 'Quad.out'), k(700, 0, 'Bounce.out')], armL: [k(800, 10), k(1000, 40)], armR: [k(800, 10), k(1000, 40)] },
+      face: [[0, { eyes: 'spiral', mouth: 'open' }], [850, { eyes: 'open', mouth: 'grin', brow: 'up' }]], fx: [[0, 'puff', 3], [900, 'sparkle', 2]] },
+  ];
   // Idles longs comiques (toutes les 12 à 20 s) — Pip
   R.idle_long = [
     { dur: 4200, // L1 « La mouche » : suit une poussière, louche, la gobe, tousse une étincelle
@@ -527,7 +545,7 @@
   ];
 
   /* ---- Priorités (00-regles-communes.md) : une réaction plus basse n'interrompt pas une plus haute ---- */
-  const PRIO = { victoire: 13, echec: 13, final_ralenti: 12, presque: 11, gros_coup: 10, chaine_longue: 10, pouvoir_active: 9, dernier_coeur: 8, dernier_orbe: 7, orbe_recupere: 6, rate: 5, orbe_proche_coeur: 4, orbe_descend: 4, tir_lance: 3, suivi: 2, inactivite: 1, idle_long: 0, sommeil: 0 };
+  const PRIO = { victoire: 13, echec: 13, final_ralenti: 12, presque: 11, gros_coup: 10, chaine_longue: 10, pouvoir_active: 9, orbe_coincee: 8.5, orbe_debloquee: 8.5, dernier_coeur: 8, dernier_orbe: 7, orbe_recupere: 6, rate: 5, orbe_proche_coeur: 4, orbe_descend: 4, tir_lance: 3, suivi: 2, inactivite: 1, idle_long: 0, sommeil: 0 };
 
   /* ---- Surcharges de personnalité (gags propres à chaque Astre) ---- */
   const OVERRIDES = {
