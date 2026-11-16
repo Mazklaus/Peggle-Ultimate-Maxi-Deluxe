@@ -38,13 +38,22 @@
           <label><input type="radio" name="shape" value="circle" checked /> Rond</label>
           <label><input type="radio" name="shape" value="brick" /> Brique</label>
         </fieldset>
+        <label
+          >Groupe (G)
+          <select
+            id="group"
+            title="Groupe des pegs posés ; s'applique aussi au peg sélectionné"
+          ></select>
+        </label>
         <label><input id="snap" type="checkbox" checked /> Grille magnétique</label>
         <label>Pas <input id="grid" type="number" min="2" max="80" value="20" /></label>
         <h2>Sélection</h2>
         <div id="selection">Aucun peg sélectionné.</div>
         <p class="help">
           Clic : poser / sélectionner. Glisser : déplacer. Clic droit ou Suppr : effacer. Q / E :
-          tourner une brique. Les kinds choisis s'appliquent aussi au peg sélectionné.
+          tourner une brique. Le kind et le groupe choisis s'appliquent aussi au peg sélectionné. G
+          : rattacher le peg sélectionné au groupe choisi. Les poignées (◎, A, B) du décor se
+          glissent ; un centre emmène les pegs de son groupe.
         </p>
       </aside>
       <section id="stage">
@@ -73,6 +82,20 @@
         <label>hearts <input id="f-hearts" type="number" min="0" /></label>
         <label>power <input id="f-power" type="number" min="0" /></label>
         <label>bonus <input id="f-bonus" type="number" min="0" /></label>
+        <h2>Décor (format 2)</h2>
+        <label
+          ><select id="decor-type">
+            <option value="rotate">rotation</option>
+            <option value="orbit">orbite</option>
+            <option value="magnet">aimant</option>
+            <option value="portal">portail</option>
+            <option value="regen">régénération</option>
+          </select>
+          <button id="decor-add">Ajouter</button></label
+        >
+        <ul id="decor-list"></ul>
+        <div id="decor-fields"></div>
+        <label><input id="preview" type="checkbox" /> Aperçu animé</label>
         <h2>Validation</h2>
         <ul id="errors"></ul>
       </aside>
