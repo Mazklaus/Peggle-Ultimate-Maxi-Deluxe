@@ -58,6 +58,15 @@ import type { ResultsData } from './ResultsScene';
 import { CRYSTAL_COLORS, CRYSTAL_COLORS_CB, PALETTE, powerColor, textStyle } from './theme';
 import { ChapterBackdrop, preloadBackdrop } from './ChapterBackdrop';
 import { earnedStars } from '../core/backdrop';
+import {
+  applyChallengeConstraints,
+  ChallengeTracker,
+  type Challenge,
+  type ChallengeSnapshot,
+  type ChallengeState,
+} from '../core/challenge';
+import type { GameMode } from '../core/modes';
+import { ChallengeLine, preloadChallengeIcons } from './ChallengeLine';
 import { DecorLayer } from './DecorLayer';
 import {
   hexPoints,
@@ -80,6 +89,8 @@ export interface GameSceneData {
   companion?: string;
   /** Constellation du jour : clé AAAAMMJJ (score à enregistrer avec recordDaily). */
   daily?: string;
+  /** Mode de jeu du jalon 3 (défi, duel...) ; absent = aventure. */
+  mode?: GameMode;
 }
 
 const ORB_RADIUS = 8;
@@ -206,6 +217,10 @@ export class GameScene extends Phaser.Scene {
   /** Temps de jeu restant (s) du rebond fou de Volte ; 0 = inactif. */
   private crazyLeft = 0;
   private backdrop?: ChapterBackdrop;
+  /** Défi en cours (mode défi), sa ligne d'objectif et le nombre de cristaux cassables. */
+  private challenge?: ChallengeTracker;
+  private challengeLine?: ChallengeLine;
+  private breakableTotal = 0;
   /** Seconde chance de Nuage-Lune déjà servie sur ce tir (une par tir, l'autre charge reste). */
   private secondChanceUsed = false;
   private bucketEdgeTween?: Phaser.Tweens.Tween;
@@ -283,6 +298,8 @@ export class GameScene extends Phaser.Scene {
   preload(): void {
     // Fond du chapitre (couches SVG du DA), chargé à la demande puis gardé en cache.
     preloadBackdrop(this, this.sceneData.level.chapter || 1);
+    const ch = this.activeChallenge();
+    if (ch) preloadChallengeIcons(this, ch);
   }
 
   create(): void {
@@ -321,6 +338,11 @@ export class GameScene extends Phaser.Scene {
     const save = this.registry.get(REGISTRY.save) as SaveData | undefined;
     this.colors = save?.options.colorblind ? CRYSTAL_COLORS_CB : CRYSTAL_COLORS;
     this.level = levelFromData(this.sceneData.level);
+    const challenge = this.activeChallenge();
+    this.challenge = challenge ? new ChallengeTracker(challenge) : undefined;
+    this.challengeLine = undefined;
+    if (challenge) applyChallengeConstraints(this.level, challenge);
+    this.breakableTotal = this.level.crystals.filter((c) => c.kind !== 'wall').length;
 
     this.backdrop = new ChapterBackdrop(this, this.sceneData.level.chapter);
     this.drawFrame();
@@ -345,6 +367,8 @@ export class GameScene extends Phaser.Scene {
       BUCKET.height,
       PALETTE.bucket,
     );
+    // Défi sans réceptacle : il est retiré du terrain.
+    this.bucket.setVisible(!this.hasConstraint('sans_receptacle'));
     this.guide = this.add.graphics();
     this.powerGfx = this.add.graphics().setDepth(5);
     this.makeHud();
@@ -411,9 +435,11 @@ export class GameScene extends Phaser.Scene {
       unmountDebug?.();
       if (!this.ending) audio.music.stop(); // retour carte depuis la pause
     });
+    const kind = this.sceneData.daily ? 'quotidien' : this.sceneData.mode?.kind;
     gameEvents.emit('niveau_debut', {
       levelId: this.sceneData.level.id,
       chapter: this.sceneData.level.chapter,
+      ...(kind && kind !== 'aventure' ? { mode: kind } : {}),
     });
 
     this.refreshHud();
@@ -439,6 +465,7 @@ export class GameScene extends Phaser.Scene {
     this.updateSlowmo(time);
     if (this.warpUntil > 0 && time >= this.warpUntil) this.endTimeWarp();
     this.decor.draw();
+    this.updateChallenge(realDelta / 1000);
     const delta = realDelta * this.gameScale;
     // Horloge physique : temps réellement simulé par Matter (ralentis compris, pause et gel
     // exclus). Sous ~30 i/s, Matter plafonne ses pas et l'orbe avance moins vite que l'horloge
@@ -482,6 +509,7 @@ export class GameScene extends Phaser.Scene {
   private inBucket(orb: Phaser.GameObjects.Arc): boolean {
     return (
       !this.finalShot &&
+      this.bucket.visible &&
       orb.y + ORB_RADIUS >= BUCKET.y - BUCKET.height / 2 &&
       orb.y < GAME_HEIGHT &&
       this.orbVelocity(orb).y > 0 && // une orbe qui remonte (seconde chance) ne tombe pas dedans
@@ -829,14 +857,17 @@ export class GameScene extends Phaser.Scene {
       heartColor: this.colors.heart,
       power: astre.def && astre.id ? { id: astre.id, kind: companionKind(astre.id) } : null,
       cannon: this.muzzle(),
+      hideStars: !!this.challenge,
     });
+    if (this.challenge) this.challengeLine = new ChallengeLine(this, this.challenge.challenge);
     button(this, 1236, 32, 'II', () => this.openPause(), { width: 48, size: 18 });
   }
 
   /** Astre du niveau : forcé (?astre=, tests QA), choisi au sélecteur, ou celui du niveau. */
   private resolveCompanion(): { id: string | null; def: CompanionDef | undefined } {
     const forced = new URLSearchParams(window.location.search).get('astre');
-    const id = forced ?? this.sceneData.companion ?? this.sceneData.level.companion;
+    const imposed = this.hasConstraint('astre_impose') ? this.activeChallenge()?.astre : undefined;
+    const id = forced ?? imposed ?? this.sceneData.companion ?? this.sceneData.level.companion;
     const def =
       companionById(id)?.def ??
       (forced ? (DA_DEFS as Record<string, CompanionDef | undefined>)[forced] : undefined);
@@ -991,6 +1022,7 @@ export class GameScene extends Phaser.Scene {
   private emitAll(events: DetectedEvent[]): void {
     for (const e of events) {
       if (e === 'final_ralenti') this.startSlowmo();
+      if (e === 'pouvoir_active') this.challengeStep((t, snap) => t.powerActivated(snap));
       if (e === 'pouvoir_active' && companionById(this.companionId)?.power.kind !== 'immediate') {
         this.reveal.gain();
         this.refreshPower();
@@ -1319,6 +1351,7 @@ export class GameScene extends Phaser.Scene {
       Math.sin(this.aimAngle) * LAUNCH_SPEED,
     );
     this.shotCatches = 0;
+    this.challenge?.shotStarted();
     this.crazyLeft = 0;
     this.chain = 0;
     this.slowmoUntil = 0;
@@ -1370,6 +1403,7 @@ export class GameScene extends Phaser.Scene {
     this.views.get(id)?.setFillStyle(PALETTE.lit);
     this.breakdown.add(crystal.kind, points);
     gameEvents.emit('cristal_allume', { kind: crystal.kind, chain: this.chain, points });
+    this.challengeStep((t, snap) => t.crystalLit(crystal.kind, snap));
     this.emitAll(this.tracker.crystalLit(crystal.kind, this.level.shotScore, crystal.id));
     if (crystal.kind === 'power' && this.companionId === 'bourdon') this.shockwave(crystal);
     if (crystal.kind === 'power' && this.companionId === 'jumelles' && by) this.splitOrb(by);
@@ -1455,7 +1489,14 @@ export class GameScene extends Phaser.Scene {
     this.decor.setOrbs([]);
     this.hud.endShot();
     this.applyGameScale(1);
+    const bounces = this.tracker.shotBounces;
     const result = endShot(this.level, catches);
+    // Défi devenu impossible : le niveau se termine sur l'écran d'échec (specs UI/UX 2.4).
+    this.challengeStep((t, snap) => t.shotEnded(bounces, snap));
+    if (result.phase === 'aiming' && this.challenge?.state === 'failed') {
+      this.level.phase = 'lost';
+      result.phase = 'lost';
+    }
     this.removeViews(result.removedIds);
     // Régénération : les cristaux revenus réapparaissent avec un pop.
     for (const c of result.restored) {
@@ -1490,6 +1531,7 @@ export class GameScene extends Phaser.Scene {
 
   private endLevel(won: boolean): void {
     this.ending = true;
+    this.challengeStep((t, snap) => t.levelEnded(won, snap));
     const score = this.level.score;
     const orbBonus = won ? this.level.orbs * this.level.tuning.orbBonus : 0;
     const payload: ResultsData = {
@@ -1500,6 +1542,10 @@ export class GameScene extends Phaser.Scene {
       heartsLeft: heartsRemaining(this.level),
       breakdown: this.breakdown.finish(score, orbBonus),
       test: this.sceneData.test,
+      mode: this.sceneData.mode,
+      challenge: this.challenge
+        ? { goal: this.challenge.challenge.goal, success: this.challenge.state === 'success' }
+        : undefined,
     };
     // Overlay par-dessus le jeu, qui n'est PAS mis en pause : l'Astre continue de vivre.
     const delay = won ? RESULTS_DELAY_MS : FAIL_DELAY_MS;
@@ -1675,6 +1721,8 @@ export class GameScene extends Phaser.Scene {
     // Tir suivant armé : anneau menthe 40 % autour de la bouche du canon (specs UI/UX §3).
     if (this.reveal.armed && companionById(this.companionId)?.power.kind === 'next')
       outlinedCircle(this.guide, 3, 0.4, start.x, start.y, 13);
+    // Défi sans guide : ni guide de visée, ni trajectoire révélée.
+    if (this.hasConstraint('sans_guide')) return;
     const input = {
       x: start.x,
       y: start.y,
@@ -1751,6 +1799,64 @@ export class GameScene extends Phaser.Scene {
 
   private setTimeScale(scale: number): void {
     this.matter.world.engine.timing.timeScale = scale;
+  }
+
+  // --- Défis (regles-modes-jalon3 §1) ------------------------------------------
+
+  /** Défi du niveau, en mode défi (ou ?defi pour les tests QA). */
+  private activeChallenge(): Challenge | undefined {
+    const level = this.sceneData.level;
+    const asked =
+      this.sceneData.mode?.kind === 'defi' ||
+      new URLSearchParams(window.location.search).has('defi');
+    return asked ? level.challenge : undefined;
+  }
+
+  private hasConstraint(c: Challenge['constraint']): boolean {
+    return this.activeChallenge()?.constraint === c;
+  }
+
+  private challengeSnapshot(): ChallengeSnapshot {
+    const s = this.level;
+    return {
+      score: s.score,
+      breakableLeft: s.crystals.filter((c) => c.kind !== 'wall' && !c.lit).length,
+      breakableTotal: this.breakableTotal,
+      heartsLeft: heartsRemaining(s),
+      orbs: s.orbs,
+      canRegainOrbs: !this.hasConstraint('sans_receptacle'),
+    };
+  }
+
+  /** Fait avancer le défi et réagit aux changements d'état (son, ligne, Astre). */
+  private challengeStep(
+    fn: (t: ChallengeTracker, snap: ChallengeSnapshot) => ChallengeState,
+  ): void {
+    const t = this.challenge;
+    if (!t) return;
+    const before = t.state;
+    const after = fn(t, this.challengeSnapshot());
+    if (after !== before) {
+      if (after === 'reached' || (after === 'success' && before === 'pending')) {
+        this.challengeLine?.celebrate();
+        gameEvents.emit('defi_reussi', { goal: t.challenge.goal });
+      } else if (after === 'failed') {
+        gameEvents.emit('defi_rate', { goal: t.challenge.goal });
+      }
+    }
+    this.challengeLine?.update(t.state, t.ratio, t.secondsLeft);
+  }
+
+  /** Chrono du défi (temps réel de jeu, pause exclue) ; raté en visée -> fin du niveau. */
+  private updateChallenge(dt: number): void {
+    const t = this.challenge;
+    if (!t || this.ending) return;
+    if (this.level.phase === 'shooting' || this.level.phase === 'aiming')
+      this.challengeStep((tr) => tr.tick(dt));
+    if (t.state === 'failed' && !this.orb && this.level.phase === 'aiming') {
+      this.level.phase = 'lost';
+      this.endLevel(false);
+    }
   }
 
   private refreshHud(): void {

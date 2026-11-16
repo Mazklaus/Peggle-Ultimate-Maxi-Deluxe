@@ -9,7 +9,7 @@ type Empty = Record<string, never>;
 
 export interface GameEventMap {
   /** Un niveau commence (musique, Astre). */
-  niveau_debut: { levelId: string; chapter: number };
+  niveau_debut: { levelId: string; chapter: number; mode?: 'defi' | 'duel' | 'quotidien' };
   /** L'orbe part. */
   tir_lance: { angle: number };
   /** 5+ cristaux dans un même tir. */
@@ -43,6 +43,17 @@ export interface GameEventMap {
   mur_touche: Empty;
   cristaux_brises: { count: number };
   astre_cri: { astre: string; reaction: string; variant: number };
+  // Modes du jalon 3
+  /** Objectif du défi atteint (la médaille tombe si le niveau est gagné). */
+  defi_reussi: { goal: string };
+  /** Défi raté (objectif impossible ou niveau perdu). */
+  defi_rate: { goal: string };
+  /** Duel : changement de tour. */
+  duel_tour: { joueur: 1 | 2 };
+  /** Duel : fin de partie (gagnant, ou null en cas d'égalité avant la manche décisive). */
+  duel_fin: { gagnant: 1 | 2 | null };
+  /** Duel : un joueur prend l'avantage (sa taquinerie). */
+  duel_avantage: { joueur: 1 | 2 };
 }
 
 export type GameEventName = keyof GameEventMap;
