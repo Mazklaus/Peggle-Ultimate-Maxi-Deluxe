@@ -4,34 +4,46 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Peg Shooter (nom provisoire)</title>
+    <!-- Polices de la DA : Fredoka (titres, chiffres) et Nunito (libellés). -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fredoka:wght@600&family=Nunito:wght@400;700&display=swap"
+      rel="stylesheet"
+    />
     <style>
       html,
       body {
         margin: 0;
         height: 100%;
-        background: #111;
+        background: #0b1026;
       }
       #game {
         width: 100%;
         height: 100%;
       }
-      /* Accès discret à l'éditeur de niveaux (outil interne). */
+      /* Accès discret à l'éditeur de niveaux (outil interne, hors du jeu ; specs UI/UX 6 quater). */
       #editor-link {
         position: fixed;
-        right: 8px;
+        right: 12px;
         bottom: 6px;
-        font: 12px sans-serif;
+        font:
+          700 13px Nunito,
+          sans-serif;
         color: #a9b0d6;
-        opacity: 0.5;
+        text-decoration: none;
+        opacity: 0.6;
       }
-      #editor-link:hover {
+      #editor-link:hover,
+      #editor-link:focus-visible {
+        color: #f4f1ff;
         opacity: 1;
       }
     </style>
   </head>
   <body>
     <div id="game"></div>
-    <a id="editor-link" href="./editor.html">Éditeur de niveaux</a>
+    <a id="editor-link" href="./editor.html">✎ Éditeur de niveaux</a>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
