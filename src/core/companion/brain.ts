@@ -163,6 +163,17 @@ export class CompanionBrain {
     this.phase = phase;
   }
 
+  /** Sommeil forcé (pause du jeu) ; à la sortie, réveil en sursaut. */
+  setSleeping(on: boolean): void {
+    if (on) {
+      this.sleeping = true;
+      if (this.playing?.trigger === 'idle') this.playing.speed = BRAIN_TUNING.interruptSpeed;
+    } else {
+      this.quietTime = 0;
+      this.wake();
+    }
+  }
+
   /** Événement du bus (noms du plan). */
   onEvent(trigger: ReactionTrigger): void {
     if (trigger === 'dernier_coeur' || trigger === 'dernier_orbe') {

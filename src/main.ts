@@ -5,6 +5,7 @@ import { gameEvents } from './core/events';
 import { ORB_PHYSICS } from './core/physics';
 import { loadSave } from './core/save';
 import { BootScene } from './scenes/BootScene';
+import { CompanionLayer } from './scenes/CompanionLayer';
 import { CutsceneScene } from './scenes/CutsceneScene';
 import { GameScene } from './scenes/GameScene';
 import { MapScene } from './scenes/MapScene';
@@ -47,5 +48,6 @@ new Phaser.Game({
     ResultsScene,
     CutsceneScene,
     OptionsScene,
+    CompanionLayer,
   ],
 });

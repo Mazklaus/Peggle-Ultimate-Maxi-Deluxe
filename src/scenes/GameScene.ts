@@ -238,6 +238,7 @@ export class GameScene extends Phaser.Scene {
       this.game.events.off(OPTIONS_CHANGED, onOptions);
       this.companion?.destroy();
       this.companion = undefined;
+      this.scene.stop(SCENES.companionLayer);
       unmountDebug?.();
       if (!this.ending) audio.music.stop(); // retour carte depuis la pause
     });
@@ -280,6 +281,51 @@ export class GameScene extends Phaser.Scene {
       return;
     }
     this.checkStuck(time);
+  }
+
+  // --- Astre hors de sa loge (API des overlays du Lead) ---------------------
+
+  /**
+   * Overlay de fin (Victoire, Échec) : l'Astre sort de sa loge et rejoint (x, y), pieds,
+   * en coordonnées écran 1280 × 720, puis danse ou console. Il est dessiné sur un calque
+   * au-dessus de toutes les scènes. Game ne doit pas être mis en pause.
+   */
+  companionExit(mode: 'victoire' | 'consolation', x: number, y: number): void {
+    const c = this.companion;
+    if (!c) return;
+    this.withCompanionLayer((layer) => {
+      c.reparent(layer);
+      void c.exitTo(x, y, mode);
+    });
+  }
+
+  /** Retour de l'Astre dans sa loge (rejouer), puis le calque est fermé. */
+  companionHome(): void {
+    const c = this.companion;
+    if (!c) return;
+    void c.returnHome().then(() => {
+      if (!this.companion) return;
+      c.reparent(this);
+      this.scene.stop(SCENES.companionLayer);
+    });
+  }
+
+  /** Pause : l'Astre s'endort (et se réveille en sursaut à la reprise). */
+  companionSleep(on: boolean): void {
+    this.companion?.setSleeping(on);
+  }
+
+  private withCompanionLayer(run: (layer: Phaser.Scene) => void): void {
+    const key = SCENES.companionLayer;
+    const layer = this.scene.get(key);
+    if (this.scene.isActive(key)) {
+      this.scene.bringToTop(key);
+      run(layer);
+      return;
+    }
+    layer.events.once(Phaser.Scenes.Events.CREATE, () => run(layer));
+    this.scene.launch(key);
+    this.scene.bringToTop(key);
   }
 
   // --- Construction -------------------------------------------------------
