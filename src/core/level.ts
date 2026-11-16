@@ -175,14 +175,21 @@ function moveBonus(s: LevelState, rng: Rng): void {
   }
 }
 
-/** Fin de tir : retire les cristaux allumés, rend un orbe si attrapé, décide victoire / échec. */
-export function endShot(s: LevelState, caught: boolean, rng: Rng = Math.random): ShotResult {
+/**
+ * Fin de tir : retire les cristaux allumés, rend un orbe par orbe attrapé (true = 1 ; l'orbe
+ * scindé de Twi & Nkl peut en rendre 2), décide victoire / échec.
+ */
+export function endShot(
+  s: LevelState,
+  caught: boolean | number,
+  rng: Rng = Math.random,
+): ShotResult {
   if (s.phase !== 'shooting') {
     return { removedIds: [], caught: false, orbsGained: 0, phase: s.phase };
   }
   const removedIds = s.crystals.filter((c) => c.lit).map((c) => c.id);
   s.crystals = s.crystals.filter((c) => !c.lit);
-  const orbsGained = caught ? 1 : 0;
+  const orbsGained = Math.max(0, Math.floor(Number(caught)));
   s.orbs += orbsGained;
   if (heartsRemaining(s) === 0) {
     s.score += s.orbs * s.tuning.orbBonus; // bonus de fin : orbes restants
@@ -193,5 +200,5 @@ export function endShot(s: LevelState, caught: boolean, rng: Rng = Math.random):
     s.phase = 'aiming';
     moveBonus(s, rng);
   }
-  return { removedIds, caught, orbsGained, phase: s.phase };
+  return { removedIds, caught: orbsGained > 0, orbsGained, phase: s.phase };
 }

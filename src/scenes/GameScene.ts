@@ -77,6 +77,15 @@ const FINAL_HIT_STOP_MS = 80;
 /** Onde de choc de Bourdon : rayon (px) et durée de propagation (s). */
 const SHOCKWAVE = { radius: 110, seconds: 0.3 };
 /**
+ * Orbe scindé de Twi & Nkl (GD reglages-jalon1) : au contact d'un cristal pouvoir, un 2e orbe
+ * part du point d'impact, vitesse horizontale inversée, à 90 % de la vitesse. Le tir finit
+ * quand les deux sont sortis ; chaque orbe attrapé rend +1 orbe, au plus 2 par tir.
+ * minSideShare : part horizontale minimale du 2e orbe (une chute verticale se scinde en Y).
+ */
+const TWIN = { speed: 0.9, maxCatches: 2, minSideShare: 0.35 };
+/** Les orbes d'un même tir se traversent (groupe de collision négatif commun). */
+const ORB_COLLISION_GROUP = -1;
+/**
  * Anti-blocage garanti (règle GD) : orbe quasi immobile (moins de STUCK_RADIUS_PX en
  * TUNING.antiStuckSeconds) -> cristaux allumés voisins brisés, sinon impulsion
  * (TUNING.antiStuckNudges essais), sinon dissolution. Vitesse de l'impulsion :
@@ -136,6 +145,11 @@ export class GameScene extends Phaser.Scene {
   /** Type de cristal dessiné par chaque vue (la forme dépend du type). */
   private viewKinds = new Map<number, Crystal['kind']>();
   private orb?: Phaser.GameObjects.Arc;
+  /** 2e orbe de Twi & Nkl, vivant en même temps que `orb`. */
+  private twin?: Phaser.GameObjects.Arc;
+  private twinRef = { x: 0, y: 0, t: 0 };
+  /** Orbes attrapés pendant ce tir (2 au plus comptent, orbe scindé). */
+  private shotCatches = 0;
   private aimAngle = Math.PI / 2;
   private guide!: Phaser.GameObjects.Graphics;
   private cannon!: Phaser.GameObjects.Rectangle;
@@ -205,6 +219,7 @@ export class GameScene extends Phaser.Scene {
     this.redirecting = false;
     this.views.clear();
     this.orb = undefined;
+    this.twin = undefined;
     this.ending = false;
     this.slowmoUntil = 0;
     this.hitStopUntil = 0;
@@ -272,7 +287,9 @@ export class GameScene extends Phaser.Scene {
                 ? pair.bodyA
                 : null;
           if (!other) continue;
-          if (other.label.startsWith('crystal:')) this.onCrystalHit(Number(other.label.slice(8)));
+          const by = other === pair.bodyA ? pair.bodyB : pair.bodyA;
+          if (other.label.startsWith('crystal:'))
+            this.onCrystalHit(Number(other.label.slice(8)), by);
           else if (other.label === 'wall') {
             gameEvents.emit('mur_touche', {});
             this.countBounce();
@@ -345,16 +362,115 @@ export class GameScene extends Phaser.Scene {
     }
     audio.flight(Phaser.Math.Clamp((orb.y - PLAYFIELD.y) / PLAYFIELD.h, 0, 1));
     this.trackOrb(orb);
-    const caught =
-      !this.finalShot &&
-      orb.y + ORB_RADIUS >= BUCKET.y - BUCKET.height / 2 &&
-      orb.y < GAME_HEIGHT &&
-      Math.abs(orb.x - this.bucket.x) <= BUCKET.width / 2;
+    this.updateTwin(time);
+    const caught = this.inBucket(orb);
     if (caught || orb.y > GAME_HEIGHT + ORB_RADIUS * 2) {
-      this.finishShot(caught);
+      this.orbGone(caught);
       return;
     }
     this.checkStuck(time);
+  }
+
+  private inBucket(orb: Phaser.GameObjects.Arc): boolean {
+    return (
+      !this.finalShot &&
+      orb.y + ORB_RADIUS >= BUCKET.y - BUCKET.height / 2 &&
+      orb.y < GAME_HEIGHT &&
+      Math.abs(orb.x - this.bucket.x) <= BUCKET.width / 2
+    );
+  }
+
+  /**
+   * L'orbe principal sort (attrapé, tombé ou dissous). Si le 2e orbe de Twi & Nkl vit encore,
+   * il devient l'orbe principal et le tir continue ; sinon le tir se termine.
+   */
+  private orbGone(caught: boolean, finalX = this.orb?.x): void {
+    if (caught) this.catchFlash();
+    const twin = this.twin;
+    if (!twin) {
+      this.finishShot(finalX);
+      return;
+    }
+    this.orb?.destroy();
+    this.orb = twin;
+    this.twin = undefined;
+    this.stuckRef = { ...this.twinRef };
+    this.stuckNudges = 0;
+    if (this.stuckAnnounced) {
+      this.stuckAnnounced = false;
+      gameEvents.emit('orbe_debloquee', {});
+    }
+  }
+
+  private catchFlash(): void {
+    this.shotCatches += 1;
+    this.cameras.main.flash(120, 185, 166, 255);
+  }
+
+  /** Le 2e orbe : attrapé, tombé, ou dissous s'il reste coincé (pas d'impulsion pour lui). */
+  private updateTwin(time: number): void {
+    const t = this.twin;
+    if (!t) return;
+    const caught = this.inBucket(t);
+    if (caught || t.y > GAME_HEIGHT + ORB_RADIUS * 2) {
+      if (caught) this.catchFlash();
+      t.destroy();
+      this.twin = undefined;
+      return;
+    }
+    if (Math.hypot(t.x - this.twinRef.x, t.y - this.twinRef.y) > STUCK_RADIUS_PX) {
+      this.twinRef = { x: t.x, y: t.y, t: time };
+    } else if (time - this.twinRef.t >= TUNING.antiStuckSeconds * 1000) {
+      this.dissolveOrb(t.x, t.y);
+      t.destroy();
+      this.twin = undefined;
+    }
+  }
+
+  /** Crée un orbe de tir (corps Matter compris), à la vitesse donnée (px par pas Matter). */
+  private spawnOrb(x: number, y: number, vx: number, vy: number): Phaser.GameObjects.Arc {
+    const orb = this.add.circle(x, y, ORB_RADIUS, PALETTE.orb);
+    this.matter.add.gameObject(orb, {
+      label: 'orb',
+      shape: { type: 'circle', radius: ORB_RADIUS },
+      restitution: ORB_RESTITUTION,
+      friction: 0,
+      frictionAir: 0,
+      collisionFilter: { group: ORB_COLLISION_GROUP },
+    });
+    (orb as unknown as Phaser.Physics.Matter.Components.Velocity).setVelocity(vx, vy);
+    return orb;
+  }
+
+  /**
+   * Pouvoir de Twi & Nkl : le 2e orbe part du point d'impact de l'orbe qui a touché, vitesse
+   * horizontale inversée à 90 %. Une seule paire à la fois.
+   */
+  private splitOrb(by?: MatterJS.BodyType): void {
+    const src = this.orb;
+    if (!src || this.twin || (by && by !== src.body)) return;
+    const body = src.body as MatterJS.BodyType;
+    const { x: vx, y: vy } = body.velocity;
+    const speed = Math.hypot(vx, vy) * TWIN.speed;
+    if (speed <= 0) return;
+    // Une orbe qui tombe tout droit se scinde quand même en Y : part horizontale minimale.
+    const side = -(Math.sign(vx) || 1);
+    const sx = Math.max(Math.abs(vx) * TWIN.speed, speed * TWIN.minSideShare);
+    const sy = Math.sign(vy || 1) * Math.sqrt(Math.max(0, speed * speed - sx * sx));
+    const twin = this.spawnOrb(src.x, src.y, side * sx, sy);
+    twin.setStrokeStyle(2, PALETTE.success, 0.9);
+    this.twin = twin;
+    this.twinRef = { x: src.x, y: src.y, t: this.time.now };
+    // Petit éclat menthe au point de scission.
+    const flash = this.add.circle(src.x, src.y, ORB_RADIUS, PALETTE.success, 0.5).setDepth(6);
+    this.tweens.add({
+      targets: flash,
+      scale: 3,
+      alpha: 0,
+      duration: 260,
+      ease: 'Quad.Out',
+      onComplete: () => flash.destroy(),
+    });
   }
 
   // --- Astre hors de sa loge (API des overlays du Lead) ---------------------
@@ -793,19 +909,13 @@ export class GameScene extends Phaser.Scene {
   private shoot(): void {
     if (this.ending || !canShoot(this.level) || !startShot(this.level)) return;
     const start = this.muzzle();
-    const orb = this.add.circle(start.x, start.y, ORB_RADIUS, PALETTE.orb);
-    this.matter.add.gameObject(orb, {
-      label: 'orb',
-      shape: { type: 'circle', radius: ORB_RADIUS },
-      restitution: ORB_RESTITUTION,
-      friction: 0,
-      frictionAir: 0,
-    });
-    (orb as unknown as Phaser.Physics.Matter.Components.Velocity).setVelocity(
+    this.orb = this.spawnOrb(
+      start.x,
+      start.y,
       Math.cos(this.aimAngle) * LAUNCH_SPEED,
       Math.sin(this.aimAngle) * LAUNCH_SPEED,
     );
-    this.orb = orb;
+    this.shotCatches = 0;
     this.chain = 0;
     this.slowmoUntil = 0;
     this.stuckRef = { x: start.x, y: start.y, t: this.time.now };
@@ -835,7 +945,8 @@ export class GameScene extends Phaser.Scene {
     this.emitAll(this.tracker.bounced());
   }
 
-  private onCrystalHit(id: number): void {
+  /** by : corps de l'orbe qui touche (absent pour une onde de choc). */
+  private onCrystalHit(id: number, by?: MatterJS.BodyType): void {
     const crystal = this.level.crystals.find((c) => c.id === id);
     if (crystal?.kind === 'wall') {
       gameEvents.emit('mur_touche', {});
@@ -854,6 +965,7 @@ export class GameScene extends Phaser.Scene {
     gameEvents.emit('cristal_allume', { kind: crystal.kind, chain: this.chain, points });
     this.emitAll(this.tracker.crystalLit(crystal.kind, this.level.shotScore, crystal.id));
     if (crystal.kind === 'power' && this.companionId === 'bourdon') this.shockwave(crystal);
+    if (crystal.kind === 'power' && this.companionId === 'jumelles' && by) this.splitOrb(by);
     if (isFinalHeartLit(this.level)) {
       // Filet de sécurité : le dernier cœur touché sans prédiction préalable.
       // Pas encore de ralenti, ou un ralenti déjà terminé pendant ce tir : petit gel
@@ -896,7 +1008,9 @@ export class GameScene extends Phaser.Scene {
   }
 
   /** finalX : abscisse retenue pour la zone finale (par défaut, celle de l'orbe). */
-  private finishShot(caught: boolean, finalX = this.orb?.x): void {
+  private finishShot(finalX = this.orb?.x): void {
+    const catches = Math.min(TWIN.maxCatches, this.shotCatches);
+    const caught = catches > 0;
     if (this.finalShot && finalX !== undefined) this.scoreFinalZone(finalX);
     // Bonus de chaîne (GD) : +10 % du score du tir par rebond au-delà de 10, au plus +100 %.
     const chain = chainBonus(this.level.shotScore, this.tracker.shotBounces, this.level.tuning);
@@ -906,14 +1020,15 @@ export class GameScene extends Phaser.Scene {
     }
     this.orb?.destroy();
     this.orb = undefined;
+    this.twin?.destroy();
+    this.twin = undefined;
     this.hud.endShot();
     this.applyGameScale(1);
-    const result = endShot(this.level, caught);
+    const result = endShot(this.level, catches);
     this.removeViews(result.removedIds);
     if (result.removedIds.length > 0) {
       gameEvents.emit('cristaux_brises', { count: result.removedIds.length });
     }
-    if (caught) this.cameras.main.flash(120, 185, 166, 255);
     // Le cristal bonus a pu changer de place : la forme suit le type (un bonus rond est un bug).
     for (const c of this.level.crystals) {
       if (c.lit) continue;
@@ -1013,7 +1128,7 @@ export class GameScene extends Phaser.Scene {
       gameEvents.emit('orbe_debloquee', {});
     }
     // Tir final : l'orbe n'est tombée dans aucune zone, elle vaut la plus faible (la plus proche).
-    this.finishShot(
+    this.orbGone(
       false,
       orb.x < PLAYFIELD.x + PLAYFIELD.w / 2 ? PLAYFIELD.x : PLAYFIELD.x + PLAYFIELD.w - 1,
     );
