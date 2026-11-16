@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { GAME_WIDTH } from '../config';
 import { nextLevelId, type LevelCatalog } from '../core/levelCatalog';
 import type { LevelData } from '../core/levelFormat';
-import { recordResult, writeSave, type SaveData } from '../core/save';
+import { markSeen, recordResult, writeSave, type SaveData } from '../core/save';
 import { starsFor } from '../core/stars';
 import { REGISTRY, SCENES } from './keys';
 import { PALETTE, textStyle, TEXT } from './theme';
@@ -70,6 +70,17 @@ export class ResultsScene extends Phaser.Scene {
       });
     }
     this.add.text(cx, 370, `Score : ${score}`, textStyle(30)).setOrigin(0.5);
+
+    // Fin du chapitre 1 : vignettes B1-B6 (une fois), puis retour à la carte.
+    if (!data.test && level.id === 'ch1-12' && markSeen(save, 'fin_ch1')) {
+      writeSave(save);
+      const toEnding = () =>
+        this.scene.start(SCENES.cutscene, { sequence: 'fin_ch1', next: { scene: SCENES.map } });
+      button(this, cx, 470, 'Suite', toEnding, { primary: true, size: 30, width: 280 });
+      this.input.keyboard?.once('keydown-SPACE', toEnding);
+      button(this, cx, 570, 'Rejouer', replay, { width: 200, size: 20 });
+      return;
+    }
 
     const next = data.test ? null : nextLevelId(catalog.levels, level.id);
     const nextLevel = next ? catalog.levels.find((l) => l.id === next) : undefined;

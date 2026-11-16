@@ -6,6 +6,7 @@ export const SCENES = {
   game: 'Game',
   pause: 'Pause',
   results: 'Results',
+  cutscene: 'Cutscene',
 } as const;
 
 export const REGISTRY = {

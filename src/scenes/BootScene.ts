@@ -51,6 +51,14 @@ export class BootScene extends Phaser.Scene {
 
     const params = new URLSearchParams(window.location.search);
     if (params.has('test')) return this.startTestLevel();
+    // ?cutscene=intro | reveil_pip | fin_ch1 : rejoue une séquence de vignettes (tests).
+    const cut = params.get('cutscene');
+    if (cut === 'intro' || cut === 'reveil_pip' || cut === 'fin_ch1') {
+      return void this.scene.start(SCENES.cutscene, {
+        sequence: cut,
+        next: { scene: SCENES.title },
+      });
+    }
     const direct = params.get('level');
     if (direct) {
       const level = catalog.levels.find((l) => l.id === direct);
