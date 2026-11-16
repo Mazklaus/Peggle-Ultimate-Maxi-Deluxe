@@ -55,6 +55,8 @@ export interface HudOptions {
   power?: { id: string; kind: 'next' | 'immediate' | 'reserve' } | null;
   /** Bouche du canon (écran) : les charges consommées y volent. */
   cannon?: { x: number; y: number };
+  /** Défi : la ligne d'objectif remplace les étoiles du bandeau (specs UI/UX jalon 3, 2.4). */
+  hideStars?: boolean;
 }
 
 /** Loge : hexagone du pouvoir Ø 26 et indicateurs (specs UI/UX jalon 2, section 3). */
@@ -388,6 +390,7 @@ export class GameHud {
   private drawStars(score: number): void {
     const g = this.starsGfx;
     g.clear();
+    if (this.opts.hideStars) return;
     const [two, three] = this.opts.stars;
     // 1re étoile : le niveau gagné (affichée creuse en jeu), puis les paliers de score.
     const lit = [false, score >= two, score >= three];

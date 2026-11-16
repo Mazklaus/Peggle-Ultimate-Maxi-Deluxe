@@ -2,6 +2,7 @@
  * Format JSON des niveaux, v1 et v2 (voir docs/level-format.md) : types, validation et sérialisation.
  * Utilisé par le chargeur du jeu et par l'éditeur de niveaux. Sans Phaser.
  */
+import { challengeErrors, type Challenge } from './challenge';
 
 /** Format écrit par défaut (niveau sans décor). */
 export const LEVEL_FORMAT = 1;
@@ -159,6 +160,8 @@ export interface LevelData {
   assign: LevelAssign;
   pegs: LevelPeg[];
   decor: DecorItem[];
+  /** Défi posé sur le niveau (regles-modes-jalon3 §1). */
+  challenge?: Challenge;
 }
 
 export type ParseResult =
@@ -475,6 +478,7 @@ export function parseLevel(input: string | unknown): ParseResult {
     (!isInt(raw.guideBounces) || raw.guideBounces < 0 || raw.guideBounces > 5)
   )
     errors.push('guideBounces : entier 0..5.');
+  if (raw.challenge !== undefined) errors.push(...challengeErrors(raw.challenge));
   const orbs = raw.orbs ?? DEFAULT_ORBS;
   if (!isInt(orbs) || orbs < 1) errors.push('orbs : entier >= 1.');
 
@@ -530,6 +534,7 @@ export function parseLevel(input: string | unknown): ParseResult {
   if (raw.title !== undefined) level.title = raw.title as string;
   if (raw.rhythm !== undefined) level.rhythm = raw.rhythm as Rhythm;
   if (raw.guideBounces !== undefined) level.guideBounces = raw.guideBounces as number;
+  if (raw.challenge !== undefined) level.challenge = raw.challenge as Challenge;
   return { level };
 }
 
@@ -568,6 +573,7 @@ const LEVEL_KEYS = [
   'rhythm',
   'orbs',
   'guideBounces',
+  'challenge',
   'stars',
   'assign',
 ] as const;
