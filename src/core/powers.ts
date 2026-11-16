@@ -33,6 +33,11 @@ export class RevealCharges {
     this.n = Math.min(PIP_POWER.maxCharges, this.n + PIP_POWER.chargesPerActivation);
   }
 
+  /** Aide anti-frustration : charges offertes sans dépasser le plafond. */
+  grant(n: number): void {
+    this.n = Math.min(PIP_POWER.maxCharges, this.n + n);
+  }
+
   /** Au tir : consomme une charge si l'aperçu était actif. */
   fire(): boolean {
     this.activeShot = this.n > 0;

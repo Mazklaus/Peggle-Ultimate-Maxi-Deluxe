@@ -20,7 +20,7 @@ import type { LevelData } from '../core/levelFormat';
 import { levelFromData } from '../core/levelSetup';
 import { FINAL_ZONES, finalZoneAt } from '../core/finalZones';
 import { PIP_POWER, RevealCharges } from '../core/powers';
-import type { SaveData } from '../core/save';
+import { failsBeforeFirstWin, type SaveData } from '../core/save';
 import {
   ShotTracker,
   edgeDistance,
@@ -302,6 +302,11 @@ export class GameScene extends Phaser.Scene {
     if (id !== 'pip') return; // prologue sans Astre ; les autres Astres arrivent au jalon 2
     this.companion = new CompanionView(this, PIP, COMPANION_ANCHOR);
     this.companion.attach();
+    // Aide après 3 échecs sur un niveau pas encore fini : le 1er tir montre la trajectoire de Pip.
+    const save = this.registry.get(REGISTRY.save) as SaveData | undefined;
+    if (!this.sceneData.test && save && failsBeforeFirstWin(save, this.sceneData.level.id) >= 3) {
+      this.reveal.grant(1);
+    }
     this.chargeDots = this.add.graphics();
   }
 
@@ -670,7 +675,16 @@ export class GameScene extends Phaser.Scene {
       for (const b of path.bounces) this.guide.strokeCircle(b.x, b.y, 7);
       return;
     }
-    const points = aimGuide(input);
+    const guideBounces = this.sceneData.level.guideBounces ?? 0;
+    const points =
+      guideBounces > 0
+        ? predictPath({
+            ...input,
+            restitution: ORB_RESTITUTION,
+            maxBounces: guideBounces,
+            maxSteps: 240,
+          }).points
+        : aimGuide(input);
     this.guide.fillStyle(PALETTE.lit, 0.6);
     points.forEach((pt, i) => {
       if (i % 3 === 0) this.guide.fillCircle(pt.x, pt.y, 3);

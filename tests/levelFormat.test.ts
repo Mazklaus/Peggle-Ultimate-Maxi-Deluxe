@@ -127,3 +127,17 @@ describe('format de niveau v1', () => {
     }
   });
 });
+
+describe('guideBounces (guide de visée par niveau)', () => {
+  it('est facultatif et absent par défaut', () => {
+    expect(parseLevel(sample).level?.guideBounces).toBeUndefined();
+  });
+
+  it('accepte 0..5, refuse le reste et survit à l’aller-retour', () => {
+    expect(errorsOf({ guideBounces: 2 })).toEqual([]);
+    expect(errorsOf({ guideBounces: -1 }).join()).toContain('guideBounces');
+    expect(errorsOf({ guideBounces: 1.5 }).join()).toContain('guideBounces');
+    const level = parseLevel({ ...sample, guideBounces: 2 }).level as LevelData;
+    expect(parseLevel(serializeLevel(level)).level).toEqual(level);
+  });
+});
