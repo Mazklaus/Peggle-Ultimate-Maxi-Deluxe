@@ -48,7 +48,7 @@ export interface OrbSample extends Vec {
   r: number;
 }
 
-export type CrystalKindOrPower = CrystalKind | 'power';
+export type CrystalKindOrPower = CrystalKind;
 
 export class ShotTracker {
   private t = EVENT_THRESHOLDS;
