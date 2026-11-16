@@ -5,6 +5,8 @@ import {
   magnetAccel,
   pegPoseAt,
   pegTravel,
+  PORTAL,
+  portalStep,
   type MovingDecor,
 } from '../src/core/decor';
 
@@ -74,5 +76,28 @@ describe('aimants', () => {
     const a2 = magnetAccel([{ ...m, strength: 2 }], 50, 0).ax;
     expect(a2).toBeCloseTo(2 * a1, 6);
     expect(Math.abs(a1)).toBeLessThanOrEqual(MAGNET.accel);
+  });
+});
+
+describe('portails', () => {
+  const p = { id: 'p1', type: 'portal' as const, a: { x: 100, y: 500 }, b: { x: 700, y: 200 } };
+  it("l'orbe qui entre en A ressort en B, au même décalage", () => {
+    const r = portalStep([p], 105, 497, null);
+    expect(r.to).toEqual({ x: 705, y: 197 });
+    expect(r.inside).toBe('p1:b');
+  });
+  it('pas de retour tant que l’orbe n’est pas sortie de la bouche d’arrivée', () => {
+    expect(portalStep([p], 705, 197, 'p1:b').to).toBeNull();
+    expect(portalStep([p], 760, 197, 'p1:b').inside).toBeNull();
+    expect(portalStep([p], 701, 199, null).to).toEqual({ x: 101, y: 499 });
+  });
+  it('délai de réentrée : rien ne passe tant que ready est faux', () => {
+    const r = portalStep([p], 100, 500, null, false);
+    expect(r.to).toBeNull();
+    expect(r.inside).toBe('p1:a');
+  });
+  it('hors des bouches, rien', () => {
+    expect(portalStep([p], 300, 300, null)).toEqual({ to: null, inside: null });
+    expect(PORTAL.r).toBe(18);
   });
 });

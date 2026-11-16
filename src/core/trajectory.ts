@@ -73,6 +73,15 @@ export interface PredictInput extends TrajectoryInput {
   substeps?: number;
   /** Champ de force du décor (aimants), en px par pas de référence au carré. */
   field?: (x: number, y: number) => { ax: number; ay: number };
+  /**
+   * Portails du décor : appelé à chaque sous-pas avec la bouche où l'orbe se trouve ;
+   * renvoie la position de sortie si elle passe (voir core/decor.ts portalStep).
+   */
+  portal?: (
+    x: number,
+    y: number,
+    inside: string | null,
+  ) => { to: { x: number; y: number } | null; inside: string | null };
 }
 
 /**
@@ -95,6 +104,7 @@ export function predictPath(input: PredictInput): {
   const n = Math.max(1, Math.round(input.substeps ?? 1));
   const g = input.gravity / n;
   let lastHit: Circle | null = null;
+  let inside: string | null = null;
   for (let i = 0; i < maxSteps && bounces.length < input.maxBounces; i++) {
     for (let k = 0; k < n; k++) {
       // Sous-pas : vitesses en px par pas de référence, déplacement divisé par n.
@@ -106,6 +116,15 @@ export function predictPath(input: PredictInput): {
       }
       x += vx / n;
       y += vy / n;
+      if (input.portal) {
+        const p = input.portal(x, y, inside);
+        inside = p.inside;
+        if (p.to) {
+          points.push({ x, y });
+          x = p.to.x;
+          y = p.to.y;
+        }
+      }
       if (x - input.radius <= input.minX && vx < 0) {
         x = input.minX + input.radius;
         vx = -vx * ew;
