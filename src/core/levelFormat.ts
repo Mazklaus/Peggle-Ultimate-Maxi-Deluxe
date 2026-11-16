@@ -325,7 +325,9 @@ export function checkDecor(pegs: readonly LevelPeg[], decor: readonly DecorItem[
     if (!byId.has(p.group)) errors.push(`pegs[${i}] : group « ${p.group} » inconnu.`);
     else members.set(p.group, [...(members.get(p.group) ?? []), i]);
   });
-  const inZone = (x: number, y: number): boolean => x >= 0 && x <= ZONE_W && y >= 0 && y <= ZONE_H;
+  // Mêmes bornes que les pegs fixes (canon au-dessus, réceptacle en dessous), sur tout le tour.
+  const inZone = (x: number, y: number): boolean =>
+    x >= 0 && x <= ZONE_W && y >= PEG_MIN_Y && y <= PEG_MAX_Y;
   for (const d of decor) {
     const ids = members.get(d.id) ?? [];
     const list = ids.map((i) => ({ i, p: pegs[i] as LevelPeg }));
