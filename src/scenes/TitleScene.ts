@@ -43,6 +43,17 @@ export class TitleScene extends Phaser.Scene {
       } else this.scene.start(SCENES.map);
     };
     button(this, GAME_WIDTH / 2, 450, 'Jouer', start, { primary: true, size: 30, width: 260 });
+    button(
+      this,
+      GAME_WIDTH / 2,
+      540,
+      'Options',
+      () => {
+        this.scene.pause();
+        this.scene.launch(SCENES.options, { from: SCENES.title });
+      },
+      { width: 200, size: 22 },
+    );
     this.input.keyboard?.once('keydown-SPACE', start);
     this.input.keyboard?.once('keydown-ENTER', start);
   }

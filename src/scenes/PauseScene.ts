@@ -29,13 +29,19 @@ export class PauseScene extends Phaser.Scene {
       this.scene.stop();
       this.scene.get(SCENES.game).scene.restart();
     });
+    const options = () => {
+      this.scene.pause();
+      this.scene.launch(SCENES.options, { from: SCENES.pause });
+    };
+    button(this, GAME_WIDTH / 2, 490, 'Options', options);
     if (!data?.test) {
-      button(this, GAME_WIDTH / 2, 490, 'Carte', () => {
+      button(this, GAME_WIDTH / 2, 570, 'Carte', () => {
         this.scene.stop(SCENES.game);
         this.scene.start(SCENES.map);
       });
     }
-    this.input.keyboard?.once('keydown-ESC', resume);
-    this.input.keyboard?.once('keydown-P', resume);
+    // Pas de once : la pause peut être suspendue par les options puis reprise.
+    this.input.keyboard?.on('keydown-ESC', () => !this.scene.isPaused() && resume());
+    this.input.keyboard?.on('keydown-P', () => !this.scene.isPaused() && resume());
   }
 }

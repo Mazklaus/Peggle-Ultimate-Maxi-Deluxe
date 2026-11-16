@@ -6,6 +6,7 @@ export const SCENES = {
   game: 'Game',
   pause: 'Pause',
   results: 'Results',
+  options: 'Options',
   cutscene: 'Cutscene',
 } as const;
 
@@ -21,3 +22,6 @@ export const REGISTRY = {
   catalog: 'catalog',
   save: 'save',
 } as const;
+
+/** Événement global (game.events) émis quand le joueur change une option. */
+export const OPTIONS_CHANGED = 'options-changed';
