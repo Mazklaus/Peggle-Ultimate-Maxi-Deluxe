@@ -7,6 +7,7 @@ import { BootScene } from './scenes/BootScene';
 import { CutsceneScene } from './scenes/CutsceneScene';
 import { GameScene } from './scenes/GameScene';
 import { MapScene } from './scenes/MapScene';
+import { applyAudioOptions, OptionsScene } from './scenes/OptionsScene';
 import { PauseScene } from './scenes/PauseScene';
 import { ResultsScene } from './scenes/ResultsScene';
 import { TitleScene } from './scenes/TitleScene';
@@ -14,8 +15,7 @@ import { TitleScene } from './scenes/TitleScene';
 // Son : tous les événements de jeu passent au directeur audio.
 gameEvents.onAny((name, data) => audio.onGameEvent(name, data));
 const { options } = loadSave();
-audio.setVolume('music', options.musicVolume);
-audio.setVolume('sfx', options.sfxVolume);
+applyAudioOptions(options);
 // Le navigateur n'autorise l'audio qu'après un geste du joueur.
 const unlockAudio = () => audio.unlock();
 window.addEventListener('pointerdown', unlockAudio, { once: true });
@@ -30,5 +30,14 @@ new Phaser.Game({
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
   physics: { default: 'matter', matter: { gravity: { x: 0, y: 1 } } },
   // Boot en premier : il charge sauvegarde et niveaux puis aiguille.
-  scene: [BootScene, TitleScene, MapScene, GameScene, PauseScene, ResultsScene, CutsceneScene],
+  scene: [
+    BootScene,
+    TitleScene,
+    MapScene,
+    GameScene,
+    PauseScene,
+    ResultsScene,
+    CutsceneScene,
+    OptionsScene,
+  ],
 });

@@ -29,7 +29,7 @@ import {
 } from '../core/shotEvents';
 import { aimGuide, predictPath } from '../core/trajectory';
 import { TUNING } from '../core/tuning';
-import { REGISTRY, SCENES, STORY_LEVELS } from './keys';
+import { OPTIONS_CHANGED, REGISTRY, SCENES, STORY_LEVELS } from './keys';
 import { CompanionView } from './CompanionView';
 import type { ResultsData } from './ResultsScene';
 import { CRYSTAL_COLORS, CRYSTAL_COLORS_CB, PALETTE, textStyle, TEXT } from './theme';
@@ -198,7 +198,16 @@ export class GameScene extends Phaser.Scene {
     );
 
     const unmountDebug = debugEnabled() ? this.mountDebug() : undefined;
+    // Options changées depuis la pause : on recolore les cristaux tout de suite.
+    const onOptions = (o: SaveData['options']) => {
+      this.colors = o.colorblind ? CRYSTAL_COLORS_CB : CRYSTAL_COLORS;
+      for (const c of this.level.crystals) {
+        if (!c.lit) this.views.get(c.id)?.setFillStyle(this.colors[c.kind]);
+      }
+    };
+    this.game.events.on(OPTIONS_CHANGED, onOptions);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.game.events.off(OPTIONS_CHANGED, onOptions);
       this.companion?.destroy();
       this.companion = undefined;
       unmountDebug?.();
