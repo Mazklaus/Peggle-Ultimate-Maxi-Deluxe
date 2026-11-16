@@ -129,8 +129,8 @@ describe('arbitre de voix', () => {
   it("n'enchaîne pas les idles vocaux", () => {
     const g = new VoiceGate();
     expect(g.request('idle_court', 0, 0.5)).toBe('play');
-    expect(g.request('idle_fredonne', 1, 0.5)).toBe('drop');
-    expect(g.request('idle_fredonne', 5, 0.5)).toBe('play');
+    expect(g.request('idle_long', 1, 0.5)).toBe('drop');
+    expect(g.request('idle_long', 5, 0.5)).toBe('play');
   });
 });
 

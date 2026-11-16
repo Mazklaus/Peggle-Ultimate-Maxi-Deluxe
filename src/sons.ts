@@ -1,7 +1,9 @@
 /** Banc d'écoute (sons.html) : déclenche chaque son du jalon 1 sans lancer le jeu. */
 import { audio, type CrystalKind } from './audio';
 import type { BusName } from './audio/engine';
-import { PIP_VOICE, type VoiceCue } from './core/audio/voice';
+import { VOICES } from './core/audio/astres';
+import { CHAPTER_SPECS } from './core/audio/chapters';
+import type { VoiceCue } from './core/audio/voice';
 
 const app = document.getElementById('app') as HTMLElement;
 
@@ -32,22 +34,24 @@ function button(
 }
 
 // Musique
-const music = section('Musique adaptative');
+const music = section('Musique adaptative : chapitres');
 let layerButtons: HTMLButtonElement[] = [];
-button(music, '▶ Chapitre 1', () => {
-  audio.levelStart('ch1');
-  refreshLayers();
-});
-button(music, '▶ Phare (boîte à musique seule)', () => audio.music.start('phare'));
-button(music, '▶ Phare + Pip', () => audio.music.start('phare', { astres: 1 }));
+const chapterTitles = ['Premier ciel (Pip)', ...CHAPTER_SPECS.map((c) => c.title)];
+chapterTitles.forEach((title, i) =>
+  button(music, `▶ ${i + 1}. ${title}`, () => {
+    audio.levelStart(`ch${i + 1}`);
+    refreshLayers();
+  }),
+);
 button(music, '■ Stop', () => audio.music.stop());
+const layersRow = section('Couches (pendant un chapitre)');
 const states: [string, string][] = [
   ['Visée (couche 1)', 'fin_tir'],
   ['Tir (couches 1+2)', 'tir_lance'],
   ['Tension (dernier cœur)', 'dernier_coeur'],
 ];
 layerButtons = states.map(([label, ev]) =>
-  button(music, label, () => {
+  button(layersRow, label, () => {
     audio.onGameEvent(ev === 'fin_tir' ? 'cristaux_brises' : ev, { count: 0 });
     refreshLayers();
   }),
@@ -58,6 +62,21 @@ function refreshLayers(): void {
   layerButtons[1]?.classList.toggle('on', s.shooting);
   layerButtons[2]?.classList.toggle('on', s.tension);
 }
+
+// Phare
+const phare = section('Thème du phare : un instrument par Astre réveillé');
+[
+  'Boîte à musique seule',
+  '+ Pip',
+  '+ Bourdon',
+  '+ Twi & Nkl',
+  '+ Volte',
+  '+ Mousse',
+  '+ Horloge',
+  '+ Grelot',
+  '+ Nuage-Lune (complet)',
+].forEach((label, n) => button(phare, label, () => audio.music.start('phare', { astres: n })));
+button(phare, '■ Stop', () => audio.music.stop());
 
 // Rebonds
 const hits = section('Rebonds : chaîne pentatonique');
@@ -102,23 +121,30 @@ button(fin, 'Final au ralenti → victoire', () => {
 button(fin, 'Victoire seule', () => audio.onGameEvent('victoire'));
 button(fin, 'Échec', () => audio.onGameEvent('echec'));
 button(fin, 'Déblocage', () => audio.jingle('deblocage'));
+button(fin, '✦ Final de l’aventure : réveil de la Veilleuse (~45 s)', () => audio.finale());
 
-// Voix de Pip
+// Voix des Astres
+const who = section('Astre actif (voix-instrument)');
+const names: Record<string, string> = {
+  pip: 'Pip · piccolo',
+  bourdon: 'Bourdon · tuba',
+  twi_nkl: 'Twi & Nkl · 2 clarinettes',
+  volte: 'Volte · banjo',
+  mousse: 'Mousse · vibraphone',
+  horloge: 'Horloge · marimba + tic-tac',
+  grelot: 'Grelot · clochettes',
+  nuage_lune: 'Nuage-Lune · harpe + chœur',
+};
+const astreButtons = Object.keys(VOICES).map((id) =>
+  button(who, names[id] ?? id, () => {
+    audio.setAstre(id);
+    renderVoices();
+  }),
+);
 const groups: [string, VoiceCue[]][] = [
+  ['Avant le tir (idles)', ['idle_court', 'idle_long', 'inactivite', 'sommeil', 'reveil']],
   [
-    'Pip · avant le tir (idles)',
-    [
-      'idle_court',
-      'idle_fredonne',
-      'idle_mouche',
-      'idle_jongle',
-      'inactivite',
-      'sommeil',
-      'reveil',
-    ],
-  ],
-  [
-    'Pip · pendant le vol',
+    'Pendant le vol',
     [
       'tir_lance',
       'cristal',
@@ -128,25 +154,35 @@ const groups: [string, VoiceCue[]][] = [
       'dernier_coeur',
       'dernier_orbe',
       'pouvoir_active',
+      'orbe_coincee',
+      'orbe_debloquee',
       'final_ralenti',
     ],
   ],
   [
-    'Pip · après le tir (bilan)',
+    'Après le tir (bilan)',
     ['tir_moyen', 'gros_coup', 'chaine_longue', 'rate', 'orbe_recupere', 'victoire', 'echec'],
   ],
 ];
-for (const [title, cues] of groups) {
-  const g = section(title);
-  for (const cue of cues) {
-    PIP_VOICE.phrases[cue].forEach((_, i, all) =>
-      button(g, all.length > 1 ? `${cue} · V${i + 1}` : cue, () => {
+const voiceGrids = groups.map(([title]) => section(title));
+function renderVoices(): void {
+  const voice = VOICES[audio.astre] ?? VOICES.pip;
+  Object.keys(VOICES).forEach((id, i) =>
+    astreButtons[i]?.classList.toggle('on', id === audio.astre),
+  );
+  groups.forEach(([, cues], gi) => {
+    const g = voiceGrids[gi];
+    if (!g || !voice) return;
+    g.replaceChildren();
+    for (const cue of cues) {
+      voice.phrases[cue].forEach((_, i, all) =>
         // Le banc d'écoute rejoue toujours, sans l'arbitre anti-saturation.
-        audio.preview(cue, i);
-      }),
-    );
-  }
+        button(g, all.length > 1 ? `${cue} · V${i + 1}` : cue, () => audio.preview(cue, i)),
+      );
+    }
+  });
 }
+renderVoices();
 
 // Réglages
 const opts = section('Réglages (accessibilité)');

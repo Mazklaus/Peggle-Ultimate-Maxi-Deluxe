@@ -407,6 +407,20 @@ export function playInstrument(
       return celesta(eng, time, midi, vel, opts, 1.6);
     case 'piccolo':
       return melody(eng, time, midi + 12, vel * 0.8, dur, opts);
+    case 'clarinet':
+      return wind(eng, 'clarinet', time, midi, vel, dur, opts);
+    case 'tuba':
+      return wind(eng, 'tuba', time, midi, vel, dur, opts);
+    case 'pluck':
+      return pluck(eng, time, midi, vel, opts, Math.min(dur, 0.6));
+    case 'vibes':
+      return vibes(eng, time, midi, vel, opts);
+    case 'marimba':
+      return marimba(eng, time, midi, vel, opts);
+    case 'organ':
+      return organ(eng, time, midi, vel, dur, opts);
+    case 'tick':
+      return tick(eng, time, vel, midi % 2 === 0, opts);
   }
 }
 
@@ -436,4 +450,182 @@ export function breath(
   bp.connect(g);
   const end = envelope(g, time, 0.18 * vel, dur * 0.3, dur * 0.2, dur * 0.5);
   noise(eng, time, end, bp);
+}
+
+// ---------- Instruments-voix des Astres (jalon 2) ----------
+
+/** Marimba (Horloge) : lame de bois, partiel à ~3,9×, extinction rapide. */
+export function marimba(
+  eng: AudioEngine,
+  time: number,
+  midi: number,
+  vel: number,
+  opts: NoteOptions,
+): void {
+  const ctx = eng.ctx as Ctx;
+  const f = midiToFreq(midi);
+  const g = output(eng, opts);
+  const end = envelope(g, time, 0.3 * vel, 0.002, 0, 0.45);
+  osc(ctx, 'sine', f, time, end, g);
+  if (f * 3.93 < MAX_PARTIAL) {
+    const pg = ctx.createGain();
+    pg.connect(g);
+    envelope(pg, time, 0.35, 0.001, 0, 0.06);
+    osc(ctx, 'sine', f * 3.93, time, end, pg);
+  }
+}
+
+/** Vibraphone feutré (Mousse) : sinus + trémolo du moteur de l'instrument. */
+export function vibes(
+  eng: AudioEngine,
+  time: number,
+  midi: number,
+  vel: number,
+  opts: NoteOptions,
+  decay = 1.6,
+): void {
+  const ctx = eng.ctx as Ctx;
+  const f = midiToFreq(midi);
+  const g = output(eng, opts);
+  const end = envelope(g, time, 0.2 * vel, 0.006, 0, decay);
+  const trem = ctx.createGain();
+  trem.connect(g);
+  const lfo = ctx.createOscillator();
+  const depth = ctx.createGain();
+  lfo.frequency.value = 5.2;
+  depth.gain.value = 0.35;
+  lfo.connect(depth).connect(trem.gain);
+  lfo.start(time);
+  lfo.stop(end);
+  osc(ctx, 'sine', f, time, end, trem);
+  if (f * 4 < MAX_PARTIAL) {
+    const pg = ctx.createGain();
+    pg.connect(trem);
+    envelope(pg, time, 0.12, 0.002, 0, 0.3);
+    osc(ctx, 'sine', f * 4, time, end, pg);
+  }
+}
+
+/** Banjo / guitare (Volte) : corde pincée brillante, glissando possible vers `toMidi`. */
+export function pluck(
+  eng: AudioEngine,
+  time: number,
+  midi: number,
+  vel: number,
+  opts: NoteOptions,
+  dur = 0.4,
+  toMidi?: number,
+): void {
+  const ctx = eng.ctx as Ctx;
+  const f = midiToFreq(midi);
+  const g = output(eng, opts);
+  const lp = filter(ctx, 'lowpass', 6000, 2);
+  lp.frequency.setValueAtTime(Math.min(9000, f * 10), time);
+  lp.frequency.exponentialRampToValueAtTime(Math.max(300, f * 1.5), time + 0.25);
+  lp.connect(g);
+  const end = envelope(g, time, 0.16 * vel, 0.002, 0, Math.max(0.3, dur + 0.25));
+  for (const [type, mult, det] of [
+    ['sawtooth', 1, 0],
+    ['square', 1, 6],
+  ] as const) {
+    const o = osc(ctx, type, f * mult, time, end, lp, det);
+    if (toMidi !== undefined)
+      o.frequency.exponentialRampToValueAtTime(
+        midiToFreq(toMidi) * mult,
+        time + Math.max(0.05, dur),
+      );
+  }
+}
+
+/** Tic-tac de pendule. */
+export function tick(
+  eng: AudioEngine,
+  time: number,
+  vel: number,
+  high: boolean,
+  opts: NoteOptions,
+): void {
+  const ctx = eng.ctx as Ctx;
+  const g = output(eng, opts);
+  const bp = filter(ctx, 'bandpass', high ? 3200 : 2200, 8);
+  bp.connect(g);
+  const end = envelope(g, time, 0.4 * vel, 0.001, 0, 0.035);
+  noise(eng, time, end, bp);
+  osc(ctx, 'sine', high ? 2400 : 1800, time, end, g);
+}
+
+/** Orgue doux (Grande Veilleuse) : jeux de fond 8' + 4' + quinte. */
+export function organ(
+  eng: AudioEngine,
+  time: number,
+  midi: number,
+  vel: number,
+  dur: number,
+  opts: NoteOptions,
+): void {
+  const ctx = eng.ctx as Ctx;
+  const f = midiToFreq(midi);
+  const g = output(eng, opts);
+  const end = envelope(g, time, 0.06 * vel, 0.12, Math.max(0, dur - 0.12), 0.6);
+  for (const [mult, amp] of [
+    [1, 1],
+    [2, 0.5],
+    [3, 0.25],
+    [0.5, 0.4],
+  ] as const) {
+    if (f * mult > MAX_PARTIAL) continue;
+    const a = ctx.createGain();
+    a.gain.value = amp;
+    a.connect(g);
+    osc(ctx, 'sine', f * mult, time, end, a);
+  }
+}
+
+/** Instrument à vent tenu : clarinette (carré, anche) ou tuba (dent de scie sombre). */
+export function wind(
+  eng: AudioEngine,
+  kind: 'clarinet' | 'tuba',
+  time: number,
+  midi: number,
+  vel: number,
+  dur: number,
+  opts: NoteOptions,
+  glide?: { toMidi?: number; trill?: number },
+): void {
+  const ctx = eng.ctx as Ctx;
+  const f = midiToFreq(midi);
+  const g = output(eng, opts);
+  const tuba = kind === 'tuba';
+  const lp = filter(ctx, 'lowpass', tuba ? 260 : 2200, tuba ? 1.5 : 0.8);
+  if (tuba) {
+    lp.frequency.setValueAtTime(220, time);
+    lp.frequency.linearRampToValueAtTime(220 + 900 * vel, time + 0.06);
+    lp.frequency.exponentialRampToValueAtTime(360, time + Math.max(0.15, dur));
+  }
+  lp.connect(g);
+  const peak = (tuba ? 0.42 : 0.13) * vel;
+  const end = envelope(
+    g,
+    time,
+    peak,
+    tuba ? 0.04 : 0.025,
+    Math.max(0, dur - 0.05),
+    tuba ? 0.12 : 0.08,
+  );
+  const o = osc(ctx, tuba ? 'sawtooth' : 'square', f, time, end, lp);
+  if (glide?.toMidi !== undefined)
+    o.frequency.exponentialRampToValueAtTime(midiToFreq(glide.toMidi), time + dur);
+  if (glide?.trill) {
+    const up = midiToFreq(midi + glide.trill);
+    for (let k = 0.07, i = 0; k < dur; k += 0.07, i++)
+      o.frequency.setValueAtTime(i % 2 === 0 ? up : f, time + k);
+  }
+  const vib = ctx.createOscillator();
+  const vibAmt = ctx.createGain();
+  vib.frequency.value = tuba ? 4.5 : 5.5;
+  vibAmt.gain.setValueAtTime(0, time);
+  vibAmt.gain.linearRampToValueAtTime(dur > 0.3 ? 10 : 0, time + Math.min(0.3, dur));
+  vib.connect(vibAmt).connect(o.detune);
+  vib.start(time);
+  vib.stop(end);
 }
