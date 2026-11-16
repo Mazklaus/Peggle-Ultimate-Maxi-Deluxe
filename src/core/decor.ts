@@ -5,7 +5,13 @@
  * Un peg rejoint un élément par "group" ; ses x, y sont sa position à t = 0.
  * Le temps est celui du jeu (ralenti et pause compris), en secondes.
  */
-import type { DecorMagnet, DecorOrbit, DecorRotate } from './levelFormat';
+import {
+  DECOR_LIMITS,
+  type DecorMagnet,
+  type DecorOrbit,
+  type DecorPortal,
+  type DecorRotate,
+} from './levelFormat';
 import { ORB_PHYSICS } from './physics';
 
 export type RotateDecor = DecorRotate;
@@ -92,4 +98,55 @@ export function magnetAccel(
 export function magnetWeight(m: DecorMagnet, d: number): number {
   if (d <= MAGNET.deadZone || d >= m.radius) return 0;
   return 1 - (d - MAGNET.deadZone) / Math.max(1, m.radius - MAGNET.deadZone);
+}
+
+/**
+ * Portails (GD reglages-jalon2 §2, format v2) : paire A <-> B de rayon 18 ; l'orbe qui entre
+ * dans l'un ressort de l'autre avec la même vitesse. Pour éviter le ping-pong, un portail
+ * ne s'ouvre qu'à une orbe qui y ENTRE (elle doit d'abord sortir du portail d'arrivée), et
+ * chaque orbe attend 0,3 s de jeu entre deux passages.
+ */
+export const PORTAL = { r: DECOR_LIMITS.portalR, reentrySeconds: 0.3 };
+
+export function isPortal(d: { type?: unknown }): d is DecorPortal {
+  return d.type === 'portal';
+}
+
+/** Clé d'une bouche de portail : `${id}:a` ou `${id}:b`. */
+export type PortalMouth = string;
+
+/** Bouche de portail qui contient (x, y), ou null. */
+export function portalMouthAt(
+  portals: ReadonlyArray<DecorPortal>,
+  x: number,
+  y: number,
+): { portal: DecorPortal; side: 'a' | 'b' } | null {
+  for (const p of portals) {
+    if (Math.hypot(x - p.a.x, y - p.a.y) <= PORTAL.r) return { portal: p, side: 'a' };
+    if (Math.hypot(x - p.b.x, y - p.b.y) <= PORTAL.r) return { portal: p, side: 'b' };
+  }
+  return null;
+}
+
+/**
+ * Un pas de portail pour une orbe : `inside` = bouche où elle se trouve déjà (rien ne se
+ * passe tant qu'elle n'en est pas sortie). Renvoie la nouvelle position si elle passe,
+ * et la bouche où elle se trouve après ce pas.
+ */
+export function portalStep(
+  portals: ReadonlyArray<DecorPortal>,
+  x: number,
+  y: number,
+  inside: PortalMouth | null,
+  ready = true,
+): { to: { x: number; y: number } | null; inside: PortalMouth | null } {
+  const m = portalMouthAt(portals, x, y);
+  if (!m) return { to: null, inside: null };
+  const key = `${m.portal.id}:${m.side}`;
+  if (key === inside || !ready) return { to: null, inside: key };
+  const exit = m.side === 'a' ? m.portal.b : m.portal.a;
+  const from = m.side === 'a' ? m.portal.a : m.portal.b;
+  // Même décalage par rapport au centre : l'orbe ressort au même endroit de l'autre bouche.
+  const to = { x: exit.x + (x - from.x), y: exit.y + (y - from.y) };
+  return { to, inside: `${m.portal.id}:${m.side === 'a' ? 'b' : 'a'}` };
 }

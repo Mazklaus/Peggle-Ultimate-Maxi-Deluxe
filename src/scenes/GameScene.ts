@@ -55,6 +55,7 @@ import { CompanionView } from './CompanionView';
 import type { ResultsData } from './ResultsScene';
 import { CRYSTAL_COLORS, CRYSTAL_COLORS_CB, PALETTE, textStyle } from './theme';
 import { DecorLayer } from './DecorLayer';
+import { PORTAL } from '../core/decor';
 import { LANTERN } from './gardienne';
 import { GameHud, HUD_LAYOUT } from './Hud';
 import { button } from './widgets';
@@ -194,6 +195,13 @@ export class GameScene extends Phaser.Scene {
   private pierced = new Set<number>();
   private boltLeft = 0;
   private boltPrev = { x: 0, y: 0 };
+  /** Portails : bouche où se trouve chaque orbe, et temps de jeu où elle pourra repasser. */
+  private portalState = new WeakMap<
+    Phaser.GameObjects.Arc,
+    { inside: string | null; readyAt: number }
+  >();
+  /** Temps de jeu cumulé (s), ralentis compris. */
+  private gameTime = 0;
   private aimAngle = Math.PI / 2;
   private guide!: Phaser.GameObjects.Graphics;
   /** Effets des pouvoirs en zone de jeu (menthe), redessinés chaque frame. */
@@ -398,6 +406,7 @@ export class GameScene extends Phaser.Scene {
     if (this.warpUntil > 0 && time >= this.warpUntil) this.endTimeWarp();
     this.decor.draw();
     const delta = realDelta * this.gameScale;
+    this.gameTime += delta / 1000;
     this.moveBucket(delta);
     this.cannon.setRotation(this.aimAngle);
     this.handleKeyboardAim(delta);
@@ -417,6 +426,7 @@ export class GameScene extends Phaser.Scene {
     this.updateCrazyBounce(delta / 1000);
     this.updateMagnet(delta / 1000);
     this.applyMagnets(delta / 1000);
+    this.applyPortals(time);
     this.updateTwin(time);
     this.hud.setPowerActivity(this.crazyLeft > 0 ? this.crazyLeft / VOLTE.seconds : 0, !!this.twin);
     const caught = this.inBucket(orb);
@@ -584,6 +594,30 @@ export class GameScene extends Phaser.Scene {
         v.x + a.ax * k,
         v.y + a.ay * k,
       );
+    }
+  }
+
+  /**
+   * Portails : l'orbe qui entre dans une bouche ressort de l'autre, même vitesse. Une orbe
+   * doit sortir de la bouche d'arrivée avant de repasser, et attend 0,3 s de jeu (GD).
+   */
+  private applyPortals(time: number): void {
+    if (!this.decor.hasPortals) return;
+    for (const o of this.shotOrbs()) {
+      const st = this.portalState.get(o) ?? { inside: null, readyAt: 0 };
+      const ready = this.gameTime >= st.readyAt;
+      const step = this.decor.portalStep(o.x, o.y, st.inside, ready);
+      st.inside = step.inside;
+      if (step.to) {
+        o.setPosition(step.to.x, step.to.y); // Matter garde la vitesse
+        st.readyAt = this.gameTime + PORTAL.reentrySeconds;
+        this.decor.portalFlash(step.inside);
+        if (o === this.orb) {
+          this.boltPrev = { ...step.to }; // l'éclair de Grelot ne balaie pas l'écran entre les bouches
+          this.stuckRef = { x: step.to.x, y: step.to.y, t: time };
+        } else this.twinRef = { x: step.to.x, y: step.to.y, t: time };
+      }
+      this.portalState.set(o, st);
     }
   }
 
@@ -909,6 +943,8 @@ export class GameScene extends Phaser.Scene {
       this.decor.mayCross(predictPath(input).points, contactStep / 60, heart.id, ORB_RADIUS)
     )
       return null;
+    // Un portail sur le trajet : la prédiction s'abstient (le vrai contact relance le ralenti).
+    if (this.decor.touchesPortal(predictPath(input).points)) return null;
     return contactStep / 60;
   }
 
@@ -1535,6 +1571,7 @@ export class GameScene extends Phaser.Scene {
       obstacles: this.obstacles(),
       wallRestitution: ORB_PHYSICS.wallRestitution,
       field: this.decor.field,
+      portal: this.decor.portal,
     };
     if (this.companionId === 'pip' && this.reveal.armed) {
       // Pouvoir de Pip : trajectoire révélée jusqu'au 3e rebond ou 1,5 s.

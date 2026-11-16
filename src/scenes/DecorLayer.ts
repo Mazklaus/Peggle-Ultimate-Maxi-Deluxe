@@ -11,6 +11,10 @@ import Phaser from 'phaser';
 import { toWorld } from '../config';
 import {
   isMagnet,
+  isPortal,
+  PORTAL,
+  portalMouthAt,
+  portalStep,
   isMovingDecor,
   magnetAccel,
   magnetWeight,
@@ -18,7 +22,7 @@ import {
   pegTravel,
   type MovingDecor,
 } from '../core/decor';
-import type { DecorMagnet } from '../core/levelFormat';
+import type { DecorMagnet, DecorPortal } from '../core/levelFormat';
 import type { Crystal } from '../core/level';
 
 const TRACK = 0xb9a6ff;
@@ -41,6 +45,9 @@ export class DecorLayer {
   private readonly pegs: MovingPeg[] = [];
   private readonly decor: MovingDecor[];
   private readonly magnets: DecorMagnet[];
+  private readonly portals: DecorPortal[];
+  /** Flash de passage par bouche (`${id}:a|b`), 1 -> 0. */
+  private readonly flash = new Map<string, number>();
   /** Orbes en vol (monde) : l'aimant qui les tient pulse. */
   private orbs: ReadonlyArray<{ x: number; y: number }> = [];
   private readonly body: MatterBodyApi;
@@ -58,6 +65,7 @@ export class DecorLayer {
   ) {
     this.decor = decor.filter(isMovingDecor);
     this.magnets = decor.filter(isMagnet);
+    this.portals = decor.filter(isPortal);
     const byId = new Map(this.decor.map((d) => [d.id, d]));
     for (const c of crystals) {
       const d = c.group ? byId.get(c.group) : undefined;
@@ -95,6 +103,48 @@ export class DecorLayer {
       const a = this.magnetAt(x, y);
       return { ax: a.ax / 3600, ay: a.ay / 3600 };
     };
+  }
+
+  get hasPortals(): boolean {
+    return this.portals.length > 0;
+  }
+
+  /** Pas de portail en coordonnées monde (voir core/decor.ts portalStep). */
+  portalStep(
+    x: number,
+    y: number,
+    inside: string | null,
+    ready = true,
+  ): { to: { x: number; y: number } | null; inside: string | null } {
+    const o = toWorld({ x: 0, y: 0 });
+    const r = portalStep(this.portals, x - o.x, y - o.y, inside, ready);
+    return { to: r.to ? toWorld(r.to) : null, inside: r.inside };
+  }
+
+  /** Pour les prédictions (aperçu de Pip), ou undefined sans portail. */
+  get portal():
+    | ((
+        x: number,
+        y: number,
+        inside: string | null,
+      ) => { to: { x: number; y: number } | null; inside: string | null })
+    | undefined {
+    return this.portals.length > 0 ? (x, y, inside) => this.portalStep(x, y, inside) : undefined;
+  }
+
+  /** Le trajet passe-t-il par une bouche de portail ? (la prédiction du final s'abstient) */
+  touchesPortal(path: ReadonlyArray<{ x: number; y: number }>): boolean {
+    if (this.portals.length === 0) return false;
+    const o = toWorld({ x: 0, y: 0 });
+    return path.some((q) => portalMouthAt(this.portals, q.x - o.x, q.y - o.y) !== null);
+  }
+
+  /** Une orbe vient de passer : les deux bouches flashent. */
+  portalFlash(inside: string | null): void {
+    if (!inside) return;
+    const [id] = inside.split(':');
+    this.flash.set(`${id}:a`, 1);
+    this.flash.set(`${id}:b`, 1);
   }
 
   setOrbs(orbs: ReadonlyArray<{ x: number; y: number }>): void {
@@ -151,6 +201,54 @@ export class DecorLayer {
       else this.drawOrbit(g, d, c);
     }
     for (const m of this.magnets) this.drawMagnet(g, m);
+    this.portals.forEach((p, i) => {
+      this.drawPortal(g, p, 'a', i + 1);
+      this.drawPortal(g, p, 'b', i + 1);
+    });
+  }
+
+  /**
+   * Portail (DA elements-decor.js) : disque nuit, tourbillon lavande qui aspire, anneau
+   * blanc chaud ; les paires se distinguent par le NOMBRE d'étoiles (1, 2, 3), jamais par
+   * la couleur. Flash au passage de l'orbe.
+   */
+  private drawPortal(
+    g: Phaser.GameObjects.Graphics,
+    p: DecorPortal,
+    side: 'a' | 'b',
+    pair: number,
+  ): void {
+    const c = toWorld(side === 'a' ? p.a : p.b);
+    const r = PORTAL.r;
+    const now = this.scene.time.now;
+    const key = `${p.id}:${side}`;
+    const flash = this.flash.get(key) ?? 0;
+    if (flash > 0) this.flash.set(key, Math.max(0, flash - 0.05));
+    g.fillStyle(0x3b2e6e, 0.9).fillCircle(c.x, c.y, r);
+    g.fillStyle(0x0b1026, 1).fillCircle(c.x, c.y, r * 0.55);
+    for (let i = 0; i < 3; i++) {
+      const s = (now / 900 + i / 3) % 1;
+      const a0 = now / 300 + i * 2;
+      g.lineStyle(1.4, TRACK, 0.45 * s).beginPath();
+      g.arc(c.x, c.y, r * (1 - s) * 0.95, a0, a0 + 2.4);
+      g.strokePath();
+    }
+    g.lineStyle(3 + flash * 3, WARM, 1).strokeCircle(c.x, c.y, r);
+    if (flash > 0) g.fillStyle(WARM, 0.45 * flash).fillCircle(c.x, c.y, r * (1 + flash));
+    g.fillStyle(WARM, 1);
+    for (let i = 0; i < pair; i++) {
+      const a = -Math.PI / 2 + (i - (pair - 1) / 2) * 0.5;
+      const sx = c.x + Math.cos(a) * (r + 8);
+      const sy = c.y + Math.sin(a) * (r + 8);
+      g.fillPoints(
+        [0, 1, 2, 3, 4, 5, 6, 7].map((k) => {
+          const rr = k % 2 ? 1.4 : 4;
+          const b = (k * Math.PI) / 4;
+          return new Phaser.Math.Vector2(sx + Math.cos(b) * rr, sy + Math.sin(b) * rr);
+        }),
+        true,
+      );
+    }
   }
 
   /**
