@@ -36,7 +36,7 @@ const CARDS: Record<ModeKind, { x: number; w: number; h: number }> = {
 };
 const CARD_Y = 420;
 /** Modes dont l'écran est livré (les autres restent sous cadenas en attendant). */
-const READY: ReadonlySet<ModeKind> = new Set(['aventure', 'quotidien', 'defi']);
+const READY: ReadonlySet<ModeKind> = new Set(['aventure', 'quotidien', 'defi', 'duel']);
 const iconKey = (n: string) => `icone-${n}`;
 
 interface ModeCard {
@@ -313,5 +313,6 @@ export class TitleScene extends Phaser.Scene {
     if (card.mode === 'aventure') start();
     else if (card.mode === 'quotidien') fadeTo(this, SCENES.daily);
     else if (card.mode === 'defi') fadeTo(this, SCENES.challenges);
+    else if (card.mode === 'duel') fadeTo(this, SCENES.duelSetup);
   }
 }
