@@ -140,6 +140,13 @@ export function hitCrystal(s: LevelState, id: number): number {
   return gained;
 }
 
+/** Bonus de chaîne d'un tir (points, arrondis) selon son score et ses rebonds. */
+export function chainBonus(shotScore: number, bounces: number, tuning: Tuning = TUNING): number {
+  const c = tuning.chainBonus;
+  const rate = Math.min(c.max, Math.max(0, bounces - c.fromBounces) * c.perBounce);
+  return Math.round(shotScore * rate);
+}
+
 /** Le dernier cœur vient d'être touché (déclenche le ralenti côté scène). */
 export function isFinalHeartLit(s: LevelState): boolean {
   return s.phase === 'shooting' && heartsRemaining(s) === 0;
@@ -176,7 +183,7 @@ export function endShot(s: LevelState, caught: boolean, rng: Rng = Math.random):
   const orbsGained = caught ? 1 : 0;
   s.orbs += orbsGained;
   if (heartsRemaining(s) === 0) {
-    s.score += s.orbs * s.tuning.points.bonus; // bonus de fin : orbes restants
+    s.score += s.orbs * s.tuning.orbBonus; // bonus de fin : orbes restants
     s.phase = 'won';
   } else if (s.orbs <= 0) {
     s.phase = 'lost';

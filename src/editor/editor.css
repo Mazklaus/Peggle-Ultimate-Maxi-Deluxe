@@ -133,3 +133,21 @@ canvas {
     grid-template-columns: 1fr;
   }
 }
+#decor-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+#decor-list li {
+  padding: 2px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+#decor-list li.selected {
+  background: #3b2e6e;
+}
+#decor-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}

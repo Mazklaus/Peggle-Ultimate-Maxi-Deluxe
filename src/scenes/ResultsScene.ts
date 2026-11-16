@@ -194,10 +194,13 @@ export class ResultsScene extends Phaser.Scene {
         value: b.bonus,
       });
       lines.push({ draw: drawOrbIcon, value: b.orbs });
+      if (b.chain > 0) lines.push({ draw: drawChainIcon, value: b.chain });
       if (b.finalZone > 0) lines.push({ draw: drawZoneIcon, value: b.finalZone });
     }
-    const lineTop = -124;
-    const lineGap = lines.length > 4 ? 28 : 34;
+    // Jusqu'à 6 lignes (bonus de chaîne, zones du final) : on resserre pour garder
+    // TOTAL, étoiles et boutons à leur place dans le panneau de 420 px.
+    const lineTop = -132;
+    const lineGap = lines.length > 4 ? Math.min(30, 150 / (lines.length - 1)) : 34;
     lines.forEach((line, i) => {
       const y = lineTop + i * lineGap;
       const g = this.add.graphics({ x: -120, y });
@@ -213,7 +216,7 @@ export class ResultsScene extends Phaser.Scene {
     });
 
     // TOTAL qui compte en 800 ms.
-    const totalY = lineTop + lines.length * lineGap + 28;
+    const totalY = Math.min(lineTop + (lines.length - 1) * lineGap + 56, 60);
     const total = this.add.text(0, totalY, '0', textStyle(52)).setOrigin(0.5).setAlpha(0);
     box.add(total);
     const totalAt = WIN_TIMES.lines + lines.length * WIN_TIMES.lineStep + 80;
@@ -244,11 +247,11 @@ export class ResultsScene extends Phaser.Scene {
     }
 
     // Étoiles une par une (300 ms chacune, note montante).
-    const starY = 104;
+    const starY = 112;
     for (let i = 0; i < 3; i++) {
       const lit = i < stars;
       const s = this.add
-        .text((i - 1) * 64, starY, '★', textStyle(52, lit ? '#B9A6FF' : '#2E3870'))
+        .text((i - 1) * 64, starY, '★', textStyle(44, lit ? '#B9A6FF' : '#2E3870'))
         .setOrigin(0.5)
         .setScale(0);
       box.add(s);
@@ -275,7 +278,7 @@ export class ResultsScene extends Phaser.Scene {
     data: ResultsData,
     box: Phaser.GameObjects.Container,
   ): Phaser.GameObjects.Container[] {
-    const y = 168;
+    const y = 172;
     const save = this.registry.get(REGISTRY.save) as SaveData;
     const catalog = this.registry.get(REGISTRY.catalog) as LevelCatalog;
     const out: Phaser.GameObjects.Container[] = [];
@@ -384,6 +387,17 @@ export class ResultsScene extends Phaser.Scene {
 function drawOrbIcon(g: Phaser.GameObjects.Graphics): void {
   g.fillStyle(PALETTE.orbHalo, 0.35).fillCircle(0, 0, 13);
   g.fillStyle(PALETTE.orb, 1).fillCircle(0, 0, 8);
+}
+
+/** Bonus de chaîne : trois maillons d'orbe reliés. */
+function drawChainIcon(g: Phaser.GameObjects.Graphics): void {
+  g.lineStyle(2, PALETTE.orbHalo, 0.8).lineBetween(-10, 4, 10, -4);
+  for (const [x, y] of [
+    [-10, 4],
+    [0, 0],
+    [10, -4],
+  ] as const)
+    g.fillStyle(PALETTE.orb, 1).fillCircle(x, y, 4);
 }
 
 /** Zone de bonus du tir final : petite coupe lavande. */
