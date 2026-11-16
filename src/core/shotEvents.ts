@@ -55,6 +55,9 @@ export interface OrbSample extends Vec {
 
 export type CrystalKindOrPower = CrystalKind;
 
+/** Tolérance (s) entre deux prédictions successives du contact pour confirmer le final. */
+const FINAL_CONFIRM_SLACK_S = 0.03;
+
 export class ShotTracker {
   private t = EVENT_THRESHOLDS;
   private idleTime = 0;
@@ -66,6 +69,8 @@ export class ShotTracker {
   private chainSent = false;
   private nearMissSent = false;
   private finalSent = false;
+  /** Temps de contact prévu à la frame précédente (null = pas de final en vue). */
+  private finalCandidate: number | null = null;
   /** Cœur actuellement frôlé (candidat « presque »). */
   private grazing: number | null = null;
 
@@ -95,6 +100,7 @@ export class ShotTracker {
     this.chainSent = false;
     this.nearMissSent = false;
     this.finalSent = false;
+    this.finalCandidate = null;
     this.grazing = null;
     return ['tir_lance'];
   }
@@ -155,10 +161,16 @@ export class ShotTracker {
     const last = hearts.length === 1 ? hearts[0] : undefined;
     if (!this.finalSent && last) {
       const ttc = contactTime(orb, last);
-      if (ttc !== null && ttc < this.t.finalSlowmoLeadSeconds) {
+      const due = ttc !== null && ttc < this.t.finalSlowmoLeadSeconds;
+      // Confirmé sur 2 frames de suite, avec un contact qui se rapproche : une prédiction
+      // isolée (décor mobile, aimant, portail) ne lance plus de faux final (QA, P2 résiduel).
+      // Si le contact arrive avant la confirmation, le filet du vrai contact prend le relais.
+      const prev = this.finalCandidate;
+      if (due && prev !== null && ttc <= prev + FINAL_CONFIRM_SLACK_S) {
         this.finalSent = true;
         out.push('final_ralenti');
       }
+      this.finalCandidate = due ? ttc : null;
     }
     return out;
   }

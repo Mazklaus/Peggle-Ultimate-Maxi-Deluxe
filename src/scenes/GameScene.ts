@@ -99,6 +99,8 @@ const FAIL_DELAY_MS = 400;
  * avant l'impact quand la fréquence d'images baisse, QA ch.3-5).
  */
 const SLOWMO = { scale: 0.25, afterContactMs: 500, safetyGameMs: 600 };
+/** Frames sans contact prévu avant d'abandonner un ralenti prévu. */
+const FINAL_LOST_FRAMES = 4;
 /** Gel d'image au contact du dernier cœur non anticipé (cas lent, demande GD), avant le ralenti. */
 const FINAL_HIT_STOP_MS = 80;
 /** Onde de choc de Bourdon : rayon (px) et durée de propagation (s). */
@@ -256,6 +258,8 @@ export class GameScene extends Phaser.Scene {
   private slowmoUntil = 0;
   /** Fin de secours du ralenti prévu, en horloge physique (0 = aucune). */
   private slowmoSafetyAt = 0;
+  /** Frames de suite où le ralenti prévu ne voit plus le contact. */
+  private finalLostFrames = 0;
   /** Fin (horloge réelle) du gel d'image du final ; 0 = pas de gel. */
   private hitStopUntil = 0;
   private gameScale = 1;
@@ -462,6 +466,7 @@ export class GameScene extends Phaser.Scene {
     audio.flight(Phaser.Math.Clamp((orb.y - PLAYFIELD.y) / PLAYFIELD.h, 0, 1));
     this.updateBolt(physDt);
     this.trackOrb(orb);
+    this.checkPredictedFinal(orb);
     this.updateCrazyBounce(physDt);
     this.updateMagnet(physDt);
     this.applyMagnets(physDt);
@@ -922,6 +927,25 @@ export class GameScene extends Phaser.Scene {
         (o, heart) => this.predictHeartContact(o, heart),
       ),
     );
+  }
+
+  /**
+   * Ralenti prévu en cours, contact pas encore arrivé : si la prédiction ne voit plus le
+   * contact plusieurs frames de suite (décor mobile, aimant, portail), le ralenti s'arrête
+   * tout de suite au lieu d'attendre le filet (faux final résiduel, QA feu vert jalon 2).
+   */
+  private checkPredictedFinal(orb: Phaser.GameObjects.Arc): void {
+    if (this.slowmoSafetyAt <= 0) {
+      this.finalLostFrames = 0;
+      return;
+    }
+    const hearts = this.unlitHearts();
+    const last = hearts.length === 1 ? hearts[0] : undefined;
+    if (!last) return;
+    const v = this.orbVelocity(orb);
+    const ttc = this.predictHeartContact({ x: orb.x, y: orb.y, vx: v.x * 60, vy: v.y * 60 }, last);
+    this.finalLostFrames = ttc === null ? this.finalLostFrames + 1 : 0;
+    if (this.finalLostFrames >= FINAL_LOST_FRAMES) this.slowmoSafetyAt = this.physClock();
   }
 
   /** Obstacles des prédictions de trajectoire (rayons approchés des cristaux). */

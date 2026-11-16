@@ -87,6 +87,7 @@ describe('ShotTracker', () => {
     const last = [heart(1, 100, 300)];
     expect(t.orbMoved(orb(100, 100, 0, 300), last)).toEqual([]); // ~0,6 s
     expect(t.orbMoved(orb(100, 180, 0, 300), last)).toEqual([]); // ~0,34 s
+    expect(t.orbMoved(orb(100, 215, 0, 300), last)).toEqual([]); // ~0,22 s, à confirmer
     expect(t.orbMoved(orb(100, 220, 0, 300), last)).toEqual(['final_ralenti']); // ~0,2 s
     expect(t.orbMoved(orb(100, 240, 0, 300), last)).toEqual([]);
   });
@@ -99,7 +100,20 @@ describe('final_ralenti avec prédicteur', () => {
     const last = [heart(1, 100, 300)];
     // En ligne droite le contact serait imminent, mais la vraie trajectoire l'évite.
     expect(t.orbMoved(orb(100, 200, 0, 300), last, () => null)).toEqual([]);
-    expect(t.orbMoved(orb(100, 200, 0, 300), last, () => 0.2)).toEqual(['final_ralenti']);
+    expect(t.orbMoved(orb(100, 200, 0, 300), last, () => 0.2)).toEqual([]); // 1re frame
+    expect(t.orbMoved(orb(100, 205, 0, 300), last, () => 0.18)).toEqual(['final_ralenti']);
+  });
+
+  it('une prédiction isolée ne lance pas le final (confirmation sur 2 frames)', () => {
+    const t = new ShotTracker();
+    t.shotFired();
+    const last = [heart(1, 100, 300)];
+    expect(t.orbMoved(orb(100, 200, 0, 300), last, () => 0.2)).toEqual([]);
+    expect(t.orbMoved(orb(100, 205, 0, 300), last, () => null)).toEqual([]);
+    expect(t.orbMoved(orb(100, 210, 0, 300), last, () => 0.15)).toEqual([]);
+    // Le contact recule d'un coup : prédiction incohérente, pas de final.
+    expect(t.orbMoved(orb(100, 215, 0, 300), last, () => 0.24)).toEqual([]);
+    expect(t.orbMoved(orb(100, 220, 0, 300), last, () => 0.22)).toEqual(['final_ralenti']);
   });
 });
 
