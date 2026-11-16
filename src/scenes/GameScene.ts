@@ -118,6 +118,8 @@ export class GameScene extends Phaser.Scene {
   private bucketDir = 1;
   private hud!: GameHud;
   private hudDimmed = false;
+  /** Pause : jeu figé, scène active (l'Astre continue de s'animer). */
+  private paused = false;
   private stuckRef = { x: 0, y: 0, t: 0 };
   private chain = 0;
   private ending = false;
@@ -146,6 +148,10 @@ export class GameScene extends Phaser.Scene {
   }
 
   create(): void {
+    // Une scène relancée depuis la pause garde ses champs et l'état de ses entrées.
+    this.paused = false;
+    this.input.enabled = true;
+    if (this.input.keyboard) this.input.keyboard.enabled = true;
     // Réveil de Pip (vignette B0) au tout premier lancement du 1-1.
     const firstSave = this.registry.get(REGISTRY.save) as SaveData | undefined;
     if (
@@ -265,6 +271,11 @@ export class GameScene extends Phaser.Scene {
 
   update(time: number, realDelta: number): void {
     if (this.redirecting) return;
+    if (this.paused) {
+      // Jeu figé : seul l'Astre vit (il dort).
+      this.companion?.update(realDelta / 1000, {});
+      return;
+    }
     this.updateSlowmo(time);
     const delta = realDelta * this.gameScale;
     this.moveBucket(delta);
@@ -849,10 +860,36 @@ export class GameScene extends Phaser.Scene {
 
   // --- Divers ---------------------------------------------------------------
 
+  /**
+   * Pause : on fige le jeu (physique, réceptacle, tweens, entrées) mais pas la scène, pour
+   * que l'Astre continue de vivre : il s'endort, bien visible au-dessus du voile.
+   */
   private openPause(): void {
-    if (this.ending || this.scene.isPaused()) return;
-    this.scene.pause();
+    if (this.ending || this.paused) return;
+    this.paused = true;
+    this.matter.world.pause();
+    this.tweens.pauseAll();
+    this.input.enabled = false;
+    if (this.input.keyboard) this.input.keyboard.enabled = false;
     this.scene.launch(SCENES.pause, { test: this.sceneData.test });
+    const c = this.companion;
+    if (c) this.withCompanionLayer((layer) => c.reparent(layer));
+  }
+
+  /** Reprise après la pause (appelée par PauseScene). */
+  resumeFromPause(): void {
+    if (!this.paused) return;
+    this.paused = false;
+    this.matter.world.resume();
+    this.tweens.resumeAll();
+    this.input.enabled = true;
+    if (this.input.keyboard) this.input.keyboard.enabled = true;
+    this.companion?.reparent(this);
+    this.scene.stop(SCENES.companionLayer);
+  }
+
+  get isGamePaused(): boolean {
+    return this.paused;
   }
 
   private moveBucket(delta: number): void {
