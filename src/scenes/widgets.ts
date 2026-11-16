@@ -391,6 +391,54 @@ export function slider(
   return box;
 }
 
+/**
+ * Sélecteur segmenté (cases 80 × 48, case active lavande) : clic sur une case, ou au clavier
+ * (focus) flèches gauche/droite. onChange reçoit l'index choisi.
+ */
+export function segmented(
+  scene: Phaser.Scene,
+  x: number,
+  y: number,
+  labels: string[],
+  value: number,
+  onChange: (index: number) => void,
+): Phaser.GameObjects.Container {
+  const cell = { w: 80, h: UI.minTarget };
+  const w = cell.w * labels.length;
+  let index = Phaser.Math.Clamp(value, 0, labels.length - 1);
+  const bg = scene.add.graphics();
+  const texts = labels.map((l, i) =>
+    scene.add.text(-w / 2 + cell.w * (i + 0.5), 0, l, bodyStyle(15)).setOrigin(0.5),
+  );
+  const paint = () => {
+    bg.clear();
+    bg.fillStyle(PALETTE.border, 1).fillRoundedRect(-w / 2, -cell.h / 2, w, cell.h, 12);
+    bg.fillStyle(PALETTE.accent, 1);
+    bg.fillRoundedRect(-w / 2 + cell.w * index + 3, -cell.h / 2 + 3, cell.w - 6, cell.h - 6, 10);
+    texts.forEach((t, i) => t.setColor(i === index ? TEXT.onAccent : TEXT.main));
+  };
+  const set = (i: number) => {
+    i = Phaser.Math.Clamp(i, 0, labels.length - 1);
+    if (i === index) return;
+    index = i;
+    paint();
+    onChange(index);
+  };
+  paint();
+  const ring = roundedRing(w + 8, cell.h + 8, 14, scene);
+  const box = scene.add.container(x, y, [ring, bg, ...texts]).setSize(w, cell.h) as Focusable;
+  box.focusRing = ring;
+  ring.setVisible(false);
+  box.setInteractive({ useHandCursor: true });
+  box.on('pointerup', (p: Phaser.Input.Pointer) => {
+    const local = (p.x - box.x) / box.scaleX;
+    set(Math.floor((local + w / 2) / cell.w));
+  });
+  box.setData('nudge', (dir: number) => set(index + dir));
+  box.activate = () => set((index + 1) % labels.length);
+  return box;
+}
+
 // ---------------------------------------------------------------------------
 // Focus clavier
 // ---------------------------------------------------------------------------

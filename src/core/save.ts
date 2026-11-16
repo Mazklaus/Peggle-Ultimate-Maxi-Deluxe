@@ -25,7 +25,12 @@ export interface Options {
   softAudio: boolean;
   /** Son mono. */
   monoAudio: boolean;
+  /** Vitesse du jeu (specs UI/UX jalon 3, 5) : lent 0.8, normal 1, rapide 1.2. */
+  speed: GameSpeed;
 }
+
+export const GAME_SPEEDS = [0.8, 1, 1.2] as const;
+export type GameSpeed = (typeof GAME_SPEEDS)[number];
 
 /** Une ligne par niveau joué jusqu'au bout : sert au Game Designer pour recaler les étoiles. */
 export interface ScoreLogEntry {
@@ -74,7 +79,13 @@ export const DEFAULT_OPTIONS: Options = {
   voiceVolume: 0.8,
   softAudio: false,
   monoAudio: false,
+  speed: 1,
 };
+
+/** Valeurs hors liste (sauvegarde trafiquée ou ancienne) ramenées au défaut. */
+function sanitizeOptions(o: Options): Options {
+  return GAME_SPEEDS.includes(o.speed) ? o : { ...o, speed: DEFAULT_OPTIONS.speed };
+}
 
 export function emptySave(): SaveData {
   return {
@@ -106,7 +117,7 @@ export function loadSave(storage: KeyValueStorage | null = browserStorage()): Sa
     return {
       version: SAVE_VERSION,
       levels: typeof data.levels === 'object' && data.levels ? data.levels : {},
-      options: { ...DEFAULT_OPTIONS, ...(data.options ?? {}) },
+      options: sanitizeOptions({ ...DEFAULT_OPTIONS, ...(data.options ?? {}) }),
       scoreLog: Array.isArray(data.scoreLog) ? data.scoreLog : [],
       // Champ ajouté après la v1 : absent des anciennes sauvegardes.
       seen: typeof data.seen === 'object' && data.seen ? data.seen : {},
