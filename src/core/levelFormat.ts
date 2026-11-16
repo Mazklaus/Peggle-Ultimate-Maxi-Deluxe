@@ -42,6 +42,7 @@ export const RHYTHMS = [
   'combinaison',
   'maitrise',
   'grande-constellation',
+  'duel',
 ] as const;
 export type Rhythm = (typeof RHYTHMS)[number];
 
@@ -478,7 +479,7 @@ export function parseLevel(input: string | unknown): ParseResult {
     (!isInt(raw.guideBounces) || raw.guideBounces < 0 || raw.guideBounces > 5)
   )
     errors.push('guideBounces : entier 0..5.');
-  if (raw.challenge !== undefined) errors.push(...challengeErrors(raw.challenge));
+  if (raw.challenge !== undefined) errors.push(...challengeErrors(raw.challenge, COMPANIONS));
   const orbs = raw.orbs ?? DEFAULT_ORBS;
   if (!isInt(orbs) || orbs < 1) errors.push('orbs : entier >= 1.');
 

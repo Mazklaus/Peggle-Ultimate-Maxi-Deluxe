@@ -1,8 +1,13 @@
 import Phaser from 'phaser';
 import { GAME_HEIGHT, GAME_WIDTH } from '../config';
 import {
+  allLevelIds,
   buildCatalog,
+  EXTRA_INDEXES,
+  type ExtraIndexName,
   LEVELS_DIR,
+  parseExtraIndexes,
+  parseIdList,
   parseIndex,
   TEST_LEVEL_KEY,
   type LevelCatalog,
@@ -19,7 +24,7 @@ import { textStyle } from './theme';
  * Démarrage : charge la sauvegarde et les niveaux, puis aiguille.
  *   ./            -> écran titre
  *   ./?test       -> niveau envoyé par l'éditeur (localStorage « ricochet:test-level »)
- *   ./?level=<id> -> lance directement un niveau (QA, debug)
+ *   ./?level=<id> -> lance directement un niveau, aventure, défi ou duel (QA, debug)
  *   ./?daily      -> Constellation du jour (date locale) ; ./?daily=AAAAMMJJ pour un autre jour (QA)
  */
 export class BootScene extends Phaser.Scene {
@@ -34,25 +39,53 @@ export class BootScene extends Phaser.Scene {
     this.load.json('level-index', `${LEVELS_DIR}/index.json`);
     this.load.once('filecomplete-json-level-index', () => {
       const { index } = parseIndex(this.cache.json.get('level-index'));
-      for (const id of index?.levels ?? [])
-        this.load.json(`level:${id}`, `${LEVELS_DIR}/${id}.json`);
+      for (const id of index?.levels ?? []) this.loadLevelFile(id);
     });
+    // Défis et duel : facultatifs (un fichier absent laisse la liste vide).
+    for (const name of Object.keys(EXTRA_INDEXES) as ExtraIndexName[]) {
+      const { file, key } = EXTRA_INDEXES[name];
+      this.load.json(`index:${name}`, `${LEVELS_DIR}/${file}`);
+      this.load.once(`filecomplete-json-index:${name}`, () => {
+        const { ids } = parseIdList(this.cache.json.get(`index:${name}`), file, key);
+        for (const id of ids ?? []) this.loadLevelFile(id);
+      });
+    }
+  }
+
+  /** Ids déjà mis en file (un niveau peut figurer dans plusieurs index). */
+  private readonly queued = new Set<string>();
+
+  private loadLevelFile(id: string): void {
+    if (this.queued.has(id)) return;
+    this.queued.add(id);
+    this.load.json(`level:${id}`, `${LEVELS_DIR}/${id}.json`);
   }
 
   create(): void {
     this.registry.set(REGISTRY.save, loadSave());
 
     const parsed = parseIndex(this.cache.json.get('level-index'));
+    const extra = parseExtraIndexes(
+      Object.fromEntries(
+        (Object.keys(EXTRA_INDEXES) as ExtraIndexName[])
+          .filter((name) => this.cache.json.exists(`index:${name}`))
+          .map((name) => [name, this.cache.json.get(`index:${name}`) as unknown]),
+      ),
+    );
+    const files = Object.fromEntries(
+      allLevelIds(parsed.index, extra.extras)
+        .filter((id) => this.cache.json.exists(`level:${id}`))
+        .map((id) => [id, this.cache.json.get(`level:${id}`) as unknown]),
+    );
     const catalog: LevelCatalog = parsed.index
-      ? buildCatalog(
-          parsed.index,
-          Object.fromEntries(
-            parsed.index.levels
-              .filter((id) => this.cache.json.exists(`level:${id}`))
-              .map((id) => [id, this.cache.json.get(`level:${id}`) as unknown]),
-          ),
-        )
-      : { levels: [], errors: [parsed.error ?? 'index.json introuvable.'] };
+      ? buildCatalog(parsed.index, files, extra.extras)
+      : {
+          levels: [],
+          challenges: [],
+          duel: [],
+          errors: [parsed.error ?? 'index.json introuvable.'],
+        };
+    catalog.errors.unshift(...extra.errors);
     for (const e of catalog.errors) console.warn(`[niveaux] ${e}`);
     this.registry.set(REGISTRY.catalog, catalog);
 
@@ -70,7 +103,9 @@ export class BootScene extends Phaser.Scene {
     }
     const direct = params.get('level');
     if (direct) {
-      const level = catalog.levels.find((l) => l.id === direct);
+      const level = [...catalog.levels, ...catalog.challenges, ...catalog.duel].find(
+        (l) => l.id === direct,
+      );
       if (level) return void this.scene.start(SCENES.game, { level });
       return this.fail([`Niveau « ${direct} » introuvable.`, ...catalog.errors]);
     }

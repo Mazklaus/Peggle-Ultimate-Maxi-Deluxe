@@ -52,8 +52,11 @@ export function goalTarget(c: Challenge): number {
   return c.value ?? 0;
 }
 
-/** Erreurs de forme d'un champ challenge (vide = valide). */
-export function challengeErrors(raw: unknown): string[] {
+/**
+ * Erreurs de forme d'un champ challenge (vide = valide). `companions` : ids d'Astres connus
+ * (passés par levelFormat, pour éviter un import circulaire) ; absent = pas de vérification.
+ */
+export function challengeErrors(raw: unknown, companions?: readonly string[]): string[] {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw))
     return ['challenge : objet attendu.'];
   const r = raw as Record<string, unknown>;
@@ -71,6 +74,12 @@ export function challengeErrors(raw: unknown): string[] {
     errors.push(`challenge.constraint : un de ${CHALLENGE_CONSTRAINTS.join(', ')}.`);
   if (r.constraint === 'astre_impose' && typeof r.astre !== 'string')
     errors.push('challenge.astre : id de l’Astre requis avec astre_impose.');
+  if (r.astre !== undefined) {
+    if (r.constraint !== 'astre_impose')
+      errors.push('challenge.astre : seulement avec la contrainte astre_impose.');
+    if (companions && !companions.includes(r.astre as string))
+      errors.push(`challenge.astre : Astre inconnu « ${String(r.astre)} ».`);
+  }
   return errors;
 }
 
