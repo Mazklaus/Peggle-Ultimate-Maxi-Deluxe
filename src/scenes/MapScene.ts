@@ -1,4 +1,6 @@
 import Phaser from 'phaser';
+import { audio } from '../audio';
+import { awakeAstres } from '../core/audio/storyMusic';
 import { GAME_HEIGHT, GAME_WIDTH, PLAYFIELD } from '../config';
 import { levelLabel, type LevelCatalog } from '../core/levelCatalog';
 import type { LevelData } from '../core/levelFormat';
@@ -261,6 +263,11 @@ export class MapScene extends Phaser.Scene {
       const def = awake ? astreDef(c.astre) : null;
       this.companion = new MapCompanion(this, def, start, this.nodes);
     }
+    // Thème du phare : une voix de plus par Astre réveillé (chapitre terminé).
+    const progress = this.save();
+    audio.music.start('phare', {
+      astres: awakeAstres((n) => chapterState(progress, n) === 'done'),
+    });
     if (unlock) this.playChapterLightUp(c, unlock);
     else if (current?.level) this.openCard(current.level);
     else if (!own.some((n) => n.level)) {
