@@ -114,15 +114,17 @@ describe('ScoreBreakdown', () => {
     b.add('common', 10);
     b.add('power', 10);
     b.add('bonus', 500);
-    expect(b.finish(2120, 1000)).toEqual({
+    b.addChain(200);
+    expect(b.finish(2320, 1000)).toEqual({
       hearts: 100,
       others: 20,
       bonus: 500,
       orbs: 1000,
       finalZone: 500,
-      total: 2120,
+      chain: 200,
+      total: 2320,
     });
     b.reset();
-    expect(b.finish(0, 0).total).toBe(0);
+    expect(b.finish(0, 0)).toMatchObject({ total: 0, chain: 0 });
   });
 });

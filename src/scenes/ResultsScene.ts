@@ -194,6 +194,7 @@ export class ResultsScene extends Phaser.Scene {
         value: b.bonus,
       });
       lines.push({ draw: drawOrbIcon, value: b.orbs });
+      if (b.chain > 0) lines.push({ draw: drawChainIcon, value: b.chain });
       if (b.finalZone > 0) lines.push({ draw: drawZoneIcon, value: b.finalZone });
     }
     const lineTop = -124;
@@ -384,6 +385,17 @@ export class ResultsScene extends Phaser.Scene {
 function drawOrbIcon(g: Phaser.GameObjects.Graphics): void {
   g.fillStyle(PALETTE.orbHalo, 0.35).fillCircle(0, 0, 13);
   g.fillStyle(PALETTE.orb, 1).fillCircle(0, 0, 8);
+}
+
+/** Bonus de chaîne : trois maillons d'orbe reliés. */
+function drawChainIcon(g: Phaser.GameObjects.Graphics): void {
+  g.lineStyle(2, PALETTE.orbHalo, 0.8).lineBetween(-10, 4, 10, -4);
+  for (const [x, y] of [
+    [-10, 4],
+    [0, 0],
+    [10, -4],
+  ] as const)
+    g.fillStyle(PALETTE.orb, 1).fillCircle(x, y, 4);
 }
 
 /** Zone de bonus du tir final : petite coupe lavande. */

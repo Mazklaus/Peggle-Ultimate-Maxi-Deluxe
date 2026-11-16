@@ -15,6 +15,7 @@ import {
   startShot,
   type Crystal,
   type LevelState,
+  chainBonus,
 } from '../core/level';
 import type { LevelData } from '../core/levelFormat';
 import { levelFromData } from '../core/levelSetup';
@@ -681,7 +682,7 @@ export class GameScene extends Phaser.Scene {
       endNow: (won) => {
         if (this.ending || this.orb) return;
         if (won) {
-          this.level.score += this.level.orbs * this.level.tuning.points.bonus;
+          this.level.score += this.level.orbs * this.level.tuning.orbBonus;
           gameEvents.emit('victoire', { score: this.level.score });
         } else gameEvents.emit('echec', { score: this.level.score });
         this.endLevel(won);
@@ -813,6 +814,12 @@ export class GameScene extends Phaser.Scene {
   /** finalX : abscisse retenue pour la zone finale (par défaut, celle de l'orbe). */
   private finishShot(caught: boolean, finalX = this.orb?.x): void {
     if (this.finalShot && finalX !== undefined) this.scoreFinalZone(finalX);
+    // Bonus de chaîne (GD) : +10 % du score du tir par rebond au-delà de 10, au plus +100 %.
+    const chain = chainBonus(this.level.shotScore, this.tracker.shotBounces, this.level.tuning);
+    if (chain > 0) {
+      this.level.score += chain;
+      this.breakdown.addChain(chain);
+    }
     this.orb?.destroy();
     this.orb = undefined;
     this.hud.endShot();
@@ -847,7 +854,7 @@ export class GameScene extends Phaser.Scene {
   private endLevel(won: boolean): void {
     this.ending = true;
     const score = this.level.score;
-    const orbBonus = won ? this.level.orbs * this.level.tuning.points.bonus : 0;
+    const orbBonus = won ? this.level.orbs * this.level.tuning.orbBonus : 0;
     const payload: ResultsData = {
       level: this.sceneData.level,
       score,
