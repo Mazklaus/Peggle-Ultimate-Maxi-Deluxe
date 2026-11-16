@@ -6,6 +6,7 @@ Scripts Python 3 (PIL pour `render.py`), utilisés pour concevoir et équilibrer
 python3 levels.py out          # génère pro-01..04 et ch1-01..12 (format v1) dans out/
 python3 render.py out sheet.png # planche de tous les niveaux
 python3 sim.py out/*-*.json     # simulation de tirs : taux de victoire et scores (p50, p80)
+python3 dead.py out/*-*.json    # angles morts : tirs de 8° à 172° qui ne touchent aucun cristal (viser <= 5 %)
 ```
 
 `sim.py` est une approximation (pas Matter) : un joueur « correct » qui teste des angles et
