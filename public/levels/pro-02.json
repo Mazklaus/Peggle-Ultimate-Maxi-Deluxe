@@ -8,6 +8,7 @@
   "title": "Le panier des étoiles",
   "rhythm": "tutoriel",
   "orbs": 13,
+  "guideBounces": 2,
   "stars": [
     8400,
     14400
