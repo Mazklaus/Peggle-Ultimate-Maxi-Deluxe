@@ -302,6 +302,7 @@ export class GameScene extends Phaser.Scene {
       (id) => (this.views.get(id) as { body?: MatterJS.BodyType } | undefined)?.body,
       decorGfx,
     );
+    this.decor.setRegen(this.level);
 
     this.cannon = this.add.rectangle(CANNON.x, CANNON.y, 36, 14, PALETTE.cannon).setOrigin(0, 0.5);
     this.add.circle(CANNON.x, CANNON.y, 16, PALETTE.cannon);
@@ -937,14 +938,12 @@ export class GameScene extends Phaser.Scene {
     };
     const contactStep = robustContactStep(input);
     if (contactStep === null) return null;
+    const path = predictPath(input).points;
     // La prédiction suppose le décor immobile : un peg mobile près du trajet la rend douteuse.
-    if (
-      this.decor.active &&
-      this.decor.mayCross(predictPath(input).points, contactStep / 60, heart.id, ORB_RADIUS)
-    )
+    if (this.decor.active && this.decor.mayCross(path, contactStep / 60, heart.id, ORB_RADIUS))
       return null;
     // Un portail sur le trajet : la prédiction s'abstient (le vrai contact relance le ralenti).
-    if (this.decor.touchesPortal(predictPath(input).points)) return null;
+    if (this.decor.touchesPortal(path)) return null;
     return contactStep / 60;
   }
 
@@ -1356,6 +1355,13 @@ export class GameScene extends Phaser.Scene {
     this.applyGameScale(1);
     const result = endShot(this.level, catches);
     this.removeViews(result.removedIds);
+    // Régénération : les cristaux revenus réapparaissent avec un pop.
+    for (const c of result.restored) {
+      const view = this.makeCrystal(c);
+      this.views.set(c.id, view);
+      view.setScale(0.2);
+      this.tweens.add({ targets: view, scale: 1, duration: 320, ease: 'Back.Out' });
+    }
     if (result.removedIds.length > 0) {
       gameEvents.emit('cristaux_brises', { count: result.removedIds.length });
     }

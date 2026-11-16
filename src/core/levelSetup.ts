@@ -19,8 +19,13 @@ export function levelFromData(
   };
   const state = createLevel([], rng, tuning);
 
+  // Régénération : ses pegs restent communs (GD : jamais un cœur, jamais un pouvoir).
+  for (const d of data.decor ?? []) if (d.type === 'regen') state.regen.groups[d.id] = d.shots;
+  const regen = (g?: string) => g !== undefined && state.regen.groups[g] !== undefined;
   // Tirage : mélange des pegs libres, puis cœurs, pouvoirs, bonus, le reste en communs.
-  const free = data.pegs.map((p, i) => (p.kind === undefined ? i : -1)).filter((i) => i >= 0);
+  const free = data.pegs
+    .map((p, i) => (p.kind === undefined && !regen(p.group) ? i : -1))
+    .filter((i) => i >= 0);
   for (let i = free.length - 1; i > 0; i--) {
     const j = Math.floor(rng() * (i + 1));
     [free[i], free[j]] = [free[j] as number, free[i] as number];

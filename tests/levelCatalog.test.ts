@@ -55,6 +55,23 @@ describe('levelFromData', () => {
   });
 });
 
+describe('levelFromData : régénération', () => {
+  const level = (parseLevel({ ...base, id: 't-02' }).level as LevelData)!;
+  const withRegen: LevelData = {
+    ...level,
+    decor: [{ id: 'r1', type: 'regen', shots: 2 }],
+    pegs: level.pegs.map((p, i) => (i < 4 ? { ...p, group: 'r1' } : p)),
+  };
+
+  it('les pegs d un groupe de régénération restent communs (jamais cœur ni pouvoir)', () => {
+    for (let seed = 1; seed < 20; seed++) {
+      const s = levelFromData(withRegen, seeded(seed));
+      for (let i = 0; i < 4; i++) expect(s.crystals[i]?.kind).toBe('common');
+      expect(s.regen.groups).toEqual({ r1: 2 });
+    }
+  });
+});
+
 describe('catalogue', () => {
   it('valide, ordonne et signale les erreurs', () => {
     const { index } = parseIndex({ format: 1, levels: ['a-01', 'b-01', 'c-01', 'a-01'] });

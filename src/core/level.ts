@@ -34,6 +34,13 @@ export interface LevelState {
   shotScore: number;
   shotHits: number;
   freeOrbThisShot: boolean;
+  /** Régénération (décor v2) : tirs avant retour par groupe, cristaux brisés en attente. */
+  regen: RegenState;
+}
+
+export interface RegenState {
+  groups: Record<string, number>;
+  pending: Array<{ crystal: Crystal; left: number; total: number }>;
 }
 
 export interface ShotResult {
@@ -41,6 +48,37 @@ export interface ShotResult {
   caught: boolean;
   orbsGained: number;
   phase: Phase;
+  /** Cristaux régénérés revenus à la fin de ce tir (vues à recréer). */
+  restored: Crystal[];
+}
+
+/** Le cristal appartient-il à un groupe de régénération ? */
+export function isRegen(s: LevelState, c: Crystal): boolean {
+  return c.group !== undefined && s.regen.groups[c.group] !== undefined;
+}
+
+/**
+ * Cristaux brisés : ceux d'un groupe de régénération partent en attente, comme cristaux
+ * communs éteints (GD : jamais un cœur, jamais un pouvoir), pour `shots` tirs.
+ */
+function queueRegen(s: LevelState, removed: Crystal[]): void {
+  for (const c of removed) {
+    if (!isRegen(s, c)) continue;
+    const total = s.regen.groups[c.group as string] as number;
+    s.regen.pending.push({ crystal: { ...c, kind: 'common', lit: false }, left: total, total });
+  }
+}
+
+/** Fin de tir : un tir de moins pour chaque cristal en attente ; ceux à 0 reviennent. */
+function tickRegen(s: LevelState): Crystal[] {
+  const back: Crystal[] = [];
+  for (const p of s.regen.pending) {
+    p.left -= 1;
+    if (p.left <= 0) back.push(p.crystal);
+  }
+  s.regen.pending = s.regen.pending.filter((p) => p.left > 0);
+  s.crystals.push(...back);
+  return back;
 }
 
 /** Mélange de Fisher-Yates (rng injecté pour des tests déterministes). */
@@ -91,6 +129,7 @@ export function createLevel(
     shotScore: 0,
     shotHits: 0,
     freeOrbThisShot: false,
+    regen: { groups: {}, pending: [] },
   };
 }
 
@@ -160,15 +199,17 @@ export function isFinalHeartLit(s: LevelState): boolean {
  */
 export function breakLitNow(s: LevelState, ids: number[]): number[] {
   const set = new Set(ids);
-  const removed = s.crystals.filter((c) => c.lit && set.has(c.id)).map((c) => c.id);
+  const gone = s.crystals.filter((c) => c.lit && set.has(c.id));
+  const removed = gone.map((c) => c.id);
   s.crystals = s.crystals.filter((c) => !removed.includes(c.id));
+  queueRegen(s, gone);
   return removed;
 }
 
 /** Déplace le cristal bonus sur un cristal commun au hasard (à chaque tir). */
 function moveBonus(s: LevelState, rng: Rng): void {
   for (const c of s.crystals) if (c.kind === 'bonus') c.kind = 'common';
-  const commons = s.crystals.filter((c) => c.kind === 'common');
+  const commons = s.crystals.filter((c) => c.kind === 'common' && !isRegen(s, c));
   for (let i = 0; i < s.tuning.bonusCrystals && commons.length > 0; i++) {
     const pick = commons.splice(Math.floor(rng() * commons.length), 1)[0];
     if (pick) pick.kind = 'bonus';
@@ -185,10 +226,14 @@ export function endShot(
   rng: Rng = Math.random,
 ): ShotResult {
   if (s.phase !== 'shooting') {
-    return { removedIds: [], caught: false, orbsGained: 0, phase: s.phase };
+    return { removedIds: [], caught: false, orbsGained: 0, phase: s.phase, restored: [] };
   }
-  const removedIds = s.crystals.filter((c) => c.lit).map((c) => c.id);
+  // Les cristaux brisés aux tirs précédents avancent d'un tir AVANT ceux de ce tir.
+  const restored = tickRegen(s);
+  const gone = s.crystals.filter((c) => c.lit);
+  const removedIds = gone.map((c) => c.id);
   s.crystals = s.crystals.filter((c) => !c.lit);
+  queueRegen(s, gone);
   const orbsGained = Math.max(0, Math.floor(Number(caught)));
   s.orbs += orbsGained;
   if (heartsRemaining(s) === 0) {
@@ -200,5 +245,5 @@ export function endShot(
     s.phase = 'aiming';
     moveBonus(s, rng);
   }
-  return { removedIds, caught: orbsGained > 0, orbsGained, phase: s.phase };
+  return { removedIds, caught: orbsGained > 0, orbsGained, phase: s.phase, restored };
 }
