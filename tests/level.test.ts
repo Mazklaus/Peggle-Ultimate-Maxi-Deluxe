@@ -162,3 +162,52 @@ describe('bonus de chaîne et réglages GD', () => {
     expect(TUNING.freeOrbShotScore).toBe(5000);
   });
 });
+
+describe('régénération (décor v2)', () => {
+  function regenLevel(): LevelState {
+    const s = newLevel();
+    s.regen.groups.r1 = 2;
+    const c = s.crystals.find((k) => k.kind === 'common')!;
+    c.group = 'r1';
+    return s;
+  }
+
+  it('un cristal du groupe brisé revient 2 tirs plus tard, commun et éteint', () => {
+    const s = regenLevel();
+    const c = s.crystals.find((k) => k.group === 'r1')!;
+    startShot(s);
+    hitCrystal(s, c.id);
+    endShot(s, false, seeded());
+    expect(s.crystals.some((k) => k.id === c.id)).toBe(false);
+    expect(s.regen.pending[0]?.left).toBe(2);
+    startShot(s);
+    const r1 = endShot(s, false, seeded());
+    expect(r1.restored).toHaveLength(0);
+    expect(s.regen.pending[0]?.left).toBe(1); // clignote
+    startShot(s);
+    const r2 = endShot(s, false, seeded());
+    expect(r2.restored.map((k) => k.id)).toEqual([c.id]);
+    const back = s.crystals.find((k) => k.id === c.id)!;
+    expect(back.lit).toBe(false);
+    expect(back.kind).toBe('common');
+  });
+
+  it('le bonus ne se pose jamais sur un régénérant', () => {
+    const s = regenLevel();
+    const c = s.crystals.find((k) => k.group === 'r1')!;
+    for (let i = 0; i < 30; i++) {
+      startShot(s);
+      endShot(s, true, seeded(i + 3));
+      expect(c.kind).toBe('common');
+    }
+  });
+
+  it('anti-blocage : un régénérant brisé sur place part aussi en attente', () => {
+    const s = regenLevel();
+    const c = s.crystals.find((k) => k.group === 'r1')!;
+    startShot(s);
+    hitCrystal(s, c.id);
+    breakLitNow(s, [c.id]);
+    expect(s.regen.pending).toHaveLength(1);
+  });
+});

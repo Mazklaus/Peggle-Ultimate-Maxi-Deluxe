@@ -23,9 +23,11 @@ import {
   type MovingDecor,
 } from '../core/decor';
 import type { DecorMagnet, DecorPortal } from '../core/levelFormat';
-import type { Crystal } from '../core/level';
+import { isRegen, type Crystal, type LevelState } from '../core/level';
 
 const TRACK = 0xb9a6ff;
+/** Graine des régénérants (lavande pleine). */
+const TRACK_SOLID = 0xb9a6ff;
 const WARM = 0xfff6e0;
 const SLATE = 0x3a4170;
 const SLATE_L = 0x5a63a0;
@@ -50,6 +52,9 @@ export class DecorLayer {
   private readonly flash = new Map<string, number>();
   /** Orbes en vol (monde) : l'aimant qui les tient pulse. */
   private orbs: ReadonlyArray<{ x: number; y: number }> = [];
+  /** Régénération : état du niveau (cristaux en attente), calque au-dessus des cristaux. */
+  private level?: LevelState;
+  private top?: Phaser.GameObjects.Graphics;
   private readonly body: MatterBodyApi;
   /** Temps du décor (s) : temps de la physique, donc ralenti et pause compris. */
   private t = 0;
@@ -147,6 +152,13 @@ export class DecorLayer {
     this.flash.set(`${id}:b`, 1);
   }
 
+  /** Branche la régénération : contours des cristaux brisés et graines des vivants. */
+  setRegen(level: LevelState): void {
+    if (Object.keys(level.regen.groups).length === 0) return;
+    this.level = level;
+    this.top ??= this.scene.add.graphics().setDepth(1);
+  }
+
   setOrbs(orbs: ReadonlyArray<{ x: number; y: number }>): void {
     this.orbs = orbs;
   }
@@ -201,6 +213,7 @@ export class DecorLayer {
       else this.drawOrbit(g, d, c);
     }
     for (const m of this.magnets) this.drawMagnet(g, m);
+    this.drawRegen(g);
     this.portals.forEach((p, i) => {
       this.drawPortal(g, p, 'a', i + 1);
       this.drawPortal(g, p, 'b', i + 1);
@@ -248,6 +261,33 @@ export class DecorLayer {
         }),
         true,
       );
+    }
+  }
+
+  /**
+   * Régénérant (DA elements-decor.js) : un cristal vivant porte une graine lavande ; brisé,
+   * il laisse son contour en pointillé et un arc chaud qui se remplit comme une horloge,
+   * et clignote le tir d'avant son retour.
+   */
+  private drawRegen(g: Phaser.GameObjects.Graphics): void {
+    const level = this.level;
+    const top = this.top?.clear();
+    if (!level || !top) return;
+    const now = this.scene.time.now;
+    for (const c of level.crystals) {
+      if (!isRegen(level, c)) continue;
+      const w = toWorld(c);
+      top.fillStyle(TRACK_SOLID, 1).fillCircle(w.x, w.y, 2.6 + Math.sin(now / 300) * 0.6);
+    }
+    for (const p of level.regen.pending) {
+      const w = toWorld(p.crystal);
+      const r = p.crystal.shape?.type === 'circle' ? p.crystal.shape.r : 9;
+      const blink = p.left === 1 ? 0.55 + 0.45 * Math.sin(now / 110) : 1;
+      dashedEllipse(g, w.x, w.y, r, r, 1.6, 0.45 * blink, 2, 4, 0);
+      const done = (p.total - p.left) / p.total;
+      g.lineStyle(2, WARM, 0.9 * blink).beginPath();
+      g.arc(w.x, w.y, r + 5, -Math.PI / 2, -Math.PI / 2 + Math.max(0.05, done) * Math.PI * 2);
+      g.strokePath();
     }
   }
 
@@ -350,6 +390,7 @@ export class DecorLayer {
   destroy(): void {
     this.scene.matter.world.off(Phaser.Physics.Matter.Events.BEFORE_UPDATE, this.step, this);
     this.gfx.destroy();
+    this.top?.destroy();
   }
 }
 
