@@ -189,6 +189,7 @@ export class GameScene extends Phaser.Scene {
   private crazyLeft = 0;
   /** Seconde chance de Nuage-Lune déjà servie sur ce tir (une par tir, l'autre charge reste). */
   private secondChanceUsed = false;
+  private bucketEdgeTween?: Phaser.Tweens.Tween;
   /** Fin (horloge réelle) du ralenti d'Horloge ; 0 = inactif. */
   private warpUntil = 0;
   /** Cible du réceptacle pendant Horloge (pointeur ou flèches), dernière position du pointeur. */
@@ -1089,14 +1090,40 @@ export class GameScene extends Phaser.Scene {
     this.warpUntil = this.time.now + HORLOGE.realMs;
     this.warpTargetX = this.bucket.x;
     this.warpPointerX = this.input.activePointer.worldX;
-    this.bucket.setScale(HORLOGE.bucketScale, 1).setStrokeStyle(2, PALETTE.success, 0.95);
+    this.widenBucket(HORLOGE.bucketScale);
     if (this.slowmoUntil <= 0) this.applyGameScale(HORLOGE.scale);
+  }
+
+  /** Réceptacle élargi par un pouvoir : bord menthe pendant l'effet (specs UI/UX jalon 2 §3). */
+  private widenBucket(scale: number): void {
+    this.bucketEdgeTween?.stop();
+    this.bucket.setScale(scale, 1).setStrokeStyle(2, PALETTE.success, 0.95);
+  }
+
+  /** Fin de l'effet : taille normale, le bord menthe revient au lavande en 200 ms puis s'efface. */
+  private releaseBucket(): void {
+    if (this.bucket.scaleX === 1) return;
+    this.bucket.setScale(1);
+    const from = Phaser.Display.Color.ValueToColor(PALETTE.success);
+    const to = Phaser.Display.Color.ValueToColor(PALETTE.bucketEdge);
+    this.bucketEdgeTween?.stop();
+    this.bucketEdgeTween = this.tweens.addCounter({
+      from: 0,
+      to: 100,
+      duration: 200,
+      onUpdate: (tw) => {
+        const k = tw.getValue() ?? 0;
+        const c = Phaser.Display.Color.Interpolate.ColorWithColor(from, to, 100, k);
+        this.bucket.setStrokeStyle(2, Phaser.Display.Color.GetColor(c.r, c.g, c.b), 0.95);
+      },
+      onComplete: () => this.bucket.setStrokeStyle(),
+    });
   }
 
   private endTimeWarp(): void {
     if (this.warpUntil <= 0) return;
     this.warpUntil = 0;
-    this.bucket.setScale(1).setStrokeStyle();
+    this.releaseBucket();
     // Le ralenti du final, s'il joue, garde la main.
     if (this.slowmoUntil <= 0) this.applyGameScale(1);
   }
@@ -1144,7 +1171,7 @@ export class GameScene extends Phaser.Scene {
     }
     this.cameras.main.flash(120, 126, 224, 198);
     // Réceptacle 2 fois plus large pour le reste du tir.
-    this.bucket.setScale(NUAGE_LUNE_POWER.bucketScale, 1).setStrokeStyle(2, PALETTE.success, 0.95);
+    this.widenBucket(NUAGE_LUNE_POWER.bucketScale);
     this.refreshPower();
     return true;
   }
@@ -1361,7 +1388,7 @@ export class GameScene extends Phaser.Scene {
     this.powerGfx.clear();
     this.endTimeWarp();
     this.endBolt();
-    this.bucket.setScale(1).setStrokeStyle(); // réceptacle élargi de Nuage-Lune
+    this.releaseBucket(); // réceptacle élargi de Nuage-Lune
     this.secondChanceUsed = false;
     this.hud.setPowerActivity(0, false);
     this.decor.setOrbs([]);
