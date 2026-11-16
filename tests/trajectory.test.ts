@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { aimGuide, predictPath } from '../src/core/trajectory';
+import { aimGuide, closestPoint, predictPath, robustContactStep } from '../src/core/trajectory';
 
 const base = { x: 400, y: 40, gravity: 0.28, radius: 8, minX: 0, maxX: 800, maxY: 600 };
 
@@ -68,5 +68,49 @@ describe('predictPath : cible et murs', () => {
     };
     // Plus élastique : l'orbe repart plus loin du mur droit.
     expect(after(0.9)).toBeLessThan(after(0.5));
+  });
+});
+
+describe('briques, sous-pas et contact sûr', () => {
+  const input = { ...base, restitution: 0.75, maxBounces: 9, maxSteps: 120 };
+  const brick = { x: 400, y: 200, r: 6, seg: { ax: 320, ay: 200, bx: 480, by: 200 } };
+
+  it('closestPoint projette sur la brique', () => {
+    expect(closestPoint(brick, 350, 120)).toEqual({ x: 350, y: 200 });
+    expect(closestPoint(brick, 600, 200)).toEqual({ x: 480, y: 200 });
+  });
+
+  it('une brique renvoie l’orbe avec une seule normale (rebond franc vers le haut)', () => {
+    const r = predictPath({ ...input, x: 380, vx: 0, vy: 6, obstacles: [brick], maxBounces: 1 });
+    expect(r.bounces).toHaveLength(1);
+    const b = r.bounces[0]!;
+    expect(b.y).toBeCloseTo(200 - 6 - 8, 0);
+    expect(Math.abs(b.x - 380)).toBeLessThan(1);
+  });
+
+  it('les sous-pas empêchent de traverser une brique fine à grande vitesse', () => {
+    const thin = { x: 400, y: 300, r: 2, seg: { ax: 300, ay: 300, bx: 500, by: 300 } };
+    const fast = { ...input, vx: 0, vy: 19, obstacles: [thin], maxBounces: 1 };
+    const one = predictPath({ ...fast, substeps: 1, y: 270 });
+    const four = predictPath({ ...fast, substeps: 4, y: 270 });
+    expect(one.bounces).toHaveLength(0); // 19 px par pas > 2 × (2 + 8) : traversée
+    expect(four.bounces).toHaveLength(1);
+  });
+
+  it('robustContactStep refuse un contact qui dépend d’un rebond au pixel près', () => {
+    const target = { x: 400, y: 400, r: 10 };
+    const direct = { ...input, vx: 0, vy: 4, obstacles: [], target };
+    expect(robustContactStep(direct)).not.toBeNull();
+    // Rebond rasant sur un cristal qui envoie l'orbe juste sur la cible : trop fragile.
+    const fragile = {
+      ...input,
+      x: 400,
+      y: 40,
+      vx: 0,
+      vy: 4,
+      obstacles: [{ x: 413, y: 200, r: 10 }],
+      target: { x: 330, y: 330, r: 4 },
+    };
+    if (predictPath(fragile).contactStep !== null) expect(robustContactStep(fragile)).toBeNull();
   });
 });

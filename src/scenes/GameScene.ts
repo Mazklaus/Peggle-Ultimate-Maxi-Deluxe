@@ -34,7 +34,7 @@ import {
   type DetectedEvent,
   type HeartTarget,
 } from '../core/shotEvents';
-import { aimGuide, predictPath } from '../core/trajectory';
+import { aimGuide, predictPath, robustContactStep, type Circle } from '../core/trajectory';
 import { levelLabel } from '../core/levelCatalog';
 import { ScoreBreakdown } from '../core/scoreBreakdown';
 import { TUNING } from '../core/tuning';
@@ -68,6 +68,8 @@ const FAIL_DELAY_MS = 400;
 const SLOWMO = { scale: 0.25, maxRealMs: 1500 };
 /** Marge de prudence de la prédiction du final (px retirés au rayon du dernier cœur). */
 const FINAL_PREDICT_MARGIN_PX = 3;
+/** Vitesse minimale (px/s) pour anticiper le final ; en dessous, seul le contact compte. */
+const FINAL_MIN_SPEED = 200 * ORB_PHYSICS.slowdown;
 /** Loge de l'Astre : colonne gauche sous le compteur d'orbes (pieds de l'Astre). */
 /** Loge de l'Astre (specs UI/UX) : pieds de l'Astre en haut de la colonne gauche. */
 const COMPANION_ANCHOR = HUD_LAYOUT.anchor;
@@ -510,27 +512,15 @@ export class GameScene extends Phaser.Scene {
   }
 
   /** Obstacles des prédictions de trajectoire (rayons approchés des cristaux). */
-  private obstacles(exceptId?: number): { x: number; y: number; r: number }[] {
-    const out: { x: number; y: number; r: number }[] = [];
-    for (const c of this.level.crystals) {
-      if (c.id === exceptId) continue;
-      const w = toWorld(c);
-      const shape = c.shape;
-      if (shape?.type !== 'brick') {
-        out.push({ x: w.x, y: w.y, r: shape?.r ?? 10 });
-        continue;
-      }
-      // Brique : une rangée de cercles le long de sa longueur.
-      const long = Math.max(shape.w, shape.h);
-      const r = Math.min(shape.w, shape.h) / 2;
-      const a = Phaser.Math.DegToRad(shape.angle) + (shape.h > shape.w ? Math.PI / 2 : 0);
-      const n = Math.max(1, Math.ceil(long / (r * 1.5)));
-      for (let i = 0; i < n; i++) {
-        const d = n === 1 ? 0 : -long / 2 + r + ((long - 2 * r) * i) / (n - 1);
-        out.push({ x: w.x + Math.cos(a) * d, y: w.y + Math.sin(a) * d, r });
-      }
-    }
-    return out;
+  private obstacles(exceptId?: number): Circle[] {
+    return this.level.crystals.filter((c) => c.id !== exceptId).map((c) => obstacleOf(c));
+  }
+
+  /** Forme du dernier cœur pour la prédiction, un peu réduite par prudence. */
+  private finalTarget(heart: HeartTarget): Circle {
+    const crystal = this.level.crystals.find((c) => c.id === heart.id);
+    const shape = crystal ? obstacleOf(crystal) : { x: heart.x, y: heart.y, r: heart.r };
+    return { ...shape, r: Math.max(2, shape.r - FINAL_PREDICT_MARGIN_PX) };
   }
 
   /**
@@ -541,8 +531,11 @@ export class GameScene extends Phaser.Scene {
     o: { x: number; y: number; vx: number; vy: number },
     heart: HeartTarget,
   ): number | null {
+    // Orbe lente (roule ou tressaute sur un cristal) : Matter n'est plus prévisible ici,
+    // on laisse le vrai contact déclencher le ralenti.
+    if (Math.hypot(o.vx, o.vy) < FINAL_MIN_SPEED) return null;
     const steps = Math.ceil(EVENT_THRESHOLDS.finalSlowmoLeadSeconds * 60);
-    const { contactStep } = predictPath({
+    const contactStep = robustContactStep({
       x: o.x,
       y: o.y,
       vx: o.vx / 60,
@@ -557,9 +550,10 @@ export class GameScene extends Phaser.Scene {
       wallRestitution: ORB_PHYSICS.wallRestitution,
       maxBounces: 99,
       maxSteps: steps,
+      substeps: Math.round(ORB_PHYSICS.stepsPerSecond / 60),
       // Cible un peu réduite : on préfère rater un ralenti (le vrai contact le relance)
       // qu'en déclencher un faux.
-      target: { x: heart.x, y: heart.y, r: Math.max(2, heart.r - FINAL_PREDICT_MARGIN_PX) },
+      target: this.finalTarget(heart),
     });
     return contactStep === null ? null : contactStep / 60;
   }
@@ -1002,3 +996,19 @@ export class GameScene extends Phaser.Scene {
 }
 
 /** « ch1-04 » -> « 1-4 », « pro-02 » -> « P-2 » (numéro de niveau du bandeau). */
+
+/**
+ * Forme d'un cristal pour les prédictions de trajectoire : cercle de son rayon, ou capsule
+ * le long d'une brique (une seule normale, comme le rectangle de Matter).
+ */
+function obstacleOf(c: Crystal): Circle {
+  const w = toWorld(c);
+  const shape = c.shape;
+  if (shape?.type !== 'brick') return { x: w.x, y: w.y, r: shape?.r ?? 10 };
+  const half = Math.max(shape.w, shape.h) / 2;
+  const r = Math.min(shape.w, shape.h) / 2;
+  const a = Phaser.Math.DegToRad(shape.angle) + (shape.h > shape.w ? Math.PI / 2 : 0);
+  const ux = Math.cos(a) * (half - r);
+  const uy = Math.sin(a) * (half - r);
+  return { x: w.x, y: w.y, r, seg: { ax: w.x - ux, ay: w.y - uy, bx: w.x + ux, by: w.y + uy } };
+}
