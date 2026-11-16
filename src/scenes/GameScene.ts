@@ -1,49 +1,58 @@
 import Phaser from 'phaser';
-import { GAME_HEIGHT, GAME_WIDTH } from '../config';
-import { staggeredGrid } from '../core/layout';
+import { GAME_HEIGHT, GAME_WIDTH, PLAYFIELD, toWorld } from '../config';
+import { gameEvents } from '../core/events';
 import {
   breakLitNow,
   canShoot,
-  createLevel,
   endShot,
   heartsRemaining,
   hitCrystal,
   isFinalHeartLit,
   multiplier,
   startShot,
-  type CrystalKind,
+  type Crystal,
   type LevelState,
 } from '../core/level';
+import type { LevelData } from '../core/levelFormat';
+import { levelFromData } from '../core/levelSetup';
+import type { SaveData } from '../core/save';
 import { aimGuide } from '../core/trajectory';
 import { TUNING } from '../core/tuning';
+import { REGISTRY, SCENES } from './keys';
+import type { ResultsData } from './ResultsScene';
+import { CRYSTAL_COLORS, CRYSTAL_COLORS_CB, PALETTE, textStyle, TEXT } from './theme';
+import { button } from './widgets';
 
-/** Couleurs provisoires reprises de la direction visuelle (formes simples, aucun asset final). */
-const COLORS: Record<CrystalKind, number> = {
-  heart: 0xffb23f,
-  common: 0x6fcbff,
-  bonus: 0xff5fa2,
-};
-const LIT_COLOR = 0xfff6e0;
-const ORB_COLOR = 0xfff6e0;
-const BUCKET_COLOR = 0xb9a6ff;
-const CANNON_COLOR = 0x8c93c9;
+export interface GameSceneData {
+  level: LevelData;
+  /** Lancé depuis l'éditeur : pas de sauvegarde, pas de carte. */
+  test?: boolean;
+}
 
-const CRYSTAL_RADIUS = 10;
 const ORB_RADIUS = 8;
 /** Vitesse de lancement en px par pas Matter (~16,7 ms). */
 const LAUNCH_SPEED = 11;
 /** Gravité effective de Matter (gravity.y = 1, scale 0.001) en px par pas². */
 const GRAVITY_PER_STEP = 0.001 * (1000 / 60) ** 2;
-const CANNON = { x: GAME_WIDTH / 2, y: 40 };
+const CANNON = { x: PLAYFIELD.x + PLAYFIELD.w / 2, y: PLAYFIELD.y + 24 };
 const BUCKET = { width: 100, height: 18, y: GAME_HEIGHT - 14 };
 const MIN_AIM = Phaser.Math.DegToRad(8);
 const MAX_AIM = Phaser.Math.DegToRad(172);
+const WALL_THICKNESS = 40;
+/** Délai entre la fin du dernier tir et l'écran de résultats. */
+const RESULTS_DELAY_MS = 900;
 
 type CrystalView = Phaser.GameObjects.Arc | Phaser.GameObjects.Rectangle;
 
-/** Prototype de la boucle : viser, tirer, rebondir, allumer puis briser les cristaux. */
+/**
+ * Scène de jeu : un niveau JSON, la boucle viser / tirer / rebondir / briser.
+ * Elle émet les événements de jeu sur `gameEvents` (Astres, UI, son).
+ * HUD provisoire dans les marges ; le HUD final vient de l'UI/UX.
+ */
 export class GameScene extends Phaser.Scene {
+  private sceneData!: GameSceneData;
   private level!: LevelState;
+  private colors = CRYSTAL_COLORS;
   private views = new Map<number, CrystalView>();
   private orb?: Phaser.GameObjects.Arc;
   private aimAngle = Math.PI / 2;
@@ -51,63 +60,59 @@ export class GameScene extends Phaser.Scene {
   private cannon!: Phaser.GameObjects.Rectangle;
   private bucket!: Phaser.GameObjects.Rectangle;
   private bucketDir = 1;
-  private hud!: Phaser.GameObjects.Text;
-  private banner!: Phaser.GameObjects.Text;
+  private hud!: {
+    orbs: Phaser.GameObjects.Text;
+    hearts: Phaser.GameObjects.Text;
+    mult: Phaser.GameObjects.Text;
+    score: Phaser.GameObjects.Text;
+  };
   private stuckRef = { x: 0, y: 0, t: 0 };
+  private chain = 0;
+  private ending = false;
 
   constructor() {
-    super('Game');
+    super(SCENES.game);
+  }
+
+  init(data: GameSceneData): void {
+    this.sceneData = data;
   }
 
   create(): void {
     this.views.clear();
     this.orb = undefined;
+    this.ending = false;
     this.setTimeScale(1);
-    this.level = createLevel(staggeredGrid(9, 9, 80, 160, 80, 40));
+    const save = this.registry.get(REGISTRY.save) as SaveData | undefined;
+    this.colors = save?.options.colorblind ? CRYSTAL_COLORS_CB : CRYSTAL_COLORS;
+    this.level = levelFromData(this.sceneData.level);
 
-    // Murs gauche, droit et haut ; le bas est ouvert.
-    this.matter.world.setBounds(0, 0, GAME_WIDTH, GAME_HEIGHT, 64, true, true, true, false);
+    this.drawFrame();
+    this.makeWalls();
+    for (const c of this.level.crystals) this.views.set(c.id, this.makeCrystal(c));
 
-    for (const c of this.level.crystals)
-      this.views.set(c.id, this.makeCrystal(c.id, c.x, c.y, c.kind));
-
-    this.cannon = this.add.rectangle(CANNON.x, CANNON.y, 36, 14, CANNON_COLOR).setOrigin(0, 0.5);
-    this.add.circle(CANNON.x, CANNON.y, 16, CANNON_COLOR);
+    this.cannon = this.add.rectangle(CANNON.x, CANNON.y, 36, 14, PALETTE.cannon).setOrigin(0, 0.5);
+    this.add.circle(CANNON.x, CANNON.y, 16, PALETTE.cannon);
     this.bucket = this.add.rectangle(
       GAME_WIDTH / 2,
       BUCKET.y,
       BUCKET.width,
       BUCKET.height,
-      BUCKET_COLOR,
+      PALETTE.bucket,
     );
     this.guide = this.add.graphics();
-    this.hud = this.add.text(12, 10, '', {
-      fontFamily: 'sans-serif',
-      fontSize: '16px',
-      color: '#F4F1FF',
-    });
-    this.banner = this.add
-      .text(GAME_WIDTH / 2, GAME_HEIGHT / 2, '', {
-        fontFamily: 'sans-serif',
-        fontSize: '32px',
-        color: '#F4F1FF',
-        align: 'center',
-        backgroundColor: '#1B2350',
-        padding: { x: 24, y: 16 },
-      })
-      .setOrigin(0.5)
-      .setDepth(10)
-      .setVisible(false);
+    this.makeHud();
 
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => this.aimAt(p));
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
-      if (this.level.phase === 'won' || this.level.phase === 'lost') {
-        this.scene.restart();
-        return;
-      }
+      if (p.y < PLAYFIELD.y) return; // bandeau haut (bouton pause)
       this.aimAt(p);
       this.shoot();
     });
+    const kb = this.input.keyboard;
+    kb?.on('keydown-SPACE', () => this.shoot());
+    kb?.on('keydown-ESC', () => this.openPause());
+    kb?.on('keydown-P', () => this.openPause());
 
     this.matter.world.on(
       'collisionstart',
@@ -119,7 +124,9 @@ export class GameScene extends Phaser.Scene {
               : pair.bodyB.label === 'orb'
                 ? pair.bodyA
                 : null;
-          if (other?.label.startsWith('crystal:')) this.onCrystalHit(Number(other.label.slice(8)));
+          if (!other) continue;
+          if (other.label.startsWith('crystal:')) this.onCrystalHit(Number(other.label.slice(8)));
+          else if (other.label === 'wall') gameEvents.emit('mur_touche', {});
         }
       },
     );
@@ -130,6 +137,7 @@ export class GameScene extends Phaser.Scene {
   update(time: number, delta: number): void {
     this.moveBucket(delta);
     this.cannon.setRotation(this.aimAngle);
+    this.handleKeyboardAim(delta);
     this.drawGuide();
 
     const orb = this.orb;
@@ -145,29 +153,95 @@ export class GameScene extends Phaser.Scene {
     this.checkStuck(time);
   }
 
-  private makeCrystal(id: number, x: number, y: number, kind: CrystalKind): CrystalView {
-    // Doublage forme / couleur : les cœurs sont des carrés, les autres des ronds.
-    const view: CrystalView =
-      kind === 'heart'
-        ? this.add.rectangle(x, y, CRYSTAL_RADIUS * 1.8, CRYSTAL_RADIUS * 1.8, COLORS.heart)
-        : this.add.circle(x, y, CRYSTAL_RADIUS, COLORS[kind]);
+  // --- Construction -------------------------------------------------------
+
+  private drawFrame(): void {
+    const g = this.add.graphics();
+    g.fillStyle(PALETTE.night, 0.35).fillRect(PLAYFIELD.x, PLAYFIELD.y, PLAYFIELD.w, PLAYFIELD.h);
+    g.lineStyle(2, PALETTE.border).strokeLineShape(
+      new Phaser.Geom.Line(PLAYFIELD.x, PLAYFIELD.y, PLAYFIELD.x, GAME_HEIGHT),
+    );
+    g.strokeLineShape(
+      new Phaser.Geom.Line(
+        PLAYFIELD.x + PLAYFIELD.w,
+        PLAYFIELD.y,
+        PLAYFIELD.x + PLAYFIELD.w,
+        GAME_HEIGHT,
+      ),
+    );
+  }
+
+  /** Murs gauche, droit et haut de la zone de jeu ; le bas reste ouvert. */
+  private makeWalls(): void {
+    const t = WALL_THICKNESS;
+    const { x, y, w, h } = PLAYFIELD;
+    const opts = { isStatic: true, label: 'wall', restitution: 0.6 };
+    this.matter.add.rectangle(x - t / 2, y + h / 2, t, h + t * 2, opts);
+    this.matter.add.rectangle(x + w + t / 2, y + h / 2, t, h + t * 2, opts);
+    this.matter.add.rectangle(x + w / 2, y - t / 2, w + t * 2, t, opts);
+  }
+
+  private makeCrystal(c: Crystal): CrystalView {
+    const { x, y } = toWorld(c);
+    const color = this.colors[c.kind];
+    const shape = c.shape ?? { type: 'circle', r: 10 };
+    const label = `crystal:${c.id}`;
+    if (shape.type === 'brick') {
+      const view = this.add.rectangle(x, y, shape.w, shape.h, color);
+      this.matter.add.gameObject(view, { isStatic: true, label });
+      view.setRotation(Phaser.Math.DegToRad(shape.angle));
+      return view;
+    }
+    // Doublage forme / couleur : cœurs carrés, pouvoirs en losange, les autres ronds.
+    const r = shape.r;
+    let view: CrystalView;
+    if (c.kind === 'heart') view = this.add.rectangle(x, y, r * 1.8, r * 1.8, color);
+    else if (c.kind === 'power')
+      view = this.add.rectangle(x, y, r * 1.6, r * 1.6, color).setAngle(45);
+    else view = this.add.circle(x, y, r, color);
     this.matter.add.gameObject(view, {
       isStatic: true,
-      label: `crystal:${id}`,
-      shape: { type: 'circle', radius: CRYSTAL_RADIUS },
+      label,
+      shape: { type: 'circle', radius: r },
     });
     return view;
   }
+
+  private makeHud(): void {
+    const s = textStyle(26);
+    const small = textStyle(16, TEXT.dim);
+    this.add.text(100, 120, 'Orbes', small).setOrigin(0.5);
+    this.add.text(GAME_WIDTH - 100, 120, 'Cœurs', small).setOrigin(0.5);
+    this.add.text(GAME_WIDTH - 100, 260, 'Multiplicateur', small).setOrigin(0.5);
+    this.hud = {
+      orbs: this.add.text(100, 160, '', s).setOrigin(0.5),
+      hearts: this.add.text(GAME_WIDTH - 100, 160, '', textStyle(26, '#FFB23F')).setOrigin(0.5),
+      mult: this.add.text(GAME_WIDTH - 100, 300, '', s).setOrigin(0.5),
+      score: this.add.text(PLAYFIELD.x, 32, '', s).setOrigin(0, 0.5),
+    };
+    button(this, GAME_WIDTH - 60, 32, 'II', () => this.openPause(), { width: 64, size: 20 });
+  }
+
+  // --- Tir ------------------------------------------------------------------
 
   private aimAt(p: Phaser.Input.Pointer): void {
     const angle = Math.atan2(p.worldY - CANNON.y, p.worldX - CANNON.x);
     this.aimAngle = Phaser.Math.Clamp(angle < -Math.PI / 2 ? Math.PI : angle, MIN_AIM, MAX_AIM);
   }
 
+  /** Clavier en bonus (principe UI) : flèches gauche / droite pour viser. */
+  private handleKeyboardAim(delta: number): void {
+    const cursors = this.input.keyboard?.createCursorKeys();
+    if (!cursors) return;
+    const step = (delta / 1000) * 1.2;
+    if (cursors.left.isDown) this.aimAngle = Math.min(MAX_AIM, this.aimAngle + step);
+    if (cursors.right.isDown) this.aimAngle = Math.max(MIN_AIM, this.aimAngle - step);
+  }
+
   private shoot(): void {
-    if (!canShoot(this.level) || !startShot(this.level)) return;
+    if (this.ending || !canShoot(this.level) || !startShot(this.level)) return;
     const start = this.muzzle();
-    const orb = this.add.circle(start.x, start.y, ORB_RADIUS, ORB_COLOR);
+    const orb = this.add.circle(start.x, start.y, ORB_RADIUS, PALETTE.orb);
     this.matter.add.gameObject(orb, {
       label: 'orb',
       shape: { type: 'circle', radius: ORB_RADIUS },
@@ -180,15 +254,30 @@ export class GameScene extends Phaser.Scene {
       Math.sin(this.aimAngle) * LAUNCH_SPEED,
     );
     this.orb = orb;
+    this.chain = 0;
     this.stuckRef = { x: start.x, y: start.y, t: this.time.now };
+    gameEvents.emit('tir_lance', { angle: this.aimAngle });
     this.refreshHud();
   }
 
   private onCrystalHit(id: number): void {
-    if (hitCrystal(this.level, id) === 0) return;
-    const view = this.views.get(id);
-    view?.setFillStyle(LIT_COLOR);
-    if (isFinalHeartLit(this.level)) this.setTimeScale(0.3); // ralenti sur le dernier cœur
+    const crystal = this.level.crystals.find((c) => c.id === id);
+    if (crystal?.kind === 'wall') {
+      gameEvents.emit('mur_touche', {});
+      return;
+    }
+    const points = hitCrystal(this.level, id);
+    if (points === 0 || !crystal) return;
+    this.chain += 1;
+    this.views.get(id)?.setFillStyle(PALETTE.lit);
+    gameEvents.emit('cristal_allume', { kind: crystal.kind, chain: this.chain, points });
+    if (crystal.kind === 'power') {
+      gameEvents.emit('pouvoir_active', { astre: this.sceneData.level.companion ?? 'aucun' });
+    }
+    if (isFinalHeartLit(this.level)) {
+      this.setTimeScale(0.3); // ralenti sur le dernier cœur
+      gameEvents.emit('final_ralenti', {});
+    }
     this.refreshHud();
   }
 
@@ -198,18 +287,40 @@ export class GameScene extends Phaser.Scene {
     this.setTimeScale(1);
     const result = endShot(this.level, caught);
     this.removeViews(result.removedIds);
+    if (result.removedIds.length > 0) {
+      gameEvents.emit('cristaux_brises', { count: result.removedIds.length });
+    }
+    if (caught) {
+      gameEvents.emit('orbe_recupere', {});
+      this.cameras.main.flash(120, 185, 166, 255);
+    }
     // Le cristal bonus a pu changer de place.
     for (const c of this.level.crystals) {
-      this.views.get(c.id)?.setFillStyle(COLORS[c.kind]);
+      if (!c.lit) this.views.get(c.id)?.setFillStyle(this.colors[c.kind]);
     }
-    if (result.phase === 'won')
-      this.showBanner(`Victoire !\nScore : ${this.level.score}\nCliquer pour rejouer`);
-    if (result.phase === 'lost') this.showBanner('Plus d’orbes…\nEncore une fois ?');
-    if (caught) this.cameras.main.flash(120, 185, 166, 255);
     this.refreshHud();
+    if (result.phase === 'won') {
+      gameEvents.emit('victoire', { score: this.level.score });
+      this.endLevel(true);
+    } else if (result.phase === 'lost') {
+      gameEvents.emit('echec', { score: this.level.score });
+      this.endLevel(false);
+    }
   }
 
-  /** Anti-blocage : orbe presque immobile depuis 3 s → les cristaux allumés autour se brisent. */
+  private endLevel(won: boolean): void {
+    this.ending = true;
+    const payload: ResultsData = {
+      level: this.sceneData.level,
+      score: this.level.score,
+      won,
+      orbsLeft: this.level.orbs,
+      test: this.sceneData.test,
+    };
+    this.time.delayedCall(RESULTS_DELAY_MS, () => this.scene.start(SCENES.results, payload));
+  }
+
+  /** Anti-blocage : orbe presque immobile depuis 3 s -> les cristaux allumés autour se brisent. */
   private checkStuck(time: number): void {
     const orb = this.orb;
     if (!orb) return;
@@ -219,7 +330,11 @@ export class GameScene extends Phaser.Scene {
     }
     if (time - this.stuckRef.t < TUNING.antiStuckSeconds * 1000) return;
     const near = this.level.crystals
-      .filter((c) => Math.hypot(c.x - orb.x, c.y - orb.y) < CRYSTAL_RADIUS + ORB_RADIUS + 12)
+      .filter((c) => {
+        const w = toWorld(c);
+        const reach = c.shape?.type === 'brick' ? Math.max(c.shape.w, c.shape.h) / 2 : 10;
+        return Math.hypot(w.x - orb.x, w.y - orb.y) < reach + ORB_RADIUS + 12;
+      })
       .map((c) => c.id);
     this.removeViews(breakLitNow(this.level, near));
     this.stuckRef.t = time;
@@ -232,18 +347,28 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  // --- Divers ---------------------------------------------------------------
+
+  private openPause(): void {
+    if (this.ending || this.scene.isPaused()) return;
+    this.scene.pause();
+    this.scene.launch(SCENES.pause, { test: this.sceneData.test });
+  }
+
   private moveBucket(delta: number): void {
-    const speed = GAME_WIDTH / TUNING.bucketCrossSeconds; // px par seconde
+    const speed = PLAYFIELD.w / TUNING.bucketCrossSeconds; // px par seconde
     const half = BUCKET.width / 2;
+    const min = PLAYFIELD.x + half;
+    const max = PLAYFIELD.x + PLAYFIELD.w - half;
     this.bucket.x += this.bucketDir * speed * (delta / 1000);
-    if (this.bucket.x > GAME_WIDTH - half) this.bucketDir = -1;
-    if (this.bucket.x < half) this.bucketDir = 1;
-    this.bucket.x = Phaser.Math.Clamp(this.bucket.x, half, GAME_WIDTH - half);
+    if (this.bucket.x > max) this.bucketDir = -1;
+    if (this.bucket.x < min) this.bucketDir = 1;
+    this.bucket.x = Phaser.Math.Clamp(this.bucket.x, min, max);
   }
 
   private drawGuide(): void {
     this.guide.clear();
-    if (!canShoot(this.level)) return;
+    if (this.ending || !canShoot(this.level)) return;
     const start = this.muzzle();
     const points = aimGuide({
       x: start.x,
@@ -252,12 +377,16 @@ export class GameScene extends Phaser.Scene {
       vy: Math.sin(this.aimAngle) * LAUNCH_SPEED,
       gravity: GRAVITY_PER_STEP,
       radius: ORB_RADIUS,
-      minX: 0,
-      maxX: GAME_WIDTH,
+      minX: PLAYFIELD.x,
+      maxX: PLAYFIELD.x + PLAYFIELD.w,
       maxY: GAME_HEIGHT,
-      obstacles: this.level.crystals.map((c) => ({ x: c.x, y: c.y, r: CRYSTAL_RADIUS })),
+      obstacles: this.level.crystals.map((c) => {
+        const w = toWorld(c);
+        const r = c.shape?.type === 'brick' ? Math.min(c.shape.w, c.shape.h) / 2 : 10;
+        return { x: w.x, y: w.y, r };
+      }),
     });
-    this.guide.fillStyle(LIT_COLOR, 0.6);
+    this.guide.fillStyle(PALETTE.lit, 0.6);
     points.forEach((pt, i) => {
       if (i % 3 === 0) this.guide.fillCircle(pt.x, pt.y, 3);
     });
@@ -274,15 +403,11 @@ export class GameScene extends Phaser.Scene {
     this.matter.world.engine.timing.timeScale = scale;
   }
 
-  private showBanner(text: string): void {
-    this.banner.setText(text).setVisible(true);
-  }
-
   private refreshHud(): void {
     const s = this.level;
-    this.hud.setText(
-      `Orbes : ${s.orbs}   Cœurs restants : ${heartsRemaining(s)}/${s.heartsTotal}   ` +
-        `Score : ${s.score}   ×${multiplier(s)}`,
-    );
+    this.hud.orbs.setText(String(s.orbs)).setColor(s.orbs <= 1 ? '#FF7A6B' : TEXT.main);
+    this.hud.hearts.setText(`${heartsRemaining(s)}/${s.heartsTotal}`);
+    this.hud.mult.setText(`×${multiplier(s)}`);
+    this.hud.score.setText(`Score  ${s.score}`);
   }
 }

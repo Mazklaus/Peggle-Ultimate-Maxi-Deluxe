@@ -27,11 +27,29 @@ npm run build      # build web statique dans dist/
 
 ```
 src/
-  core/      logique pure, sans Phaser (règles, score) : testée par Vitest
-  scenes/    scènes Phaser (affichage, input, physique)
-  config.ts  constantes globales
-tests/       tests Vitest
+  core/        logique pure, sans Phaser (testée par Vitest)
+    events.ts       bus d'événements de jeu (gameEvents) : Astres, UI, son
+    level.ts        règles d'un niveau (tir, cristaux, score, victoire/échec)
+    levelFormat.ts  format JSON des niveaux v1 + validateur (docs/level-format.md)
+    levelSetup.ts   niveau JSON -> état de jeu (tirage des cœurs, pouvoirs, bonus)
+    levelCatalog.ts index.json + niveaux, ordre de l'aventure
+    save.ts         sauvegarde locale (progression, étoiles, options, journal des scores)
+  scenes/      scènes Phaser (affichage, input, physique)
+    Boot -> Title -> Map -> Game (+ Pause) -> Results
+  config.ts    1280x720, zone de jeu 880x656 en (200, 64)
+public/levels/ niveaux JSON (index.json + un fichier par niveau)
+tests/         tests Vitest
 ```
+
+## URL utiles
+
+```
+./                  écran titre
+./?level=ch1-03     lance directement un niveau (QA, debug)
+./?test             joue le niveau envoyé par l'éditeur (localStorage « ricochet:test-level »)
+```
+
+Sauvegarde : `localStorage["ricochet:save"]` (le champ `scoreLog` garde les 500 dernières fins de niveau).
 
 Voir [CONTRIBUTING.md](CONTRIBUTING.md) pour les conventions.
 
