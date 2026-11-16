@@ -14,6 +14,8 @@ export const SCENES = {
   daily: 'Daily',
   /** Liste des défis et panneau du défi (jalon 3). */
   challenges: 'Challenges',
+  /** Avant le duel : niveau et Astres des deux joueurs (jalon 3). */
+  duelSetup: 'DuelSetup',
   /** Calque de l'Astre au-dessus des overlays de fin. */
   companionLayer: 'CompanionLayer',
   /** Sélecteur de compagnon, par-dessus la carte (jalon 2). */

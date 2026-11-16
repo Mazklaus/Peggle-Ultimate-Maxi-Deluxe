@@ -14,6 +14,10 @@ import {
 } from '../core/save';
 import type { Breakdown } from '../core/scoreBreakdown';
 import { starsFor } from '../core/stars';
+import { companionById } from '../companions';
+import { DUEL_RULES } from '../core/duel';
+import { CompanionView } from './CompanionView';
+import type { DuelSetupData } from './DuelSetupScene';
 import type { GameScene } from './GameScene';
 import { REGISTRY, SCENES } from './keys';
 import { endSequenceFor } from '../core/story';
@@ -123,6 +127,7 @@ export class ResultsScene extends Phaser.Scene {
       newRecord = data.won && !!before?.completed && data.score > before.bestScore;
     }
 
+    if (data.duel) return this.showDuel(data, data.duel);
     if (data.won) this.showVictory(data, stars, newRecord, streak);
     else this.showDefeat(data);
 
@@ -162,6 +167,111 @@ export class ResultsScene extends Phaser.Scene {
   private toMap(): void {
     this.scene.stop(SCENES.game);
     this.scene.start(SCENES.map);
+  }
+
+  // --- Fin du duel (specs UI/UX jalon 3, 4.3) ---------------------------------
+
+  /**
+   * Les deux scores côte à côte ; le gagnant grossit (×1,2) avec une couronne, son Astre
+   * danse et l'autre applaudit ; égalité : les deux dansent. Égalité hors manche décisive :
+   * on propose la manche décisive (un tir chacun). Boutons : REVANCHE, autre niveau, menu.
+   */
+  private showDuel(data: ResultsData, duel: NonNullable<ResultsData['duel']>): void {
+    const cx = GAME_WIDTH / 2;
+    const cy = GAME_HEIGHT / 2;
+    const root = this.add.container(0, 0).setAlpha(0);
+    root.add(veil(this, 0.6));
+    root.add(panel(this, cx, cy, 680, 460, 24));
+    const tie = duel.winner === null;
+    root.add(
+      this.add
+        .text(cx, cy - 190, tie ? 'Égalité !' : `J${duel.winner! + 1} gagne !`, textStyle(30))
+        .setOrigin(0.5),
+    );
+    const views: CompanionView[] = [];
+    ([0, 1] as const).forEach((p) => {
+      const x = cx + (p === 0 ? -160 : 160);
+      const won = duel.winner === p;
+      const col = this.add.container(x, cy - 40).setScale(won ? 1.2 : 1);
+      const color = DUEL_RULES.colors[p];
+      const g = this.add.graphics();
+      g.fillStyle(color, 1);
+      if (p === 0) g.fillCircle(-26, 50, 11);
+      else g.fillRoundedRect(-37, 39, 22, 22, 6);
+      col.add(g);
+      col.add(
+        this.add
+          .text(-8, 50, `J${p + 1}`, textStyle(22, p === 0 ? '#B9A6FF' : '#FF9E8F'))
+          .setOrigin(0, 0.5),
+      );
+      col.add(
+        this.add.text(0, 92, duel.scores[p].toLocaleString('fr-FR'), textStyle(40)).setOrigin(0.5),
+      );
+      if (won) {
+        // Couronne lavande au-dessus de l'Astre du gagnant.
+        const crown = this.add.graphics();
+        crown.fillStyle(PALETTE.accent, 1);
+        crown.fillPoints(
+          [
+            new Phaser.Math.Vector2(-24, -86),
+            new Phaser.Math.Vector2(-24, -110),
+            new Phaser.Math.Vector2(-12, -96),
+            new Phaser.Math.Vector2(0, -116),
+            new Phaser.Math.Vector2(12, -96),
+            new Phaser.Math.Vector2(24, -110),
+            new Phaser.Math.Vector2(24, -86),
+          ],
+          true,
+        );
+        col.add(crown);
+      }
+      root.add(col);
+      const def = companionById(duel.astres[p])?.def;
+      if (def) {
+        const view = new CompanionView(this, def, { x: 0, y: 0 });
+        view.setDisplay(x, cy - 70, won ? 0.62 : 0.52);
+        view.setDepth(10);
+        views.push(view);
+        // Gagnant (ou égalité) : il danse ; l'autre applaudit.
+        const cheer = () => view.brain.onEvent(won || tie ? 'victoire' : 'gros_coup');
+        cheer();
+        this.time.addEvent({ delay: 2600, loop: true, callback: cheer });
+      }
+    });
+    this.events.on(Phaser.Scenes.Events.UPDATE, (_t: number, dt: number) => {
+      for (const v of views) v.update(dt / 1000, {});
+    });
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      for (const v of views) v.destroy();
+    });
+
+    const mode = data.mode ?? { kind: 'duel' as const };
+    const decider = tie && !duel.tiebreak;
+    const replay = (tiebreak: boolean) =>
+      this.scene.start(SCENES.game, { level: data.level, mode: { ...mode, tiebreak } });
+    const main = decider
+      ? primaryButton(this, cx, cy + 170, 'Manche décisive', () => replay(true), {
+          icon: 'play',
+          width: 300,
+        })
+      : primaryButton(this, cx, cy + 170, 'Revanche', () => replay(false), {
+          icon: 'replay',
+          width: 260,
+        });
+    const other = iconButton(this, cx - 230, cy + 170, 'map', () => {
+      this.scene.stop(SCENES.game);
+      this.scene.start(SCENES.duelSetup, {
+        levelId: data.level.id,
+        astres: duel.astres,
+      } satisfies DuelSetupData);
+    });
+    const menu = iconButton(this, cx + 230, cy + 170, 'back', () => {
+      this.scene.stop(SCENES.game);
+      this.scene.start(SCENES.title);
+    });
+    root.add([main, other, menu]);
+    this.time.delayedCall(50, () => enableKeyboardFocus(this, [main, other, menu], 0));
+    this.tweens.add({ targets: root, alpha: 1, duration: 220 });
   }
 
   // --- Échec « Encore » -------------------------------------------------------
