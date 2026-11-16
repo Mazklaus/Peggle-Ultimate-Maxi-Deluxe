@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { PIP_POWER, RevealCharges } from '../src/core/powers';
+import {
+  MOUSSE_POWER,
+  PIP_POWER,
+  RevealCharges,
+  ShotCharges,
+  magnetPull,
+} from '../src/core/powers';
 import { predictPath } from '../src/core/trajectory';
 
 describe('RevealCharges (pouvoir de Pip)', () => {
@@ -95,5 +101,31 @@ describe('aide après 3 échecs', () => {
     expect(c.previewing).toBe(false);
     c.grant(9);
     expect(c.charges).toBe(PIP_POWER.maxCharges);
+  });
+});
+
+describe('Pouvoirs « tir suivant » génériques', () => {
+  it('Mousse : 1 charge par activation, plafond 2', () => {
+    const c = new ShotCharges(MOUSSE_POWER);
+    c.gain();
+    expect(c.armed).toBe(true);
+    c.gain();
+    c.gain();
+    expect(c.charges).toBe(2);
+  });
+
+  it('aimant : vise le cœur le plus proche dans la portée, plus fort de près', () => {
+    const hearts = [
+      { id: 1, x: 100, y: 0 },
+      { id: 2, x: 0, y: 50 },
+      { id: 3, x: 0, y: -500 },
+    ];
+    const p = magnetPull({ x: 0, y: 0 }, hearts, 176, 400);
+    expect(p?.targetId).toBe(2);
+    expect(p?.ax).toBeCloseTo(0, 6);
+    expect(p?.ay).toBeGreaterThan(0);
+    const far = magnetPull({ x: 0, y: 0 }, [{ id: 1, x: 150, y: 0 }], 176, 400);
+    expect(Math.abs(far?.ax ?? 0)).toBeLessThan(p?.ay ?? 0);
+    expect(magnetPull({ x: 0, y: 0 }, [{ id: 3, x: 0, y: -500 }], 176, 400)).toBeNull();
   });
 });
