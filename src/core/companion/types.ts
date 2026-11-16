@@ -133,6 +133,7 @@ export type ReactionTrigger =
   | 'inactivite'
   | 'tir_moyen'
   | 'proche_coeur'
+  | 'orbe_coincee'
   | 'reveil';
 
 export interface CompanionDef {

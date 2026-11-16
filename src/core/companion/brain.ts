@@ -32,6 +32,7 @@ export const PRIORITY: Record<ReactionTrigger | 'idle', number> = {
   gros_coup: 70,
   chaine_longue: 65,
   pouvoir_active: 60,
+  orbe_coincee: 58,
   dernier_coeur: 55,
   dernier_orbe: 50,
   orbe_recupere: 45,

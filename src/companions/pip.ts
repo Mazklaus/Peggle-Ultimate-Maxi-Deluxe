@@ -222,6 +222,23 @@ const presque: ReactionDef[] = [
   ]),
 ];
 
+/** Orbe coincée : Pip gonfle les joues et souffle dessus pour la décoincer (demande GD). */
+const orbe_coincee: ReactionDef[] = [
+  r('pip_souffle_orbe', 1.3, [
+    { t: 0, mouth: 'puffed', eyes: 'squint', body: { sx: 1.25, sy: 1.15 }, flush: 0.8 },
+    { t: 0.35, body: { sx: 1.35, sy: 1.2, y: -2 }, flush: 1 },
+    {
+      t: 0.5,
+      mouth: 'o',
+      body: { sx: 0.85, sy: 0.95, x: 8 },
+      burst: { kind: 'smoke', count: 8 },
+      flush: 0,
+    },
+    { t: 0.75, eyes: 'wide', mouth: 'grin', arms: 'wide', symbol: '!' },
+    { t: 1, body: { sx: 1, sy: 1, x: 0 }, arms: 'rest', symbol: null },
+  ]),
+];
+
 const pouvoir_active: ReactionDef[] = [
   r('pip_garde_a_vous', 1.2, [
     {
@@ -524,6 +541,7 @@ export const PIP: CompanionDef = {
     proche_coeur,
     presque,
     pouvoir_active,
+    orbe_coincee,
     final_ralenti,
     gros_coup,
     chaine_longue,
