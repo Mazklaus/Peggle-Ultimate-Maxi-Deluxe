@@ -100,6 +100,7 @@ describe('format de niveau v2 : décor', () => {
       errorsOf({ decor: [...sample.decor.slice(0, 2), d, sample.decor[4]], pegs: sample.pegs });
     expect(with1({ id: 'm', type: 'magnet', x: 1, y: 1, radius: 110 })).toContain('strength');
     expect(with1({ id: 'r2', type: 'rotate', cx: 1, cy: 1, periodS: 30 })).toContain('periodS');
+    expect(with1({ id: 'r4', type: 'rotate', cx: 1, cy: 1, periodS: 6 })).toContain('8 et 18');
     expect(with1({ id: 'r3', type: 'rotate', cx: 1, cy: 1, periodS: 8, dir: 2 })).toContain('dir');
     expect(with1({ id: 'p', type: 'portal', a: { x: 0, y: 0 }, b: { x: 400, y: 300 } })).toContain(
       'hors zone',

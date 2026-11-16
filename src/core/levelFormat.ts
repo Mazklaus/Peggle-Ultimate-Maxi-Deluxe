@@ -114,11 +114,13 @@ export interface DecorRegen {
   shots: number;
 }
 export type DecorItem = DecorRotate | DecorOrbit | DecorMagnet | DecorPortal | DecorRegen;
+/** Alias utilisé par la simulation (src/core/decor.ts). */
+export type DecorDef = DecorItem;
 
-/** Bornes (format-decor-v2 du Level Designer). */
+/** Bornes (format-decor-v2 du Level Designer ; periodS fixées par le Game Director). */
 export const DECOR_LIMITS = {
-  rotatePeriodS: [6, 12],
-  orbitPeriodS: [2, 12],
+  rotatePeriodS: [8, 18],
+  orbitPeriodS: [4, 8],
   orbitRadius: [40, 90],
   magnetRadius: [20, 300],
   magnetStrength: [0.1, 3],
