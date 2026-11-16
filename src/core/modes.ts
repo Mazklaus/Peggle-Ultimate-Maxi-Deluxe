@@ -12,4 +12,6 @@ export interface GameMode {
   players?: 2;
   /** Duel : Astre de chaque joueur (J1, J2). */
   astres?: [string, string];
+  /** Duel : manche décisive après une égalité (un tir chacun, le meilleur tir gagne). */
+  tiebreak?: boolean;
 }

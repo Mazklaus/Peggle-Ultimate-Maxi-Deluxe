@@ -121,7 +121,7 @@ describe('format de niveau v1', () => {
     });
     expect(Object.keys(files).length).toBeGreaterThan(1);
     for (const [name, text] of Object.entries(files)) {
-      if (name.endsWith('index.json')) continue;
+      if (/\/(index|challenges|duel)\.json$/.test(name)) continue;
       const level = parseLevel(text).level as LevelData;
       expect(serializeLevel(level), name).toBe(text);
     }

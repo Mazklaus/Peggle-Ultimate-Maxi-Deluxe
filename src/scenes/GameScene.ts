@@ -66,6 +66,15 @@ import {
   type ChallengeState,
 } from '../core/challenge';
 import type { GameMode } from '../core/modes';
+import {
+  applyDuelRules,
+  createDuel,
+  endTurn,
+  playerNumber,
+  type DuelState,
+  type PlayerIndex,
+} from '../core/duel';
+import { DuelHud } from './DuelHud';
 import { ChallengeLine, preloadChallengeIcons } from './ChallengeLine';
 import { DecorLayer } from './DecorLayer';
 import {
@@ -98,6 +107,8 @@ const ORB_RADIUS = 8;
 const LAUNCH_SPEED = ORB_PHYSICS.launchSpeed;
 const CANNON = { x: PLAYFIELD.x + PLAYFIELD.w / 2, y: PLAYFIELD.y + 24 };
 const BUCKET = { width: 100, height: 18, y: GAME_HEIGHT - 14 };
+/** Duel : délai entre la fin du tir et l'entrée de l'Astre suivant (réaction du tireur). */
+const DUEL_SWITCH_MS = 900;
 const MIN_AIM = Phaser.Math.DegToRad(8);
 const MAX_AIM = Phaser.Math.DegToRad(172);
 const WALL_THICKNESS = 40;
@@ -221,6 +232,12 @@ export class GameScene extends Phaser.Scene {
   private challenge?: ChallengeTracker;
   private challengeLine?: ChallengeLine;
   private breakableTotal = 0;
+  /** Duel local : état des joueurs, HUD des cartouches, charges « tir suivant » de chacun. */
+  private duel?: DuelState;
+  private duelHud?: DuelHud;
+  private duelCharges: Array<ShotCharges | undefined> = [];
+  /** Changement de tour en cours (l'Astre suivant entre dans la loge) : pas de tir. */
+  private turnSwitching = false;
   /** Seconde chance de Nuage-Lune déjà servie sur ce tir (une par tir, l'autre charge reste). */
   private secondChanceUsed = false;
   private bucketEdgeTween?: Phaser.Tweens.Tween;
@@ -343,6 +360,13 @@ export class GameScene extends Phaser.Scene {
     this.challengeLine = undefined;
     if (challenge) applyChallengeConstraints(this.level, challenge);
     this.breakableTotal = this.level.crystals.filter((c) => c.kind !== 'wall').length;
+    const mode = this.sceneData.mode;
+    this.duel =
+      mode?.kind === 'duel' ? createDuel(this.duelAstres(), mode.tiebreak === true) : undefined;
+    this.duelHud = undefined;
+    this.duelCharges = [];
+    this.turnSwitching = false;
+    if (this.duel) applyDuelRules(this.level, this.duel);
 
     this.backdrop = new ChapterBackdrop(this, this.sceneData.level.chapter);
     this.drawFrame();
@@ -373,6 +397,12 @@ export class GameScene extends Phaser.Scene {
     this.powerGfx = this.add.graphics().setDepth(5);
     this.makeHud();
     this.makeCompanion();
+    button(this, 1236, 32, 'II', () => this.openPause(), { width: 48, size: 18 });
+    if (this.duel) {
+      this.duelHud = new DuelHud(this, this.colors.heart, CANNON);
+      this.duelHud.setActive(0, true);
+      gameEvents.emit('duel_tour', { joueur: 1 });
+    }
 
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => this.aimAt(p));
     // Souris : clic = tir. Tactile : on vise en glissant, le tir part au relâcher (règle GD).
@@ -855,16 +885,18 @@ export class GameScene extends Phaser.Scene {
       power: astre.def && astre.id ? { id: astre.id, kind: companionKind(astre.id) } : null,
       cannon: this.muzzle(),
       hideStars: !!this.challenge,
+      duel: !!this.duel,
     });
     if (this.challenge) this.challengeLine = new ChallengeLine(this, this.challenge.challenge);
-    button(this, 1236, 32, 'II', () => this.openPause(), { width: 48, size: 18 });
   }
 
   /** Astre du niveau : forcé (?astre=, tests QA), choisi au sélecteur, ou celui du niveau. */
   private resolveCompanion(): { id: string | null; def: CompanionDef | undefined } {
     const forced = new URLSearchParams(window.location.search).get('astre');
     const imposed = this.hasConstraint('astre_impose') ? this.activeChallenge()?.astre : undefined;
-    const id = forced ?? imposed ?? this.sceneData.companion ?? this.sceneData.level.companion;
+    const duelAstre = this.duel ? this.duel.players[this.duel.active].astre : undefined;
+    const id =
+      forced ?? imposed ?? duelAstre ?? this.sceneData.companion ?? this.sceneData.level.companion;
     const def =
       companionById(id)?.def ??
       (forced ? (DA_DEFS as Record<string, CompanionDef | undefined>)[forced] : undefined);
@@ -878,10 +910,14 @@ export class GameScene extends Phaser.Scene {
     const save = this.registry.get(REGISTRY.save) as SaveData | undefined;
     const needsHelp =
       !this.sceneData.test &&
+      !this.duel &&
       !!save &&
       failsBeforeFirstWin(save, this.sceneData.level.id) >= HELP_AFTER_FAILS;
     this.companionId = def && id ? id : null;
     this.reveal = chargesFor(this.companionId);
+    // Duel : les charges « tir suivant » restent au joueur qui les a gagnées.
+    const kept = this.duel ? this.duelCharges[this.duel.active] : undefined;
+    if (kept) this.reveal = kept;
     if (!def) {
       // Sans Astre (prologue) : la lanterne de la Gardienne allonge le guide du 1er tir.
       if (needsHelp) this.lanternShots = 1;
@@ -1339,7 +1375,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   private shoot(): void {
-    if (this.ending || !canShoot(this.level) || !startShot(this.level)) return;
+    if (this.ending || this.turnSwitching) return;
+    if (!canShoot(this.level) || !startShot(this.level)) return;
     const start = this.muzzle();
     this.orb = this.spawnOrb(
       start.x,
@@ -1492,6 +1529,9 @@ export class GameScene extends Phaser.Scene {
       this.level.phase = 'lost';
       result.phase = 'lost';
     }
+    const shooter = this.duel?.active;
+    const turn = this.duel ? endTurn(this.level, this.duel) : undefined;
+    if (turn) result.phase = this.level.phase;
     this.removeViews(result.removedIds);
     // Régénération : les cristaux revenus réapparaissent avec un pop.
     for (const c of result.restored) {
@@ -1519,9 +1559,46 @@ export class GameScene extends Phaser.Scene {
     else this.companion?.setPhase('over');
     this.emitAll(bilan);
     if (bilan.length === 0) this.companion?.brain.onShotEndQuiet();
+    if (turn?.newLeader != null)
+      gameEvents.emit('duel_avantage', { joueur: playerNumber(turn.newLeader) });
     if (result.phase === 'won') this.endLevel(true);
     else if (result.phase === 'lost') this.endLevel(false);
-    else this.emitAll(this.tracker.beginAiming(heartsRemaining(this.level), this.level.orbs));
+    else {
+      if (turn?.switched && shooter !== undefined) this.beginTurnSwitch(shooter);
+      this.emitAll(this.tracker.beginAiming(heartsRemaining(this.level), this.level.orbs));
+    }
+  }
+
+  /** Astres du duel (J1, J2) : choisis à l'écran d'avant duel, sinon celui du niveau. */
+  private duelAstres(): [string | null, string | null] {
+    const a = this.sceneData.mode?.astres;
+    const fallback = this.sceneData.companion ?? this.sceneData.level.companion ?? null;
+    return [a?.[0] ?? fallback, a?.[1] ?? fallback];
+  }
+
+  /**
+   * Duel : l'Astre du tireur finit sa réaction, puis celui du joueur suivant prend la loge
+   * (avec son pouvoir et son HUD) ; la bannière annonce le tour.
+   */
+  private beginTurnSwitch(shooter: PlayerIndex): void {
+    this.duelCharges[shooter] = this.reveal;
+    this.turnSwitching = true;
+    this.time.delayedCall(DUEL_SWITCH_MS, () => {
+      const d = this.duel;
+      if (!d || this.ending) return;
+      this.companion?.destroy();
+      this.companion = undefined;
+      this.hud.destroy();
+      this.makeHud();
+      this.makeCompanion();
+      (this.companion as CompanionView | undefined)?.setPhase('aiming');
+      this.hudDimmed = false;
+      this.refreshHud();
+      this.refreshPower();
+      this.duelHud?.setActive(d.active, true);
+      gameEvents.emit('duel_tour', { joueur: playerNumber(d.active) });
+      this.turnSwitching = false;
+    });
   }
 
   private endLevel(won: boolean): void {
@@ -1541,10 +1618,15 @@ export class GameScene extends Phaser.Scene {
       challenge: this.challenge
         ? { goal: this.challenge.challenge.goal, success: this.challenge.state === 'success' }
         : undefined,
+      duel: this.duel ? this.duelSummary(this.duel) : undefined,
     };
+    if (this.duel) {
+      const w = payload.duel?.winner ?? null;
+      gameEvents.emit('duel_fin', { gagnant: w === null ? null : playerNumber(w) });
+    }
     // Overlay par-dessus le jeu, qui n'est PAS mis en pause : l'Astre continue de vivre.
     const delay = won ? RESULTS_DELAY_MS : FAIL_DELAY_MS;
-    if (won) {
+    if (won && !this.duel) {
       // La constellation du chapitre s'allume : étoiles gagnées une à une (specs-decors).
       const save = this.registry.get(REGISTRY.save) as SaveData | undefined;
       const earned = earnedStars(save, this.sceneData.level.id);
@@ -1854,9 +1936,25 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  private duelSummary(d: DuelState): NonNullable<ResultsData['duel']> {
+    const scores: [number, number] = [d.players[0].score, d.players[1].score];
+    const winner: PlayerIndex | null =
+      scores[0] === scores[1] ? null : scores[0] > scores[1] ? 0 : 1;
+    const astres: [string, string] = [d.players[0].astre ?? '', d.players[1].astre ?? ''];
+    return { scores, winner, astres, tiebreak: d.tiebreak };
+  }
+
   private refreshHud(): void {
     const s = this.level;
     const hearts = heartsRemaining(s);
+    const d = this.duel;
+    if (d && this.duelHud) {
+      // Le score du tireur monte en direct pendant son tir.
+      const scores: [number, number] = [d.players[0].score, d.players[1].score];
+      scores[d.active] = s.score;
+      this.duelHud.setScores(scores);
+      this.duelHud.setHearts(hearts);
+    }
     this.hud.update({
       score: s.score,
       shotScore: s.shotScore,

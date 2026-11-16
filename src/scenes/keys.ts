@@ -8,6 +8,8 @@ export const SCENES = {
   results: 'Results',
   options: 'Options',
   cutscene: 'Cutscene',
+  /** Galerie des souvenirs, dans l'Observatoire (jalon 3). */
+  memories: 'Memories',
   /** Calque de l'Astre au-dessus des overlays de fin. */
   companionLayer: 'CompanionLayer',
   /** Sélecteur de compagnon, par-dessus la carte (jalon 2). */

@@ -1,5 +1,6 @@
 /**
- * Catalogue des niveaux : index.json + un fichier par niveau (public/levels/).
+ * Catalogue des niveaux : index.json (aventure), challenges.json (défis), duel.json (duel)
+ * + un fichier par niveau (public/levels/).
  * Sans Phaser : la BootScene charge les fichiers, ce module les valide et les ordonne.
  */
 import { parseLevel, type LevelData } from './levelFormat';
@@ -14,29 +15,107 @@ export interface LevelIndex {
 }
 
 export interface LevelCatalog {
-  /** Niveaux valides, dans l'ordre de l'index. */
+  /** Niveaux valides de l'aventure, dans l'ordre de l'index. */
   levels: LevelData[];
+  /** Défis (challenges.json), dans l'ordre du fichier ; vide si le fichier manque. */
+  challenges: LevelData[];
+  /** Niveaux de duel (duel.json), dans l'ordre du fichier ; vide si le fichier manque. */
+  duel: LevelData[];
   /** Messages d'erreur lisibles (niveau ignoré). */
   errors: string[];
 }
 
-export function parseIndex(raw: unknown): { index?: LevelIndex; error?: string } {
-  if (typeof raw !== 'object' || raw === null) return { error: 'index.json : objet attendu.' };
-  const { format, levels } = raw as Record<string, unknown>;
-  if (format !== 1) return { error: `index.json : format ${String(format)} non pris en charge.` };
-  if (!Array.isArray(levels) || !levels.every((l) => typeof l === 'string'))
-    return { error: 'index.json : levels doit être une liste d’ids.' };
-  return { index: { format: 1, levels: levels as string[] } };
+/** Index secondaires, facultatifs : fichier et clé de la liste d'ids. */
+export const EXTRA_INDEXES = {
+  challenges: { file: 'challenges.json', key: 'challenges' },
+  duel: { file: 'duel.json', key: 'duel' },
+} as const;
+export type ExtraIndexName = keyof typeof EXTRA_INDEXES;
+export type ExtraIds = Partial<Record<ExtraIndexName, string[]>>;
+
+/** Liste d'ids { format: 1, <key>: [...] } ; file sert aux messages d'erreur. */
+export function parseIdList(
+  raw: unknown,
+  file: string,
+  key: string,
+): { ids?: string[]; error?: string } {
+  if (typeof raw !== 'object' || raw === null) return { error: `${file} : objet attendu.` };
+  const obj = raw as Record<string, unknown>;
+  if (obj.format !== 1)
+    return { error: `${file} : format ${String(obj.format)} non pris en charge.` };
+  const ids = obj[key];
+  if (!Array.isArray(ids) || !ids.every((l) => typeof l === 'string'))
+    return { error: `${file} : ${key} doit être une liste d’ids.` };
+  return { ids: ids as string[] };
 }
 
-/** Valide chaque niveau listé ; un niveau absent ou invalide est ignoré avec une erreur. */
-export function buildCatalog(index: LevelIndex, files: Record<string, unknown>): LevelCatalog {
-  const levels: LevelData[] = [];
+export function parseIndex(raw: unknown): { index?: LevelIndex; error?: string } {
+  const { ids, error } = parseIdList(raw, 'index.json', 'levels');
+  return ids ? { index: { format: 1, levels: ids } } : { error };
+}
+
+/**
+ * Lit challenges.json et duel.json s'ils sont là. Un fichier absent (undefined) est
+ * normal tant que les défis ne sont pas livrés : liste vide, pas d'erreur.
+ */
+export function parseExtraIndexes(raws: Partial<Record<ExtraIndexName, unknown>>): {
+  extras: ExtraIds;
+  errors: string[];
+} {
+  const extras: ExtraIds = {};
   const errors: string[] = [];
+  for (const name of Object.keys(EXTRA_INDEXES) as ExtraIndexName[]) {
+    const raw = raws[name];
+    if (raw === undefined) continue;
+    const { file, key } = EXTRA_INDEXES[name];
+    const { ids, error } = parseIdList(raw, file, key);
+    if (ids) extras[name] = ids;
+    else errors.push(error as string);
+  }
+  return { extras, errors };
+}
+
+/** Tous les ids à charger : aventure puis défis puis duel, sans doublon. */
+export function allLevelIds(index: LevelIndex | undefined, extras: ExtraIds): string[] {
+  return [
+    ...new Set([...(index?.levels ?? []), ...(extras.challenges ?? []), ...(extras.duel ?? [])]),
+  ];
+}
+
+/**
+ * Valide chaque niveau listé (aventure, puis défis et duel s'ils sont fournis) ;
+ * un niveau absent ou invalide est ignoré avec une erreur.
+ */
+export function buildCatalog(
+  index: LevelIndex,
+  files: Record<string, unknown>,
+  extras: ExtraIds = {},
+): LevelCatalog {
+  const errors: string[] = [];
+  const levels = buildList(index.levels, 'index.json', files, errors);
+  const challenges = buildList(extras.challenges ?? [], 'challenges.json', files, errors);
+  const duel = buildList(extras.duel ?? [], 'duel.json', files, errors);
+  const adventure = new Set(index.levels);
+  for (const [file, ids] of [
+    ['challenges.json', extras.challenges],
+    ['duel.json', extras.duel],
+  ] as const)
+    for (const id of ids ?? [])
+      if (adventure.has(id)) errors.push(`${id} : listé dans index.json et dans ${file}.`);
+  return { levels, challenges, duel, errors };
+}
+
+function buildList(
+  ids: readonly string[],
+  file: string,
+  files: Record<string, unknown>,
+  errors: string[],
+): LevelData[] {
+  const levels: LevelData[] = [];
   const seen = new Set<string>();
-  for (const id of index.levels) {
+  for (const id of ids) {
     if (seen.has(id)) {
-      errors.push(`${id} : listé deux fois dans index.json.`);
+      errors.push(`${id} : listé deux fois dans ${file}.`);
       continue;
     }
     seen.add(id);
@@ -56,7 +135,7 @@ export function buildCatalog(index: LevelIndex, files: Record<string, unknown>):
     }
     levels.push(res.level);
   }
-  return { levels, errors };
+  return levels;
 }
 
 /** Niveaux regroupés par chapitre (0 = prologue), dans l'ordre de l'index. */
