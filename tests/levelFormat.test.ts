@@ -109,7 +109,21 @@ describe('format de niveau v1', () => {
   it('sérialise puis relit sans perte, un peg par ligne', () => {
     const level = parseLevel(sample).level as LevelData;
     const text = serializeLevel(level);
-    expect(text).toContain('\n    {"x":120,"y":200},\n');
+    expect(text).toContain('\n    {"x": 120, "y": 200},\n');
     expect(parseLevel(text).level).toEqual(level);
+  });
+
+  it('réécrit les niveaux du dépôt à l’identique', () => {
+    const files = import.meta.glob<string>('../public/levels/*.json', {
+      query: '?raw',
+      import: 'default',
+      eager: true,
+    });
+    expect(Object.keys(files).length).toBeGreaterThan(1);
+    for (const [name, text] of Object.entries(files)) {
+      if (name.endsWith('index.json')) continue;
+      const level = parseLevel(text).level as LevelData;
+      expect(serializeLevel(level), name).toBe(text);
+    }
   });
 });
