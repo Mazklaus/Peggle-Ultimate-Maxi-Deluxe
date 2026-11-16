@@ -227,43 +227,43 @@ pts = []
 for cx, cy in ((200, 230), (680, 230), (440, 350)):
     pts += arc(cx, cy, 130, 15, 165, 13) + arc(cx, cy + 10, 85, 25, 155, 8)
 pts += line(60, 140, 260, 140, 5) + line(620, 140, 820, 140, 5)
-L.append(level('ch2-01', 2, 1, 'Bourdon se réveille', 'decouverte', 10, 20, 55, 1, 3, build(pts, imp + GUARD_IMP), locked=True, **BOU))
+L.append(level('ch2-01', 2, 1, 'Bourdon se réveille', 'decouverte', 14, 16, 59, 1, 3, build(pts, imp + GUARD_IMP), locked=True, **BOU))
 
 # 2-2 découverte : nuées denses, les cristaux pouvoir au milieu des nuées.
 imp = [(220, 300, 'power'), (660, 300, 'power'), (440, 200, 'power')]
 pts = hexa(110, 330, 230, 400, 40) + hexa(550, 770, 230, 400, 40) + hexa(330, 550, 140, 260, 40) + arc(440, 380, 130, 20, 160, 9)
-L.append(level('ch2-02', 2, 2, 'La ruche s’agite', 'decouverte', 10, 20, 60, 1, 3, build(pts, imp + GUARD_IMP), locked=True, **BOU))
+L.append(level('ch2-02', 2, 2, 'La ruche s’agite', 'decouverte', 15, 16, 64, 1, 3, build(pts, imp + GUARD_IMP), locked=True, **BOU))
 
 # 2-3 application : quatre bols en carré.
 pts = []
 for cx, cy in ((240, 170), (640, 170), (240, 360), (640, 360)):
     pts += arc(cx, cy, 120, 15, 165, 12) + arc(cx, cy + 10, 75, 25, 155, 7)
 pts += line(440, 160, 440, 520, 7)
-L.append(level('ch2-03', 2, 3, 'Les quatre alvéoles', 'application', 10, 22, 60, 1, 2, build(pts, GUARD_IMP), **BOU))
+L.append(level('ch2-03', 2, 3, 'Les quatre alvéoles', 'application', 13, 18, 64, 1, 2, build(pts, GUARD_IMP), **BOU))
 
 # 2-4 application : lignes en zigzag et rampes.
 walls = [(150, 470, 150, 20), (730, 470, 150, -20)]
 pts = line(60, 160, 440, 260, 11) + line(820, 160, 440, 260, 11)[:-1] + line(60, 300, 440, 400, 11) + line(820, 300, 440, 400, 11)[:-1] \
     + rows(260, 620, 470, 2, 44, 9) + line(300, 140, 580, 140, 7) + line(60, 230, 400, 320, 9)[1:-1] + line(820, 230, 480, 320, 9)[1:-1] + [(440, 330), (440, 560)]
-L.append(level('ch2-04', 2, 4, 'Le vol en zigzag', 'application', 10, 22, 65, 1, 2, build(pts, GUARD_IMP, walls=walls), **BOU))
+L.append(level('ch2-04', 2, 4, 'Le vol en zigzag', 'application', 12, 22, 65, 1, 2, build(pts, GUARD_IMP, walls=walls), **BOU))
 
 # 2-5 application : grande ruche hexagonale.
 pts = hexa(110, 770, 170, 470, 56)
-L.append(level('ch2-05', 2, 5, 'La grande ruche', 'application', 10, 23, 65, 1, 2, build(pts, GUARD_IMP), **BOU))
+L.append(level('ch2-05', 2, 5, 'La grande ruche', 'application', 13, 19, 69, 1, 2, build(pts, GUARD_IMP), **BOU))
 
 # 2-6 respiration : pluie de pollen dense.
 pts = rows(50, 830, 190, 7, 46, 19)
-L.append(level('ch2-06', 2, 6, 'Pluie de pollen', 'respiration', 10, 20, 90, 1, 2, build(pts), **BOU))
+L.append(level('ch2-06', 2, 6, 'Pluie de pollen', 'respiration', 15, 16, 94, 1, 2, build(pts), **BOU))
 
 # 2-7 combinaison : première roue qui tourne, au centre, entourée de nuées fixes.
 pts = rows(60, 820, 150, 2, 44, 18) + arc(150, 380, 110, 15, 165, 11) + arc(730, 380, 110, 15, 165, 11) + rows(260, 620, 540, 1, 0, 9)
 g = [('roue', 440, 350, ring(440, 350, 110, 14) + ring(440, 350, 55, 7, phase=25), None)]
-L.append(level('ch2-07', 2, 7, 'La première roue', 'combinaison', 10, 23, 65, 1, 2, build(pts, GUARD_IMP, groups=g), decor=[rot('roue', 440, 350, 14)], **BOU))
+L.append(level('ch2-07', 2, 7, 'La première roue', 'combinaison', 12, 23, 65, 1, 2, build(pts, GUARD_IMP, groups=g), decor=[rot('roue', 440, 350, 14)], **BOU))
 
 # 2-8 combinaison : deux roues qui tournent en sens contraire.
 pts = rows(60, 820, 150, 2, 44, 18) + line(440, 230, 440, 520, 7) + rows(80, 800, 550, 1, 0, 16)
 g = [('g', 230, 360, ring(230, 360, 120, 15) + ring(230, 360, 60, 7), None), ('d', 650, 360, ring(650, 360, 120, 15) + ring(650, 360, 60, 7), None)]
-L.append(level('ch2-08', 2, 8, 'Les engrenages', 'combinaison', 10, 24, 70, 1, 2, build(pts, GUARD_IMP, groups=g), decor=[rot('g', 230, 360, 14), rot('d', 650, 360, 14, -1)], **BOU))
+L.append(level('ch2-08', 2, 8, 'Les engrenages', 'combinaison', 12, 24, 70, 1, 2, build(pts, GUARD_IMP, groups=g), decor=[rot('g', 230, 360, 14), rot('d', 650, 360, 14, -1)], **BOU))
 
 # 2-9 combinaison : moulin (croix tournante) au centre, bols de chaque côté.
 spokes = []
@@ -271,19 +271,19 @@ for k in range(4):
     a = math.radians(45 + 90*k); spokes += [(440 + r*math.cos(a), 340 + r*math.sin(a)) for r in (40, 75, 110, 145)]
 pts = arc(120, 250, 110, 15, 165, 11) + arc(760, 250, 110, 15, 165, 11) + arc(120, 430, 100, 15, 165, 10) + arc(760, 430, 100, 15, 165, 10) + line(240, 140, 640, 140, 10) + rows(250, 630, 540, 1, 0, 9) + line(60, 140, 180, 140, 4) + line(700, 140, 820, 140, 4) + arc(120, 260, 60, 30, 150, 5) + arc(760, 260, 60, 30, 150, 5)
 g = [('moulin', 440, 340, spokes + [(440, 340)], None)]
-L.append(level('ch2-09', 2, 9, 'Le moulin à miel', 'combinaison', 10, 24, 70, 1, 2, build(pts, GUARD_IMP, groups=g), decor=[rot('moulin', 440, 340, 12)], **BOU))
+L.append(level('ch2-09', 2, 9, 'Le moulin à miel', 'combinaison', 14, 20, 74, 1, 2, build(pts, GUARD_IMP, groups=g), decor=[rot('moulin', 440, 340, 12)], **BOU))
 
 # 2-10 maîtrise : grande roue double (anneaux contraires), bols latéraux.
 pts = arc(100, 300, 90, 15, 165, 9) + arc(780, 300, 90, 15, 165, 9) + arc(100, 470, 80, 15, 165, 8) + arc(780, 470, 80, 15, 165, 8) + line(260, 130, 620, 130, 9) + line(60, 140, 200, 140, 4) + line(680, 140, 820, 140, 4) + rows(300, 580, 560, 1, 0, 7) + arc(100, 310, 45, 30, 150, 4) + arc(780, 310, 45, 30, 150, 4)
 g = [('ext', 440, 360, ring(440, 360, 155, 20), None), ('int', 440, 360, ring(440, 360, 95, 12) + ring(440, 360, 40, 5), None)]
-L.append(level('ch2-10', 2, 10, 'La roue du rucher', 'maitrise', 10, 25, 70, 1, 2, build(pts, GUARD_IMP, groups=g), decor=[rot('ext', 440, 360, 16), rot('int', 440, 360, 12, -1)], **BOU))
+L.append(level('ch2-10', 2, 10, 'La roue du rucher', 'maitrise', 13, 25, 70, 1, 2, build(pts, GUARD_IMP, groups=g), decor=[rot('ext', 440, 360, 16), rot('int', 440, 360, 12, -1)], **BOU))
 
 # 2-11 maîtrise : trois fleurs tournantes et une voûte fixe.
 pts = rows(60, 820, 150, 2, 44, 18) + rows(60, 820, 550, 1, 0, 18)
 g = []; dec = []
 for k, (cx, cy) in enumerate(((180, 360), (440, 330), (700, 360))):
     gid = f'fleur{k+1}'; g.append((gid, cx, cy, ring(cx, cy, 95, 12) + ring(cx, cy, 45, 6, phase=30) + [(cx, cy)], None)); dec.append(rot(gid, cx, cy, 14, 1 if k % 2 == 0 else -1))
-L.append(level('ch2-11', 2, 11, 'Le jardin de Bourdon', 'maitrise', 10, 25, 75, 1, 2, build(pts, GUARD_IMP, groups=g), decor=dec, **BOU))
+L.append(level('ch2-11', 2, 11, 'Le jardin de Bourdon', 'maitrise', 13, 25, 75, 1, 2, build(pts, GUARD_IMP, groups=g), decor=dec, **BOU))
 
 # 2-12 Grande Constellation : le Grand Hamac, une longue arche fixe tendue entre deux roues.
 walls = [(330, 545, 120, 12), (550, 545, 120, -12)]
