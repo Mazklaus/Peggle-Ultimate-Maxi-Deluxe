@@ -78,3 +78,18 @@ describe('Constellation du jour', () => {
     expect(() => generateDaily('2026-11-16')).toThrow();
   });
 });
+
+describe('Constellation du jour : règle Mousse', () => {
+  it('jamais d’aimant de décor quand l’Astre tiré est Mousse', () => {
+    for (let d = 0; d < 366; d++) {
+      const dt = new Date(2026, 10, 16 + d);
+      const key = `${dt.getFullYear()}${String(dt.getMonth() + 1).padStart(2, '0')}${String(dt.getDate()).padStart(2, '0')}`;
+      const { level } = generateDaily(key);
+      if (level.companion === 'mousse')
+        expect(
+          level.decor.some((x) => x.type === 'magnet'),
+          key,
+        ).toBe(false);
+    }
+  });
+});
