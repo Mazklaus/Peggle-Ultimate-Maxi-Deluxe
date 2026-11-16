@@ -81,12 +81,21 @@ GUARDS = [(30, y) for y in (230, 330, 430, 530)] + [(850, y) for y in (230, 330,
 GUARD_IMP = [(x, y, 'common') for x, y in GUARDS]
 GUARD_IMP_LIGHT = [(30, 300, 'common'), (30, 460, 'common'), (850, 300, 'common'), (850, 460, 'common')]
 
-def level(id_, chapter, index, title, rhythm, orbs, hearts, commons, bonus, power, pegs, companion=None, locked=False, sym=False, decor=(), orbs_note=None):
+def level(id_, chapter, index, title, rhythm, orbs, hearts, commons, bonus, power, pegs, companion=None, locked=False, sym=False, decor=(), orbs_note=None, clusters=()):
+    # clusters : centres de grappes de cœurs imposés (règle GD respiration : cœurs groupés, pas isolés)
+    if clusters:
+        per = hearts // len(clusters)
+        for k, (cx, cy) in enumerate(clusters):
+            n = per + (1 if k < hearts - per*len(clusters) else 0)
+            cand = sorted((p for p in pegs if 'kind' not in p and 'group' not in p and p.get('shape') != 'brick'),
+                          key=lambda p: math.hypot(p['x']-cx, p['y']-cy))
+            for p in cand[:n]: p['kind'] = 'heart'
+    imposed_heart = sum(1 for p in pegs if p.get('kind') == 'heart')
     free = [p for p in pegs if 'kind' not in p]
     trim_free = [p for p in free if 'group' not in p]
     imposed_power = sum(1 for p in pegs if p.get('kind') == 'power')
     imposed_common = sum(1 for p in pegs if p.get('kind') == 'common')
-    need = hearts + (commons - imposed_common) + bonus + (power - imposed_power)
+    need = (hearts - imposed_heart) + (commons - imposed_common) + bonus + (power - imposed_power)
     if len(free) < need:
         print(f'MANQUE {id_}: {len(free)} < {need}'); need = len(free)
     # retire l'excédent de façon régulière (garde la silhouette)
@@ -112,7 +121,7 @@ def level(id_, chapter, index, title, rhythm, orbs, hearts, commons, bonus, powe
         'companion': companion, 'companionLocked': locked,
         'title': title, 'rhythm': rhythm, 'orbs': orbs,
         **({'guideBounces': 2} if id_ in ('pro-01', 'pro-02') else {}), 'stars': stars,
-        'assign': {'hearts': hearts, 'power': power - imposed_power, 'bonus': bonus},
+        'assign': {'hearts': hearts - imposed_heart, 'power': power - imposed_power, 'bonus': bonus},
         'pegs': pegs, 'decor': list(decor),
     }
 
@@ -175,7 +184,7 @@ L.append(level('ch1-05', 1, 5, 'Les trois coupes', 'application', 12, 23, 65, 1,
 
 # 1-6 respiration : nuée dense, le chaos est récompensé.
 pts = rows(50, 830, 200, 6, 50, 19) + line(320, 150, 560, 150, 4)
-L.append(level('ch1-06', 1, 6, 'Pluie de lucioles', 'respiration', 12, 20, 90, 1, 2, build(pts), **PIP))
+L.append(level('ch1-06', 1, 6, 'Pluie de lucioles', 'respiration', 15, 16, 75, 1, 2, build(pts), **PIP, clusters=[(200, 260), (680, 260), (320, 420), (560, 420)]))
 
 # 1-7 combinaison : rampes incassables (élément du ch.1), premier contact simple.
 walls = [(200, 470, 160, 20), (680, 470, 160, -20)]
@@ -253,7 +262,7 @@ L.append(level('ch2-05', 2, 5, 'La grande ruche', 'application', 13, 19, 69, 1, 
 
 # 2-6 respiration : pluie de pollen dense.
 pts = rows(50, 830, 190, 7, 46, 19)
-L.append(level('ch2-06', 2, 6, 'Pluie de pollen', 'respiration', 15, 16, 94, 1, 2, build(pts), **BOU))
+L.append(level('ch2-06', 2, 6, 'Pluie de pollen', 'respiration', 13, 16, 75, 1, 2, build(pts), **BOU, clusters=[(180, 300), (700, 300), (440, 250), (440, 430)]))
 
 # 2-7 combinaison : première roue qui tourne, au centre, entourée de nuées fixes.
 pts = rows(60, 820, 150, 2, 44, 18) + arc(150, 380, 110, 15, 165, 11) + arc(730, 380, 110, 15, 165, 11) + rows(260, 620, 540, 1, 0, 9)
@@ -327,7 +336,7 @@ L.append(level('ch3-05', 3, 5, 'Les deux voûtes', 'application', 13, 20, 69, 1,
 
 # 3-6 respiration : nuée dense.
 pts = rows(50, 830, 190, 7, 46, 19)
-L.append(level('ch3-06', 3, 6, 'Pluie d’étincelles', 'respiration', 15, 17, 94, 1, 2, build(pts), **TWI))
+L.append(level('ch3-06', 3, 6, 'Pluie d’étincelles', 'respiration', 13, 16, 75, 1, 2, build(pts), **TWI, clusters=[(240, 240), (640, 240), (240, 420), (640, 420)]))
 
 # 3-7 combinaison : premières lunes, deux pegs tournent autour de chaque bol.
 g = []; dec = []
@@ -410,7 +419,7 @@ L.append(level('ch4-05', 4, 5, 'Le mur aux rebonds', 'application', 13, 24, 70, 
 
 # 4-6 respiration : pluie serrée.
 pts = rows(50, 830, 190, 7, 42, 19)
-L.append(level('ch4-06', 4, 6, 'Averse d’étoiles', 'respiration', 14, 17, 94, 1, 2, build(pts), **VOL))
+L.append(level('ch4-06', 4, 6, 'Averse d’étoiles', 'respiration', 14, 16, 75, 1, 2, build(pts), **VOL, clusters=[(150, 300), (730, 300), (440, 220), (440, 400)]))
 
 # 4-7 combinaison : le premier aimant, au centre d'une couronne.
 pts = hole(ring(440, 340, 150, 24) + ring(440, 340, 200, 26) + rows(70, 810, 130, 1, 0, 18) + rows(90, 790, 560, 1, 0, 16) + arc(130, 400, 80, 15, 165, 7) + arc(750, 400, 80, 15, 165, 7), 440, 340)
@@ -450,9 +459,9 @@ imp = [(220, 300, 'power'), (660, 300, 'power'), (440, 460, 'power')]
 pts = arc(220, 200, 120, 15, 165, 13) + arc(660, 200, 120, 15, 165, 13) + arc(440, 360, 130, 15, 165, 14) + arc(220, 200, 75, 30, 150, 7) + arc(660, 200, 75, 30, 150, 7) + arc(440, 360, 85, 30, 150, 8) + rows(100, 780, 160, 1, 0, 10)
 L.append(level('ch5-01', 5, 1, 'Mousse renifle', 'decouverte', 15, 16, 59, 1, 3, build(pts, imp + GUARD_IMP), locked=True, **MOU))
 
-# 5-2 découverte : une fleur, les pouvoirs au cœur et aux pétales du bas.
-imp = [(440, 340, 'power'), (330, 440, 'power'), (550, 440, 'power')]
-pts = star(440, 340, 210, 100, 5, 7) + ring(440, 340, 60, 8) + rows(100, 780, 560, 1, 0, 14) + arc(130, 260, 90, 15, 165, 9) + arc(750, 260, 90, 15, 165, 9) + [(440, 500)]
+# 5-2 découverte : trois corolles ouvertes (bols), un pouvoir au fond de chacune.
+imp = [(440, 360, 'power'), (200, 450, 'power'), (680, 450, 'power')]
+pts = arc(440, 250, 150, 15, 165, 15) + arc(440, 250, 100, 25, 155, 10) + arc(200, 380, 110, 15, 165, 12) + arc(680, 380, 110, 15, 165, 12) + arc(200, 380, 65, 30, 150, 6) + arc(680, 380, 65, 30, 150, 6) + rows(120, 760, 150, 1, 0, 10) + rows(100, 780, 565, 1, 0, 14)
 L.append(level('ch5-02', 5, 2, 'La fleur de Mousse', 'decouverte', 15, 16, 64, 1, 3, build(pts, imp + GUARD_IMP), locked=True, **MOU))
 
 # 5-3 application : un bouquet de trois fleurs.
@@ -470,12 +479,12 @@ L.append(level('ch5-05', 5, 5, 'Le sablier', 'application', 15, 20, 74, 1, 2, bu
 
 # 5-6 respiration : prairie.
 pts = rows(50, 830, 190, 7, 42, 19)
-L.append(level('ch5-06', 5, 6, 'La prairie', 'respiration', 14, 17, 94, 1, 2, build(pts), **MOU))
+L.append(level('ch5-06', 5, 6, 'La prairie', 'respiration', 15, 16, 75, 1, 2, build(pts), **MOU, clusters=[(300, 250), (580, 250), (160, 400), (720, 400)]))
 
-# 5-7 combinaison : la première porte, qui mène à un nid fermé.
-A, B = (230, 240), (650, 470)
-pts = holes(rows(70, 810, 140, 2, 40, 18) + arc(230, 240, 110, 200, 340, 9) + arc(650, 470, 70, 200, 520, 14) + arc(650, 470, 115, 190, 350, 10) + arc(230, 450, 110, 15, 165, 12) + line(440, 260, 440, 520, 5) + rows(80, 800, 568, 1, 0, 18), [A, B])
-L.append(level('ch5-07', 5, 7, 'La première porte', 'combinaison', 14, 21, 74, 1, 2, build(pts, GUARD_IMP), decor=[portal('porte', A, B)], **MOU))
+# 5-7 combinaison : la première porte, qui mène au-dessus d'un nid ouvert.
+A, B = (230, 240), (650, 400)
+pts = holes(rows(70, 810, 140, 2, 40, 18) + arc(230, 240, 110, 200, 340, 9) + arc(650, 400, 75, 15, 165, 8) + arc(650, 400, 125, 10, 170, 14) + arc(230, 450, 110, 15, 165, 12) + line(440, 260, 440, 520, 5) + rows(80, 800, 568, 1, 0, 18), [A, B])
+L.append(level('ch5-07', 5, 7, 'La première porte', 'combinaison', 15, 21, 74, 1, 2, build(pts, GUARD_IMP), decor=[portal('porte', A, B)], **MOU))
 
 # 5-8 combinaison : deux portes croisées.
 A1, B1, A2, B2 = (130, 250), (720, 480), (750, 250), (160, 480)
@@ -484,7 +493,7 @@ L.append(level('ch5-08', 5, 8, 'Les portes croisées', 'combinaison', 13, 21, 74
 
 # 5-9 combinaison : le puits du bas renvoie l'orbe tout en haut, de l'autre côté.
 A, B = (300, 545), (600, 130)
-pts = holes(rows(70, 810, 200, 4, 42, 19) + arc(300, 545, 80, 190, 350, 8) + arc(620, 430, 110, 15, 165, 12) + arc(160, 420, 80, 15, 165, 8), [A, B])
+pts = holes(rows(70, 810, 200, 3, 42, 19) + arc(300, 545, 80, 190, 350, 8) + arc(620, 430, 110, 15, 165, 12) + arc(620, 430, 65, 30, 150, 6) + arc(160, 420, 80, 15, 165, 8) + arc(160, 420, 45, 40, 140, 3) + rows(450, 790, 565, 1, 0, 8), [A, B])
 L.append(level('ch5-09', 5, 9, 'Le puits et l’étoile', 'combinaison', 14, 21, 79, 1, 2, build(pts, GUARD_IMP), decor=[portal('puits', A, B)], **MOU))
 
 # 5-10 maîtrise : une ruche que deux portes traversent.
@@ -492,10 +501,10 @@ A1, B1, A2, B2 = (90, 200), (560, 470), (790, 200), (320, 470)
 pts = holes(hexa(70, 810, 290, 545, 44) + rows(200, 680, 160, 1, 0, 12), [A1, B1, A2, B2])
 L.append(level('ch5-10', 5, 10, 'La ruche aux portes', 'maitrise', 13, 26, 75, 1, 2, build(pts, GUARD_IMP_LIGHT), decor=[portal('r1', A1, B1), portal('r2', A2, B2)], **MOU))
 
-# 5-11 maîtrise : deux jardins clos et leurs portes.
+# 5-11 maîtrise : deux jardins ouverts par le haut, et leurs portes.
 A1, B1, A2, B2 = (440, 220), (220, 400), (440, 470), (660, 400)
-pts = holes(ring(220, 400, 130, 26) + ring(660, 400, 130, 26) + ring(220, 400, 70, 10) + ring(660, 400, 70, 10) + rows(70, 810, 150, 2, 40, 18) + line(440, 280, 440, 400, 3), [A1, B1, A2, B2])
-L.append(level('ch5-11', 5, 11, 'Les jardins clos', 'maitrise', 13, 22, 84, 1, 2, build(pts, GUARD_IMP), decor=[portal('j1', A1, B1), portal('j2', A2, B2)], **MOU))
+pts = holes(arc(220, 400, 130, -25, 205, 22) + arc(660, 400, 130, -25, 205, 22) + arc(220, 400, 70, 0, 180, 7) + arc(660, 400, 70, 0, 180, 7) + rows(70, 810, 150, 2, 40, 18) + line(440, 280, 440, 400, 3) + rows(80, 800, 568, 1, 0, 18), [A1, B1, A2, B2])
+L.append(level('ch5-11', 5, 11, 'Les jardins', 'maitrise', 14, 22, 84, 1, 2, build(pts, GUARD_IMP), decor=[portal('j1', A1, B1), portal('j2', A2, B2)], **MOU))
 
 # 5-12 Grande Constellation : la Serre, deux portes et deux vitres inclinées.
 walls = [(260, 330, 150, 20), (620, 330, 150, -20)]
@@ -506,6 +515,13 @@ L.append(level('ch5-12', 5, 12, 'La Serre', 'grande-constellation', 14, 22, 83, 
 # ---------- CHAPITRE 6 : Horloge (ralenti du temps), élément : régénération (niveaux 7+) ----------
 # Règle GD : application et maîtrise denses (l'Horloge ne sert que dans la masse).
 HOR = dict(companion='horloge')
+def thick(cx, cy, r, layers=3, gap=40):
+    """Bol épais : arcs concentriques (dense mais l'orbe y roule)."""
+    out = []
+    for k in range(layers):
+        rr = r - k*gap
+        if rr >= 30: out += arc(cx, cy, rr, 10, 170, max(3, int(math.pi*rr*160/180/32)))
+    return out
 def regen(gid, shots=2): return {'id': gid, 'type': 'regen', 'shots': shots}
 def tag_regen(pegs, gid, test, cap=15):
     """Marque comme régénérants (communs) les cristaux ronds libres qui vérifient test(x, y), 15 au plus."""
@@ -517,61 +533,139 @@ def tag_regen(pegs, gid, test, cap=15):
 
 # 6-1 découverte : le cadran, pouvoirs à 12 h, 4 h et 8 h.
 imp = [(440, 200, 'power'), (550, 400, 'power'), (330, 400, 'power')]
-pts = ring(440, 340, 170, 30) + ring(440, 340, 110, 18) + [(440, 340)] + rows(120, 760, 150, 1, 0, 10) + rows(100, 780, 560, 1, 0, 12) + mirror(line(140, 260, 200, 380, 4))
-L.append(level('ch6-01', 6, 1, 'L’Horloge s’éveille', 'decouverte', 10, 20, 55, 1, 3, build(pts, imp + GUARD_IMP), locked=True, **HOR))
+pts = arc(440, 340, 170, -30, 210, 26) + ring(440, 340, 110, 18) + [(440, 340)] + rows(120, 760, 150, 1, 0, 10) + rows(100, 780, 560, 1, 0, 12) + mirror(line(140, 260, 200, 380, 4))
+L.append(level('ch6-01', 6, 1, 'L’Horloge s’éveille', 'decouverte', 14, 16, 59, 1, 3, build(pts, imp + GUARD_IMP), locked=True, **HOR))
 
 # 6-2 découverte : le pendule.
 imp = [(440, 300, 'power'), (300, 470, 'power'), (580, 470, 'power')]
 pts = line(440, 140, 440, 300, 5) + arc(440, 160, 330, 50, 130, 22) + arc(440, 160, 260, 55, 125, 15) + rows(100, 780, 200, 1, 0, 14) + arc(440, 160, 395, 58, 122, 20) + arc(130, 330, 90, 15, 165, 9) + arc(750, 330, 90, 15, 165, 9) + rows(100, 780, 565, 1, 0, 12)
-L.append(level('ch6-02', 6, 2, 'Le pendule', 'decouverte', 10, 20, 60, 1, 3, build(pts, imp + GUARD_IMP), locked=True, **HOR))
+L.append(level('ch6-02', 6, 2, 'Le pendule', 'decouverte', 14, 16, 64, 1, 3, build(pts, imp + GUARD_IMP), locked=True, **HOR))
 
 # 6-3 application (dense) : les engrenages, trois disques serrés qui se touchent.
-pts = disc(250, 300, 120, 38) + disc(630, 300, 120, 38) + disc(440, 460, 100, 38) + rows(380, 500, 170, 1, 0, 3)
-L.append(level('ch6-03', 6, 3, 'Les engrenages', 'application', 10, 25, 65, 1, 2, build(pts, GUARD_IMP), **HOR))
+pts = thick(230, 250, 140) + thick(650, 250, 140) + thick(440, 420, 120) + rows(330, 550, 170, 1, 0, 6) + rows(80, 800, 565, 1, 0, 18)
+L.append(level('ch6-03', 6, 3, 'Les engrenages', 'application', 14, 21, 69, 1, 2, build(pts, GUARD_IMP), **HOR))
 
 # 6-4 application (dense) : la ruche du temps.
 pts = hexa(70, 810, 230, 460, 46)
-L.append(level('ch6-04', 6, 4, 'La ruche du temps', 'application', 10, 25, 65, 1, 2, build(pts, GUARD_IMP), **HOR))
+L.append(level('ch6-04', 6, 4, 'La ruche du temps', 'application', 13, 25, 65, 1, 2, build(pts, GUARD_IMP), **HOR))
 
 # 6-5 application (dense) : nuée sous deux rampes.
 walls = [(220, 230, 150, 20), (660, 230, 150, -20)]
-pts = rows(70, 810, 300, 6, 42, 18) + line(330, 170, 550, 170, 6)
-L.append(level('ch6-05', 6, 5, 'Sous les aiguilles', 'application', 10, 25, 70, 1, 2, build(pts, GUARD_IMP, walls=walls), **HOR))
+pts = rows(70, 810, 340, 3, 42, 18) + line(330, 170, 550, 170, 6) + thick(440, 330, 90, 2) + arc(440, 150, 400, 40, 140, 22) + rows(100, 780, 565, 1, 0, 14)
+L.append(level('ch6-05', 6, 5, 'Sous les aiguilles', 'application', 13, 23, 72, 1, 2, build(pts, GUARD_IMP, walls=walls), **HOR))
 
 # 6-6 respiration : la pluie lente.
-pts = rows(50, 830, 190, 7, 42, 19)
-L.append(level('ch6-06', 6, 6, 'Pluie lente', 'respiration', 10, 22, 90, 1, 2, build(pts), **HOR))
+pts = arc(440, 130, 380, 25, 155, 32) + arc(440, 130, 310, 30, 150, 25) + arc(440, 130, 240, 35, 145, 18) + rows(60, 820, 150, 1, 0, 19) + arc(110, 280, 70, 15, 165, 7) + arc(770, 280, 70, 15, 165, 7) + rows(80, 800, 568, 1, 0, 18)
+L.append(level('ch6-06', 6, 6, 'Pluie lente', 'respiration', 14, 16, 75, 1, 2, build(pts), **HOR, clusters=[(440, 500), (200, 380), (680, 380), (440, 290)]))
 
 # 6-7 combinaison : la première rangée qui repousse (au-dessus d'un bol).
 pts = rows(70, 810, 160, 1, 0, 18) + arc(110, 330, 70, 15, 165, 7) + arc(770, 330, 70, 15, 165, 7) + arc(440, 250, 300, 30, 150, 22) + arc(440, 250, 230, 35, 145, 16) + rows(90, 790, 560, 1, 0, 16) + arc(440, 330, 90, 15, 165, 9)
-L.append(level('ch6-07', 6, 7, 'Ce qui repousse', 'combinaison', 10, 26, 68, 1, 2,
+L.append(level('ch6-07', 6, 7, 'Ce qui repousse', 'combinaison', 14, 22, 72, 1, 2,
                tag_regen(build(pts, GUARD_IMP), 'pousse', lambda x, y: y < 170), decor=[regen('pousse')], **HOR))
 
 # 6-8 combinaison : deux haies qui repoussent devant des nids.
 pts = line(110, 280, 330, 280, 6) + line(550, 280, 770, 280, 6) + arc(220, 380, 110, 15, 165, 12) + arc(660, 380, 110, 15, 165, 12) + arc(220, 380, 65, 30, 150, 6) + arc(660, 380, 65, 30, 150, 6) + rows(70, 810, 160, 2, 40, 18) + rows(120, 760, 565, 1, 0, 15) + line(440, 300, 440, 500, 4)
-L.append(level('ch6-08', 6, 8, 'Les haies', 'combinaison', 10, 26, 70, 1, 2,
+L.append(level('ch6-08', 6, 8, 'Les haies', 'combinaison', 15, 22, 74, 1, 2,
                tag_regen(build(pts, GUARD_IMP), 'haie', lambda x, y: abs(y - 280) < 3), decor=[regen('haie')], **HOR))
 
 # 6-9 combinaison : couronne qui repousse autour d'un cœur de nuée.
-pts = ring(440, 360, 180, 30) + disc(440, 360, 110, 34) + rows(70, 810, 140, 1, 0, 18) + arc(110, 470, 70, 15, 165, 7) + arc(770, 470, 70, 15, 165, 7)
-L.append(level('ch6-09', 6, 9, 'La couronne', 'combinaison', 10, 26, 75, 1, 2,
+pts = ring(440, 360, 180, 30) + thick(440, 330, 120) + rows(70, 810, 140, 1, 0, 18) + rows(80, 800, 568, 1, 0, 18) + arc(110, 470, 70, 15, 165, 7) + arc(770, 470, 70, 15, 165, 7)
+L.append(level('ch6-09', 6, 9, 'La couronne', 'combinaison', 15, 22, 79, 1, 2,
                tag_regen(build(pts, GUARD_IMP), 'couronne', lambda x, y: abs(math.hypot(x - 440, y - 360) - 180) < 3), decor=[regen('couronne')], **HOR))
 
 # 6-10 maîtrise (dense) : ruche dont la bordure du haut repousse.
 pts = hexa(70, 810, 300, 545, 46)
-L.append(level('ch6-10', 6, 10, 'Le temps têtu', 'maitrise', 10, 27, 75, 1, 2,
+L.append(level('ch6-10', 6, 10, 'Le temps têtu', 'maitrise', 14, 23, 79, 1, 2,
                tag_regen(build(pts, GUARD_IMP), 'bord', lambda x, y: y < 315), decor=[regen('bord')], **HOR))
 
 # 6-11 maîtrise (dense) : deux engrenages denses et leurs dents qui repoussent.
-pts = disc(260, 350, 130, 38) + disc(620, 350, 130, 38) + ring(260, 350, 175, 14) + ring(620, 350, 175, 14) + rows(330, 550, 150, 1, 0, 6)
-L.append(level('ch6-11', 6, 11, 'Les rouages', 'maitrise', 10, 27, 80, 1, 2,
+pts = thick(260, 330, 135) + thick(620, 330, 135) + ring(260, 350, 175, 14) + ring(620, 350, 175, 14) + rows(70, 810, 130, 2, 36, 18) + rows(80, 800, 568, 1, 0, 18)
+L.append(level('ch6-11', 6, 11, 'Les rouages', 'maitrise', 15, 23, 84, 1, 2,
                tag_regen(build(pts, GUARD_IMP_LIGHT), 'dents', lambda x, y: min(abs(math.hypot(x - 260, y - 350) - 175), abs(math.hypot(x - 620, y - 350) - 175)) < 3), decor=[regen('dents')], **HOR))
 
 # 6-12 Grande Constellation : le Grand Cadran.
 walls = [(300, 240, 120, 25), (580, 240, 120, -25)]
-pts = ring(440, 380, 175, 32) + ring(440, 380, 115, 20) + ring(440, 380, 55, 8) + rows(70, 810, 140, 2, 40, 18) + arc(110, 420, 70, 15, 165, 7) + arc(770, 420, 70, 15, 165, 7)
-L.append(level('ch6-12', 6, 12, 'Le Grand Cadran', 'grande-constellation', 12, 27, 79, 1, 2,
-               tag_regen(build(pts, GUARD_IMP_LIGHT, walls=walls), 'cadran', lambda x, y: abs(math.hypot(x - 440, y - 380) - 115) < 3), decor=[regen('cadran')], **HOR))
+pts = thick(210, 320, 130, 2) + thick(670, 320, 130, 2) + arc(440, 380, 110, 15, 165, 12) + arc(440, 380, 65, 30, 150, 6) + rows(70, 810, 140, 1, 0, 18) + rows(80, 800, 568, 1, 0, 18) + arc(110, 420, 70, 15, 165, 7) + arc(770, 420, 70, 15, 165, 7)
+L.append(level('ch6-12', 6, 12, 'Le Grand Cadran', 'grande-constellation', 14, 23, 78, 1, 2,
+               tag_regen(build(pts, GUARD_IMP_LIGHT, walls=walls), 'cadran', lambda x, y: abs(math.hypot(x - 440, y - 380) - 110) < 3), decor=[regen('cadran')], **HOR))
+
+# ---------- CHAPITRE 7 : Grelot (orbe éclair), élément : combinaisons de deux (niveaux 7+) ----------
+# 7-3 à 7-5 rappellent un élément connu, seul ; les combinaisons arrivent à 7-7.
+GRE = dict(companion='grelot')
+def rays(angles, r0, r1, n):
+    """Rayons issus du canon : l'éclair du Grelot les perce en ligne droite."""
+    return [p for a in angles for p in line(440 + r0*math.cos(math.radians(a)), r0*math.sin(math.radians(a)), 440 + r1*math.cos(math.radians(a)), r1*math.sin(math.radians(a)), n)]
+
+# 7-1 découverte : les rayons, un pouvoir au bout de trois d'entre eux.
+imp = [(440 + 420*math.cos(math.radians(a)), 420*math.sin(math.radians(a)), 'power') for a in (70, 90, 110)]
+pts = rays((70, 90, 110), 170, 380, 8) + thick(170, 250, 120, 2) + thick(710, 250, 120, 2) + arc(150, 470, 90, 15, 165, 9) + arc(730, 470, 90, 15, 165, 9) + rows(220, 660, 565, 1, 0, 10)
+L.append(level('ch7-01', 7, 1, 'Grelot tinte', 'decouverte', 14, 16, 59, 1, 3, build(pts, imp + GUARD_IMP), locked=True, **GRE))
+
+# 7-2 découverte : les cloches, trois bols épais.
+imp = [(200, 340, 'power'), (680, 340, 'power'), (440, 470, 'power')]
+pts = thick(200, 230, 130) + thick(680, 230, 130) + thick(440, 360, 130) + rows(100, 780, 150, 1, 0, 13)
+L.append(level('ch7-02', 7, 2, 'Les cloches', 'decouverte', 13, 20, 60, 1, 3, build(pts, imp + GUARD_IMP), locked=True, **GRE))
+
+# 7-3 application (rappel : roue) : une roue lente entre deux bols.
+pts = rows(60, 820, 150, 2, 44, 18) + thick(150, 400, 110, 2) + thick(730, 400, 110, 2) + rows(260, 620, 560, 1, 0, 9)
+g = [('roue', 440, 360, ring(440, 360, 120, 16) + ring(440, 360, 60, 8, phase=20), None)]
+L.append(level('ch7-03', 7, 3, 'Souvenir de roue', 'application', 12, 24, 65, 1, 2, build(pts, GUARD_IMP, groups=g), decor=[rot('roue', 440, 360, 15)], **GRE))
+
+# 7-4 application (rappel : orbites) : deux lunes autour de deux bols.
+g = []; dec = []
+pts = rows(60, 820, 150, 2, 44, 18) + rows(100, 780, 560, 1, 0, 16) + line(440, 230, 440, 480, 5)
+for k, cx in enumerate((230, 650)):
+    pts += thick(cx, 330, 55, 1) + arc(cx, 330, 135, 15, 165, 13)
+    gg, dd = moons(f'lune{k+1}', cx, 330, 90, 3, 6, 1 if k == 0 else -1); g.append(gg); dec.append(dd)
+L.append(level('ch7-04', 7, 4, 'Souvenir de lunes', 'application', 13, 22, 67, 1, 2, build(pts, GUARD_IMP, groups=g), decor=dec, **GRE))
+
+# 7-5 application (rappel : aimant) : un aimant au-dessus d'un champ de bols.
+pts = hole(rows(60, 820, 150, 2, 40, 18) + thick(200, 380, 120) + thick(680, 380, 120) + thick(440, 440, 100, 2) + rows(100, 780, 565, 1, 0, 16), 440, 280, 45)
+L.append(level('ch7-05', 7, 5, 'Souvenir d’aimant', 'application', 13, 21, 74, 1, 2, build(pts, GUARD_IMP), decor=[mag('aimant', 440, 280, 120, 1.2)], **GRE))
+
+# 7-6 respiration : grands bols et pluie.
+pts = arc(440, 150, 360, 22, 158, 32) + arc(440, 150, 290, 28, 152, 24) + arc(200, 220, 100, 15, 165, 10) + arc(680, 220, 100, 15, 165, 10) + arc(440, 260, 110, 15, 165, 11) + rows(60, 820, 140, 1, 0, 19) + rows(80, 800, 568, 1, 0, 18)
+L.append(level('ch7-06', 7, 6, 'Carillon', 'respiration', 13, 16, 75, 1, 2, build(pts), **GRE, clusters=[(440, 500), (160, 330), (720, 330), (440, 370)]))
+
+# 7-7 combinaison : roue + aimant (l'aimant au centre de la roue).
+pts = hole(rows(60, 820, 150, 2, 44, 18) + thick(130, 420, 90, 2) + thick(750, 420, 90, 2) + rows(240, 640, 565, 1, 0, 9), 440, 350, 45)
+g = [('roue', 440, 350, ring(440, 350, 130, 18) + ring(440, 350, 85, 12, phase=15), None)]
+L.append(level('ch7-07', 7, 7, 'La roue aimantée', 'combinaison', 13, 24, 72, 1, 2, build(pts, GUARD_IMP, groups=g), decor=[rot('roue', 440, 350, 14), mag('coeur', 440, 350, 100, 1.2)], **GRE))
+
+# 7-8 combinaison : orbites + portail (la porte mène entre deux lunes).
+A, B = (120, 230), (440, 400)
+g = []; dec = []
+pts = holes(rows(200, 820, 150, 3, 40, 15) + thick(440, 400, 130, 2) + rows(100, 780, 565, 1, 0, 16) + arc(140, 420, 80, 15, 165, 8) + arc(740, 440, 80, 15, 165, 8), [A, B])
+for k, cx in enumerate((250, 630)):
+    gg, dd = moons(f'lune{k+1}', cx, 300, 70, 2, 5, 1 if k == 0 else -1); g.append(gg); dec.append(dd)
+pts += thick(630, 300, 50, 1)
+L.append(level('ch7-08', 7, 8, 'La porte des lunes', 'combinaison', 13, 24, 69, 1, 2, build(pts, GUARD_IMP_LIGHT, groups=g), decor=dec + [portal('porte', A, B)], **GRE))
+
+# 7-9 combinaison : portail + régénération (la haie qui repousse cache la porte).
+A, B = (440, 300), (760, 470)
+pts = holes(rows(60, 820, 150, 3, 36, 18) + line(330, 260, 550, 260, 6) + thick(200, 400, 120) + thick(680, 380, 100, 2) + rows(100, 780, 565, 1, 0, 16), [A, B])
+L.append(level('ch7-09', 7, 9, 'La porte cachée', 'combinaison', 14, 22, 79, 1, 2,
+               tag_regen(build(pts, GUARD_IMP), 'haie', lambda x, y: abs(y - 260) < 3), decor=[regen('haie'), portal('porte', A, B)], **GRE))
+
+# 7-10 maîtrise : aimants + orbites.
+g = []; dec = [mag('m1', 220, 260, 110, 1.2), mag('m2', 660, 260, 110, 1.2)]
+pts = holes(rows(60, 820, 140, 1, 0, 18) + hexa(80, 800, 400, 545, 44) + line(440, 200, 440, 330, 3), [(220, 260), (660, 260)])
+for k, cx in enumerate((220, 660)):
+    gg, dd = moons(f'lune{k+1}', cx, 260, 80, 3, 6, 1 if k == 0 else -1); g.append(gg); dec.append(dd)
+L.append(level('ch7-10', 7, 10, 'Les lunes aimantées', 'maitrise', 13, 27, 71, 1, 2, build(pts, GUARD_IMP, groups=g), decor=dec, **GRE))
+
+# 7-11 maîtrise : roues + régénération.
+pts = rows(60, 820, 150, 2, 40, 18) + line(440, 230, 440, 500, 6) + rows(80, 800, 565, 1, 0, 18)
+g = [('g', 230, 370, ring(230, 370, 125, 16) + ring(230, 370, 65, 8), None), ('d', 650, 370, ring(650, 370, 125, 16) + ring(650, 370, 65, 8), None)]
+L.append(level('ch7-11', 7, 11, 'Le carillon têtu', 'maitrise', 14, 23, 84, 1, 2,
+               tag_regen(build(pts, GUARD_IMP, groups=g), 'haut', lambda x, y: y < 160), decor=[rot('g', 230, 370, 15), rot('d', 650, 370, 15, -1), regen('haut')], **GRE))
+
+# 7-12 Grande Constellation : le Beffroi, roue + portails, deux auvents.
+walls = [(190, 260, 140, 20), (690, 260, 140, -20)]
+A1, B1, A2, B2 = (80, 400), (590, 520), (800, 400), (290, 520)
+pts = holes(rows(60, 820, 140, 3, 38, 18) + thick(290, 440, 110, 2) + thick(590, 440, 110, 2) + rows(80, 800, 568, 1, 0, 18), [A1, B1, A2, B2])
+g = [('beffroi', 440, 300, ring(440, 300, 90, 12) + ring(440, 300, 45, 6), None)]
+L.append(level('ch7-12', 7, 12, 'Le Beffroi', 'grande-constellation', 13, 27, 79, 1, 2, build(pts, GUARD_IMP_LIGHT, walls=walls, groups=g), decor=[rot('beffroi', 440, 300, 12), portal('b1', A1, B1), portal('b2', A2, B2)], **GRE))
 
 out = sys.argv[1] if len(sys.argv) > 1 else 'out'
 os.makedirs(out, exist_ok=True)
