@@ -282,4 +282,22 @@ describe('CompanionBrain : sommeil forcé (pause)', () => {
     expect(b.state.sleeping).toBe(false);
     expect(b.state.reaction).toBe('pip_sursaut');
   });
+
+  it('orbe coincée : pose tenue avec souffle, lâchée tout de suite par orbe_debloquee', () => {
+    const b = new CompanionBrain(PIP, seeded());
+    b.setPhase('flight');
+    b.onEvent('orbe_coincee');
+    let pose = run(b, 3);
+    expect(b.state.reaction).toBe('pip_souffle_orbe');
+    expect(pose.reach).toBeCloseTo(1);
+    // Même 0,2 s après (sous le délai minimal entre réactions), la suite part.
+    b.onEvent('orbe_coincee');
+    run(b, 0.2);
+    b.onEvent('orbe_debloquee');
+    pose = run(b, 0.1);
+    expect(b.state.reaction).toBe('pip_degonfle');
+    expect(pose.reach).toBe(0);
+    run(b, 1.5);
+    expect(b.state.reaction).toBeNull();
+  });
 });

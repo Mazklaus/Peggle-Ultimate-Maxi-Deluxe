@@ -30,6 +30,7 @@ const EVENTS: GameEventName[] = [
   'echec',
   'inactivite',
   'orbe_coincee',
+  'orbe_debloquee',
 ];
 
 const PAYLOAD = {

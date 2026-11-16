@@ -33,6 +33,7 @@ export const PRIORITY: Record<ReactionTrigger | 'idle', number> = {
   chaine_longue: 65,
   pouvoir_active: 60,
   orbe_coincee: 58,
+  orbe_debloquee: 58,
   dernier_coeur: 55,
   dernier_orbe: 50,
   orbe_recupere: 45,
@@ -297,6 +298,12 @@ export class CompanionBrain {
       this.phase === 'flight' &&
       prio < PRIORITY.presque &&
       this.time - this.lastMajorAt < BRAIN_TUNING.majorMinGapSeconds;
+    // Une pose tenue (orbe coincée) cède à sa suite de même priorité, sans délai minimal.
+    const releasesHold = cur.def.hold && prio === curPrio && next.trigger !== cur.trigger;
+    if (releasesHold) {
+      this.begin(next);
+      return;
+    }
     if (prio > curPrio && !rateLimited) {
       if (cur.trigger === 'idle' || cur.trigger === 'inactivite') {
         // Un idle interrompu se termine en accéléré, puis la réaction démarre.
@@ -438,6 +445,7 @@ export class CompanionBrain {
       shake: 0,
       glow: e * 0.8,
       flush: 0,
+      reach: 0,
       excitement: e,
       bursts: [],
       cry: null,
@@ -544,6 +552,7 @@ export class CompanionBrain {
       pose.shake += s.shake;
       if (s.glow !== undefined) pose.glow = Math.max(pose.glow, s.glow);
       if (s.flush !== undefined) pose.flush = Math.max(pose.flush, s.flush);
+      if (s.reach !== undefined) pose.reach = s.reach * wc;
     }
     return pose;
   }

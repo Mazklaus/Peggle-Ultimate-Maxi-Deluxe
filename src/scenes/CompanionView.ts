@@ -44,6 +44,7 @@ const REACTION_EVENTS: ReactionTrigger[] = [
   'echec',
   'inactivite',
   'orbe_coincee',
+  'orbe_debloquee',
 ];
 
 interface Particle {
@@ -577,6 +578,7 @@ export class CompanionView {
   private drawProp(pose: Pose, c: { x: number; y: number }): void {
     const g = this.gfx;
     const t = this.time;
+    if (pose.reach > 0.01 && this.def.reach) this.drawReach(pose, c);
     switch (pose.prop) {
       case 'juggle': {
         const speed = 4 + pose.propT * 14;
@@ -603,6 +605,68 @@ export class CompanionView {
       case 'beam': {
         g.fillStyle(0xfff6e0, 0.25);
         g.fillTriangle(c.x, c.y - 4, MARGIN.maxX, c.y - 40, MARGIN.maxX, c.y + 40);
+        break;
+      }
+    }
+  }
+
+  /** Accessoire tendu vers l'orbe coincée, orienté par le regard (DA §6). */
+  private drawReach(pose: Pose, c: { x: number; y: number }): void {
+    const g = this.gfx;
+    const r = pose.reach;
+    const t = this.time;
+    const l = pose.look;
+    const a = Math.abs(l.x) + Math.abs(l.y) > 0.1 ? Math.atan2(l.y, l.x) : 0;
+    const ca = Math.cos(a);
+    const sa = Math.sin(a);
+    // Repère local : x le long du regard, y perpendiculaire.
+    // Origine au bord du corps gonflé (les joues), pas en son centre.
+    const edge = BODY_R * Math.max(pose.body.sx, pose.body.sy) - BODY_R;
+    const at = (x: number, y: number) => ({
+      x: c.x + (x + edge) * ca - y * sa,
+      y: c.y + (x + edge) * sa + y * ca,
+    });
+    switch (this.def.reach) {
+      case 'blow':
+        for (let i = 0; i < 3; i++) {
+          const o = (t * 6 + i / 3) % 1;
+          const x = BODY_R + 6 + o * 50 * r;
+          const p0 = at(x, (i - 1) * 9);
+          const p1 = at(x + 16 * r, (i - 1) * 11);
+          g.lineStyle(3.4, 0xf4f1ff, (1 - o) * r * 0.95);
+          g.lineBetween(p0.x, p0.y, p1.x, p1.y);
+        }
+        break;
+      case 'mist': {
+        g.lineStyle(2, 0x7ee0c6, 0.8);
+        g.beginPath();
+        for (let x = 0; x <= 60 * r; x += 4) {
+          const p = at(BODY_R + x, Math.sin(x / 9 + t * 8) * 3);
+          if (x === 0) g.moveTo(p.x, p.y);
+          else g.lineTo(p.x, p.y);
+        }
+        g.strokePath();
+        const tip = at(BODY_R + 60 * r, 0);
+        g.fillStyle(0xc4f5e7, 0.9).fillCircle(tip.x, tip.y, 3);
+        break;
+      }
+      case 'spring': {
+        g.lineStyle(2.6, 0xb9a574, 1);
+        g.beginPath();
+        const len = 70 * r;
+        for (let i = 0; i <= 10; i++) {
+          const p = at(BODY_R + len * (i / 10), i % 2 ? -7 : 7);
+          if (i === 0) g.moveTo(p.x, p.y);
+          else g.lineTo(p.x, p.y);
+        }
+        g.strokePath();
+        const tip = at(BODY_R + 6 + len, 0);
+        g.fillStyle(0xffe45c, 1).fillCircle(tip.x, tip.y, 6);
+        break;
+      }
+      case 'feather': {
+        const p = at(BODY_R + 45 * r, Math.sin(t * 14) * 5 * r);
+        g.fillStyle(0xf2f4ff, 1).fillEllipse(p.x, p.y, 36, 12);
         break;
       }
     }

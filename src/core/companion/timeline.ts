@@ -25,14 +25,16 @@ export interface Sample {
   shake: number;
   glow?: number;
   flush?: number;
+  reach?: number;
 }
 
 const easeInOut = (u: number) => (u < 0.5 ? 2 * u * u : 1 - (-2 * u + 2) ** 2 / 2);
 
-type NumField = keyof BodyPose | 'shake' | 'glow' | 'flush';
+type NumField = keyof BodyPose | 'shake' | 'glow' | 'flush' | 'reach';
 
 function readNum(k: Keyframe, field: NumField): number | undefined {
-  if (field === 'shake' || field === 'glow' || field === 'flush') return k[field];
+  if (field === 'shake' || field === 'glow' || field === 'flush' || field === 'reach')
+    return k[field];
   return k.body?.[field];
 }
 
@@ -91,6 +93,7 @@ export function sampleReaction(def: ReactionDef, p: number): Sample {
     shake: numField(keys, 'shake', p, 0),
     glow: defines(keys, 'glow') ? numField(keys, 'glow', p, 0) : undefined,
     flush: defines(keys, 'flush') ? numField(keys, 'flush', p, 0) : undefined,
+    reach: defines(keys, 'reach') ? numField(keys, 'reach', p, 0) : undefined,
   };
 }
 

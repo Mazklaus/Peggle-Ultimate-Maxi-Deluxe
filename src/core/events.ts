@@ -34,6 +34,8 @@ export interface GameEventMap {
   echec: { score: number };
   /** Orbe immobile : l'anti-blocage la pousse (essai 1, 2) ou la dissout (3). */
   orbe_coincee: { attempt: number };
+  /** L'orbe coincée repart (ou se dissout) : l'Astre lâche sa pose. */
+  orbe_debloquee: Empty;
   /** 8 s sans tirer. */
   inactivite: Empty;
   // Événements fins (son, UI, Astres)

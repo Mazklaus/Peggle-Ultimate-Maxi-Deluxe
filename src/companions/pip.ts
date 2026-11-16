@@ -222,20 +222,47 @@ const presque: ReactionDef[] = [
   ]),
 ];
 
-/** Orbe coincée : Pip gonfle les joues et souffle dessus pour la décoincer (demande GD). */
+/**
+ * Orbe coincée (DA specs-astres.md §6, astres-rig.js) : Pip gonfle les joues et souffle
+ * dessus, pose tenue jusqu'à orbe_debloquee ; le souffle (reach) suit son regard.
+ */
 const orbe_coincee: ReactionDef[] = [
-  r('pip_souffle_orbe', 1.3, [
-    { t: 0, mouth: 'puffed', eyes: 'squint', body: { sx: 1.25, sy: 1.15 }, flush: 0.8 },
-    { t: 0.35, body: { sx: 1.35, sy: 1.2, y: -2 }, flush: 1 },
+  r(
+    'pip_souffle_orbe',
+    1.2,
+    [
+      { t: 0, mouth: 'puffed', eyes: 'squint', arms: 'wide', reach: 0 },
+      { t: 0.29, body: { sx: 1.5, sy: 1.45 }, flush: 0.7 },
+      { t: 0.42, shake: 0 },
+      { t: 0.5, body: { sx: 1.6, sy: 1.55 }, reach: 0 },
+      { t: 0.54, mouth: 'o', shake: 1.2, flush: 1 },
+      { t: 0.58, reach: 1 },
+      { t: 1, body: { sx: 1.55, sy: 1.5 }, reach: 1, shake: 1.2 },
+    ],
+    { hold: true },
+  ),
+];
+
+/** L'orbe repart : Pip se dégonfle en toupie, étourdi, puis tout fier. */
+const orbe_debloquee: ReactionDef[] = [
+  r('pip_degonfle', 1.3, [
     {
-      t: 0.5,
-      mouth: 'o',
-      body: { sx: 0.85, sy: 0.95, x: 8 },
-      burst: { kind: 'smoke', count: 8 },
-      flush: 0,
+      t: 0,
+      eyes: 'spiral',
+      mouth: 'open',
+      body: { sx: 1.55, sy: 1.5 },
+      burst: { kind: 'smoke', count: 3 },
     },
-    { t: 0.75, eyes: 'wide', mouth: 'grin', arms: 'wide', symbol: '!' },
-    { t: 1, body: { sx: 1, sy: 1, x: 0 }, arms: 'rest', symbol: null },
+    { t: 0.12, body: { x: 14, y: -12 } },
+    { t: 0.23, body: { x: -12, y: -24 } },
+    { t: 0.38, body: { sx: 0.85, sy: 0.85, x: 0, rot: Math.PI * 3 } },
+    { t: 0.39, body: { rot: Math.PI } },
+    { t: 0.54, body: { y: 0 } },
+    { t: 0.62, body: { sx: 0.9, sy: 0.9, rot: Math.PI * 2 } },
+    { t: 0.63, body: { rot: 0 } },
+    { t: 0.66, eyes: 'open', mouth: 'grin', burst: { kind: 'sparkle', count: 2 } },
+    { t: 0.77, body: { sx: 1.1, sy: 1.15 }, arms: 'up' },
+    { t: 1, body: { sx: 1, sy: 1 }, arms: 'rest' },
   ]),
 ];
 
@@ -534,6 +561,7 @@ export const PIP: CompanionDef = {
   color: 0xffe45c,
   colorLight: 0xfff6b8,
   colorDark: 0xe0b92e,
+  reach: 'blow',
   idleShort,
   idleLong,
   reactions: {
@@ -542,6 +570,7 @@ export const PIP: CompanionDef = {
     presque,
     pouvoir_active,
     orbe_coincee,
+    orbe_debloquee,
     final_ralenti,
     gros_coup,
     chaine_longue,
