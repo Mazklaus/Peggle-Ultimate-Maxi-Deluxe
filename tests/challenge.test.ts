@@ -1,4 +1,3 @@
-import { TUNING } from '../src/core/tuning';
 import { describe, expect, it } from 'vitest';
 import {
   CHALLENGE_RULES,
@@ -23,7 +22,9 @@ describe('format du champ challenge', () => {
       challengeErrors({ goal: 'tir_unique', value: 6, constraint: 'sans_receptacle' }),
     ).toEqual([]);
     expect(challengeErrors({ goal: 'nettoyage' })).toEqual([]);
-    expect(challengeErrors({ goal: 'chaine' })).toEqual([]);
+    expect(challengeErrors({ goal: 'chaine', value: 20 })).toEqual([]);
+    // Pas de valeur par défaut pour chaine (GD) : chaque défi donne la sienne.
+    expect(challengeErrors({ goal: 'chaine' })).toHaveLength(1);
     expect(
       challengeErrors({ goal: 'score', value: 50000, constraint: 'astre_impose', astre: 'volte' }),
     ).toEqual([]);
@@ -62,9 +63,9 @@ describe('suivi des défis', () => {
     expect(t.shotEnded(2, snap({ heartsLeft: 2 }))).toBe('failed');
   });
 
-  it('chaine : par défaut, le seuil de chaîne du tuning', () => {
-    const t = new ChallengeTracker({ goal: 'chaine' });
-    const n = TUNING.chainBounces;
+  it('chaine : un tir d’au moins N contacts de cristaux', () => {
+    const n = 20;
+    const t = new ChallengeTracker({ goal: 'chaine', value: n });
     expect(t.target).toBe(n);
     expect(t.shotEnded(n - 1, snap())).toBe('pending');
     expect(t.shotEnded(n, snap())).toBe('reached');

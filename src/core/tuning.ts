@@ -14,9 +14,9 @@ export const TUNING = {
   /**
    * Seuil de chaîne (GD) : rebonds de chaîne = contacts avec un cristal, allumé ou non (murs
    * et bords exclus). Sert à chaine_longue, au début du bonus de chaîne et aux défis chaine.
-   * Provisoire : le Level Designer le cale au simulateur (~10 % des meilleurs tirs).
+   * 18 = 90e centile des tirs mesurés par le Level Designer (orbe à 67,5 px/s au moins).
    */
-  chainBounces: 10,
+  chainBounces: 18,
   /** Bonus de chaîne : +10 % du score du tir par rebond au-delà du seuil, au plus +100 %. */
   chainBonus: { perBounce: 0.1, max: 1 },
   /** Multiplicateurs, débloqués à 25 / 50 / 75 / 90 % de cœurs brisés. */
