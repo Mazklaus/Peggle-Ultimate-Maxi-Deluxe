@@ -271,3 +271,15 @@ describe('CompanionBrain', () => {
     expect(m.state.reaction).toBeNull();
   });
 });
+
+describe('CompanionBrain : sommeil forcé (pause)', () => {
+  it('s’endort sur demande et se réveille en sursaut', () => {
+    const b = new CompanionBrain(PIP, seeded());
+    b.setSleeping(true);
+    run(b, 1);
+    expect(b.state.sleeping).toBe(true);
+    b.setSleeping(false);
+    expect(b.state.sleeping).toBe(false);
+    expect(b.state.reaction).toBe('pip_sursaut');
+  });
+});

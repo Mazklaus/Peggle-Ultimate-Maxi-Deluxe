@@ -105,8 +105,15 @@ export class CompanionView {
     this.brain = new CompanionBrain(def, rng);
     this.fx = scene.add.graphics().setDepth(20);
     this.gfx = scene.add.graphics().setDepth(21);
-    this.symbolText = scene.add
-      .text(anchor.x, anchor.y - 100, '', {
+    this.symbolText = CompanionView.makeSymbolText(scene, anchor).setDepth(22);
+  }
+
+  private static makeSymbolText(
+    scene: Phaser.Scene,
+    at: { x: number; y: number },
+  ): Phaser.GameObjects.Text {
+    return scene.add
+      .text(at.x, at.y - 100, '', {
         fontFamily: 'sans-serif',
         fontSize: '28px',
         fontStyle: 'bold',
@@ -114,8 +121,27 @@ export class CompanionView {
         stroke: '#1A1433',
         strokeThickness: 5,
       })
-      .setOrigin(0.5)
-      .setDepth(22);
+      .setOrigin(0.5);
+  }
+
+  /**
+   * Change la scène qui dessine l'Astre (ex. calque au-dessus des overlays de fin).
+   * Le cerveau, la position et les particules sont conservés.
+   */
+  reparent(scene: Phaser.Scene): void {
+    if (scene === this.scene) return;
+    const depth = this.fx.depth;
+    const visible = this.gfx.visible;
+    this.travel?.stop();
+    this.fx.destroy();
+    this.gfx.destroy();
+    this.symbolText.destroy();
+    this.scene = scene;
+    this.fx = scene.add.graphics();
+    this.gfx = scene.add.graphics();
+    this.symbolText = CompanionView.makeSymbolText(scene, this.anchor);
+    this.setDepth(depth);
+    this.setVisible(visible);
   }
 
   /** Écoute le bus de jeu (à appeler une fois ; detach() au shutdown de la scène). */
@@ -172,6 +198,11 @@ export class CompanionView {
     this.fx.setDepth(depth);
     this.gfx.setDepth(depth + 1);
     this.symbolText.setDepth(depth + 2);
+  }
+
+  /** Pause : l'Astre s'endort ; il se réveille (sursaut) à la reprise. */
+  setSleeping(on: boolean): void {
+    this.brain.setSleeping(on);
   }
 
   setVisible(on: boolean): void {
