@@ -11,6 +11,8 @@ export interface DebugTarget {
   keepHearts(n: number): void;
   /** Le prochain tir allume tous les cœurs restants (tester le final). */
   forceFinal(): void;
+  /** Termine le niveau tout de suite (tester les overlays de fin). */
+  endNow(won: boolean): void;
   status(): string;
 }
 
@@ -66,6 +68,8 @@ export function mountDebugPanel(target: DebugTarget): () => void {
   add('cœurs=1', () => target.keepHearts(1));
   add('cœurs=3', () => target.keepHearts(3));
   add('tir final', () => target.forceFinal());
+  add('fin : victoire', () => target.endNow(true));
+  add('fin : échec', () => target.endNow(false));
   const status = document.createElement('span');
   status.style.cssText = 'flex-basis:100%;font-family:monospace';
   panel.appendChild(status);
