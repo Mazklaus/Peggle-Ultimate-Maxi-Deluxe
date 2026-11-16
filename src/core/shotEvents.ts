@@ -3,10 +3,12 @@
  * Logique pure : la scène appelle ces méthodes et relaie les noms renvoyés sur le bus.
  */
 import type { CrystalKind } from './level';
+import { TUNING } from './tuning';
 
 export const EVENT_THRESHOLDS = {
   bigHitCrystals: 5,
-  longChainBounces: 10,
+  /** Seuil unique de chaîne, dans le tuning. */
+  longChainBounces: TUNING.chainBounces,
   longChainShotScore: 3000,
   nearMissMaxHearts: 3,
   nearMissEdgePx: 12,
@@ -117,7 +119,7 @@ export class ShotTracker {
     return out;
   }
 
-  /** Rebond (cristal déjà allumé ou mur) : compte pour chaine_longue. */
+  /** Rebond de chaîne (contact avec un cristal, allumé ou non) : compte pour chaine_longue. */
   bounced(): DetectedEvent[] {
     this.bounces += 1;
     if (!this.chainSent && this.bounces >= this.t.longChainBounces) {

@@ -1,3 +1,4 @@
+import { TUNING } from '../src/core/tuning';
 import { describe, expect, it } from 'vitest';
 import {
   CHALLENGE_RULES,
@@ -61,11 +62,12 @@ describe('suivi des défis', () => {
     expect(t.shotEnded(2, snap({ heartsLeft: 2 }))).toBe('failed');
   });
 
-  it('chaine : un tir d’au moins 15 rebonds par défaut', () => {
+  it('chaine : par défaut, le seuil de chaîne du tuning', () => {
     const t = new ChallengeTracker({ goal: 'chaine' });
-    expect(t.target).toBe(15);
-    expect(t.shotEnded(12, snap())).toBe('pending');
-    expect(t.shotEnded(16, snap())).toBe('reached');
+    const n = TUNING.chainBounces;
+    expect(t.target).toBe(n);
+    expect(t.shotEnded(n - 1, snap())).toBe('pending');
+    expect(t.shotEnded(n, snap())).toBe('reached');
   });
 
   it('pouvoir : P activations', () => {

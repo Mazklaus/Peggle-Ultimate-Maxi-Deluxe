@@ -11,8 +11,14 @@ export const TUNING = {
   points: { common: 10, heart: 100, bonus: 500, power: 50, wall: 0 },
   /** Bonus de fin par orbe restant (GD reglages-jalon1). */
   orbBonus: 1000,
-  /** Bonus de chaîne : +10 % du score du tir par rebond au-delà de 10, au plus +100 %. */
-  chainBonus: { fromBounces: 10, perBounce: 0.1, max: 1 },
+  /**
+   * Seuil de chaîne (GD) : rebonds de chaîne = contacts avec un cristal, allumé ou non (murs
+   * et bords exclus). Sert à chaine_longue, au début du bonus de chaîne et aux défis chaine.
+   * Provisoire : le Level Designer le cale au simulateur (~10 % des meilleurs tirs).
+   */
+  chainBounces: 10,
+  /** Bonus de chaîne : +10 % du score du tir par rebond au-delà du seuil, au plus +100 %. */
+  chainBonus: { perBounce: 0.1, max: 1 },
   /** Multiplicateurs, débloqués à 25 / 50 / 75 / 90 % de cœurs brisés. */
   multiplierSteps: [1, 2, 3, 5, 10],
   multiplierThresholds: [0.25, 0.5, 0.75, 0.9],

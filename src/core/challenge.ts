@@ -1,4 +1,5 @@
 import type { LevelState } from './level';
+import { TUNING } from './tuning';
 
 /**
  * Défis (règles du Game Designer, regles-modes-jalon3 §1), sans Phaser : un objectif et au
@@ -41,8 +42,8 @@ export const CHALLENGE_RULES = {
   reducedOrbs: 3,
   /** Contrainte chrono : 90 s de jeu (pause exclue). */
   chronoSeconds: 90,
-  /** Objectif chaine sans valeur : 15 rebonds. */
-  defaultChain: 15,
+  /** Objectif chaine sans valeur : le seuil de chaîne du tuning. */
+  defaultChain: TUNING.chainBounces,
 };
 
 /** Valeur cible de l'objectif (0 pour nettoyage, mesuré en part de cristaux). */
