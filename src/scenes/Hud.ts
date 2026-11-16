@@ -71,6 +71,10 @@ export class GameHud {
   private starsGfx: Phaser.GameObjects.Graphics;
   private tubeGfx: Phaser.GameObjects.Graphics;
   private orbsText: Phaser.GameObjects.Text;
+  /** « +N » à côté du haut du tube : orbes au-delà des 10 cases (QA ch.2). */
+  private extraOrbsText: Phaser.GameObjects.Text;
+  /** -1 tant que le tube n'a pas été dessiné (pas de pop au premier affichage). */
+  private prevExtraOrbs = -1;
   private multText: Phaser.GameObjects.Text;
   private gaugeGfx: Phaser.GameObjects.Graphics;
   private heartsText: Phaser.GameObjects.Text;
@@ -115,6 +119,7 @@ export class GameHud {
     // Colonne gauche : tube d'orbes
     this.tubeGfx = add(scene.add.graphics());
     this.orbsText = add(scene.add.text(100, L.orbsNumberY, '', textStyle(44)).setOrigin(0.5));
+    this.extraOrbsText = add(scene.add.text(0, 0, '', textStyle(18)).setOrigin(0.5));
     add(scene.add.text(100, L.labelY, 'ORBES', LABEL(13)).setOrigin(0.5));
     // Colonne droite
     this.multText = add(scene.add.text(L.rightX, L.multY, '', textStyle(52)).setOrigin(0.5));
@@ -409,6 +414,29 @@ export class GameHud {
       } else {
         g.lineStyle(2, PALETTE.border, 0.8).strokeCircle(cx, cy, tube.slot / 2 - 2);
       }
+    }
+    // Plus d'orbes que de cases : pastille « +N » à droite de la case du haut.
+    const extra = orbs - tube.slots;
+    const topY = tube.y + tube.h - 10 - tube.slot / 2 - (tube.slots - 1) * tube.step;
+    const px = tube.x + tube.w + 22;
+    // Orbe gagné au-delà des 10 cases : petit pop de la pastille (specs UI/UX jalon 1, §1).
+    if (extra > 0 && this.prevExtraOrbs >= 0 && extra > this.prevExtraOrbs) {
+      this.scene.tweens.add({
+        targets: this.extraOrbsText,
+        scale: { from: 1.2, to: 1 },
+        duration: 150,
+        ease: 'Quad.Out',
+      });
+    }
+    this.prevExtraOrbs = extra;
+    this.extraOrbsText
+      .setVisible(extra > 0)
+      .setText(`+${extra}`)
+      .setPosition(px, topY);
+    if (extra > 0) {
+      const w = Math.max(34, this.extraOrbsText.width + 14);
+      g.fillStyle(PALETTE.panel, 0.95).fillRoundedRect(px - w / 2, topY - 13, w, 26, 13);
+      g.lineStyle(2, PALETTE.accent, 0.9).strokeRoundedRect(px - w / 2, topY - 13, w, 26, 13);
     }
   }
 
