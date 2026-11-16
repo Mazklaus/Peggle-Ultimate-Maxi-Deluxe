@@ -61,7 +61,7 @@ def build(pts, imposed=(), walls=()):
         return math.hypot(px - (x + t*c), py - (y + t*s_))
     pegs = [p for p in pegs if all(seg_d(p['x'], p['y'], x, y, w, a) >= 26 for x, y, w, a in walls)]
     for x, y, w, ang in walls:
-        if min(abs(ang) % 180, 180 - abs(ang) % 180) < 8: raise SystemExit(f'mur trop plat ({ang}°) : 8° minimum')
+        if min(abs(ang) % 90, 90 - abs(ang) % 90) < 8: raise SystemExit(f'mur trop plat ({ang}°) : 8° minimum par rapport à l\'horizontale et à la verticale')
         pegs.append({'x': round(x), 'y': round(y), 'shape': 'brick', 'w': w, 'h': 12, 'angle': ang, 'kind': 'wall'})
     return pegs
 
@@ -70,7 +70,7 @@ GUARDS = [(30, y) for y in (230, 330, 430, 530)] + [(850, y) for y in (230, 330,
 GUARD_IMP = [(x, y, 'common') for x, y in GUARDS]
 GUARD_IMP_LIGHT = [(30, 300, 'common'), (30, 460, 'common'), (850, 300, 'common'), (850, 460, 'common')]
 
-def level(id_, chapter, index, title, rhythm, orbs, hearts, commons, bonus, power, pegs, companion=None, locked=False):
+def level(id_, chapter, index, title, rhythm, orbs, hearts, commons, bonus, power, pegs, companion=None, locked=False, sym=False):
     free = [p for p in pegs if 'kind' not in p]
     imposed_power = sum(1 for p in pegs if p.get('kind') == 'power')
     imposed_common = sum(1 for p in pegs if p.get('kind') == 'common')
@@ -82,7 +82,17 @@ def level(id_, chapter, index, title, rhythm, orbs, hearts, commons, bonus, powe
     print(id_, 'surplus', extra)
     if extra:
         cand = [p for p in free if (p['x'], p['y']) not in GUARDS]
-        drop = set(id(cand[int(i*len(cand)/extra)]) for i in range(extra))
+        if sym:
+            # retrait par paires miroir (axe x = 440) pour garder la symétrie
+            def mate(q): return next((r for r in cand if r is not q and abs(880 - r['x'] - q['x']) <= 2 and abs(r['y'] - q['y']) <= 2), None)
+            left = [q for q in cand if q['x'] < 438 and mate(q)]
+            centre = [q for q in cand if abs(q['x'] - 440) <= 2]
+            drop = set()
+            for i in range(extra // 2):
+                q = left[int(i*len(left)/(extra//2))]; drop |= {id(q), id(mate(q))}
+            if extra % 2: drop.add(id(centre[len(centre)//2]))
+        else:
+            drop = set(id(cand[int(i*len(cand)/extra)]) for i in range(extra))
         pegs = [p for p in pegs if id(p) not in drop]
     stars = [700*hearts, 1200*hearts]
     return {
@@ -173,7 +183,7 @@ L.append(level('ch1-09', 1, 9, 'La cascade', 'combinaison', 10, 24, 70, 1, 2, bu
 
 # 1-10 maîtrise : grande roue pleine, rampe sous le moyeu.
 pts = arc(440, 300, 240, 5, 175, 22) + arc(440, 300, 195, 10, 170, 18) + arc(440, 300, 150, 12, 168, 14) + arc(440, 300, 105, 15, 165, 10) + arc(440, 300, 60, 20, 160, 6) + arc(440, 300, 240, 200, 340, 13) + line(440, 130, 440, 250, 4) + line(40, 260, 40, 560, 8) + line(840, 260, 840, 560, 8) + [(120, 150), (760, 150), (200, 130), (680, 130), (40, 200), (840, 200)]
-L.append(level('ch1-10', 1, 10, 'La roue du phare', 'maitrise', 10, 25, 70, 1, 2, build(pts, walls=[(412, 562, 62, -12), (468, 562, 62, 12)]), **PIP))
+L.append(level('ch1-10', 1, 10, 'La roue du phare', 'maitrise', 10, 25, 70, 1, 2, build(pts, walls=[(412, 562, 62, -12), (468, 562, 62, 12)]), sym=True, **PIP))
 
 # 1-11 maîtrise : voûte d'étoiles dense, deux coupes gardées par des rampes tournées vers le centre.
 walls = [(330, 520, 120, -25), (550, 520, 120, 25)]
