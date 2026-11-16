@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { audio } from '../audio';
 import { GAME_HEIGHT, GAME_WIDTH, PLAYFIELD, toWorld } from '../config';
 import { PIP } from '../companions/pip';
 import { debugEnabled, mountDebugPanel } from '../debug/debugPanel';
@@ -182,6 +183,11 @@ export class GameScene extends Phaser.Scene {
       this.companion?.destroy();
       this.companion = undefined;
       unmountDebug?.();
+      if (!this.ending) audio.music.stop(); // retour carte depuis la pause
+    });
+    gameEvents.emit('niveau_debut', {
+      levelId: this.sceneData.level.id,
+      chapter: this.sceneData.level.chapter,
     });
 
     this.refreshHud();
@@ -204,6 +210,7 @@ export class GameScene extends Phaser.Scene {
         this.emitAll(this.tracker.updateAiming(realDelta / 1000));
       return;
     }
+    audio.flight(Phaser.Math.Clamp((orb.y - PLAYFIELD.y) / PLAYFIELD.h, 0, 1));
     this.trackOrb(orb);
     const caught =
       !this.finalShot &&
@@ -260,14 +267,16 @@ export class GameScene extends Phaser.Scene {
     const r = shape.r;
     let view: CrystalView;
     if (c.kind === 'heart') view = this.add.rectangle(x, y, r * 1.8, r * 1.8, color);
-    else if (c.kind === 'power')
-      view = this.add.rectangle(x, y, r * 1.6, r * 1.6, color).setAngle(45);
+    else if (c.kind === 'power') view = this.add.rectangle(x, y, r * 1.6, r * 1.6, color);
     else view = this.add.circle(x, y, r, color);
     this.matter.add.gameObject(view, {
       isStatic: true,
       label,
       shape: { type: 'circle', radius: r },
     });
+    // L'angle d'affichage suit celui du corps Matter : on tourne le corps (losange).
+    if (c.kind === 'power')
+      this.matter.body.setAngle(view.body as MatterJS.BodyType, Math.PI / 4, false);
     return view;
   }
 

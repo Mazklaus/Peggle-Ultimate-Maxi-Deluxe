@@ -7,8 +7,10 @@ export default defineConfig({
     outDir: 'dist',
     sourcemap: true,
     chunkSizeWarningLimit: 2000,
-    // Deux pages : le jeu et l'éditeur de niveaux.
-    rollupOptions: { input: { main: 'index.html', editor: 'editor.html' } },
+    // Trois pages : le jeu, l'éditeur de niveaux et le banc d'écoute audio.
+    rollupOptions: {
+      input: { main: 'index.html', editor: 'editor.html', sons: 'sons.html', lab: 'lab.html' },
+    },
   },
   test: { environment: 'node', include: ['tests/**/*.test.ts'] },
 });

@@ -8,6 +8,8 @@ import type { CrystalKind } from './level';
 type Empty = Record<string, never>;
 
 export interface GameEventMap {
+  /** Un niveau commence (musique, Astre). */
+  niveau_debut: { levelId: string; chapter: number };
   /** L'orbe part. */
   tir_lance: { angle: number };
   /** 5+ cristaux dans un même tir. */
