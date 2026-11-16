@@ -8,7 +8,7 @@
   "title": "Voie lactée",
   "rhythm": "maitrise",
   "orbs": 13,
-  "challenge": {"goal":"chaine","value":40},
+  "challenge": {"goal":"chaine","value":28},
   "stars": [
     18900,
     32400

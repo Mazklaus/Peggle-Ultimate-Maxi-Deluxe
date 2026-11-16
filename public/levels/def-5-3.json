@@ -8,7 +8,7 @@
   "title": "Sans filet",
   "rhythm": "combinaison",
   "orbs": 13,
-  "challenge": {"goal":"chaine","value":45,"constraint":"sans_receptacle"},
+  "challenge": {"goal":"chaine","value":28,"constraint":"sans_receptacle"},
   "stars": [
     14700,
     25200

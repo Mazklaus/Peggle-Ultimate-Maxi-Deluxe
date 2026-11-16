@@ -8,7 +8,7 @@
   "title": "Ricochets en série",
   "rhythm": "maitrise",
   "orbs": 13,
-  "challenge": {"goal":"chaine","value":30},
+  "challenge": {"goal":"chaine","value":22},
   "stars": [
     17500,
     30000

@@ -8,7 +8,7 @@
   "title": "Longue traîne",
   "rhythm": "combinaison",
   "orbs": 12,
-  "challenge": {"goal":"chaine","value":40},
+  "challenge": {"goal":"chaine","value":26},
   "stars": [
     16800,
     28800
