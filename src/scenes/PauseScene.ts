@@ -41,7 +41,7 @@ export class PauseScene extends Phaser.Scene {
       if (!this.scene.isActive()) return;
       game.companionSleep(false);
       this.scene.stop();
-      this.scene.resume(SCENES.game);
+      game.resumeFromPause();
     };
     const replay = () => {
       this.scene.stop();

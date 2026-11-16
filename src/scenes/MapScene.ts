@@ -235,7 +235,7 @@ export class MapScene extends Phaser.Scene {
     for (let i = 0; i < 3; i++) {
       c.add(
         this.add
-          .text(right + (i - 1) * 34, 70, '★', textStyle(30, i < got ? '#FFB23F' : '#2E3870'))
+          .text(right + (i - 1) * 34, 70, '★', textStyle(30, i < got ? '#B9A6FF' : '#2E3870'))
           .setOrigin(0.5),
       );
     }
