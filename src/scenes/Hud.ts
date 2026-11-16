@@ -59,6 +59,8 @@ export interface HudOptions {
 
 /** Loge : hexagone du pouvoir Ø 26 et indicateurs (specs UI/UX jalon 2, section 3). */
 const POWER_HEX = 26;
+/** Écart entre deux boucliers de réserve. */
+const SHIELD_STEP = 22;
 
 export class GameHud {
   private scene: Phaser.Scene;
@@ -143,7 +145,7 @@ export class GameHud {
     this.power = { ...this.power, charges, max, lit };
     const kind = this.opts.power?.kind;
     if (charges < prev && kind === 'next') this.flyCharge(charges);
-    if (charges < prev && kind === 'reserve') this.shatterShield();
+    if (charges < prev && kind === 'reserve') this.shatterShield(charges);
     this.drawPower();
   }
 
@@ -160,9 +162,10 @@ export class GameHud {
 
   private powerPos(): { x: number; y: number } {
     const kind = this.opts.power?.kind;
-    const max = kind === 'next' ? Math.max(1, this.power.max) : 1;
-    const x = HUD_LAYOUT.anchor.x - (max * 16 + POWER_HEX) / 2 + POWER_HEX / 2 - 4;
-    return { x: kind === 'next' ? x : HUD_LAYOUT.anchor.x - 12, y: HUD_LAYOUT.anchor.y + 28 };
+    const max = kind === 'immediate' ? 1 : Math.max(1, this.power.max);
+    const step = kind === 'reserve' ? SHIELD_STEP : 16;
+    const x = HUD_LAYOUT.anchor.x - (max * step + POWER_HEX) / 2 + POWER_HEX / 2 - 4;
+    return { x: kind === 'immediate' ? HUD_LAYOUT.anchor.x - 12 : x, y: HUD_LAYOUT.anchor.y + 28 };
   }
 
   private drawPower(): void {
@@ -182,9 +185,12 @@ export class GameHud {
         else g.lineStyle(2, MINT, 0.35).strokeCircle(x, p.y, 5);
       }
     } else if (kind === 'reserve') {
-      const pts = shield(x0 + 4, p.y, 9);
-      if (charges > 0) g.fillStyle(MINT, 1).fillPoints(pts, true);
-      else g.lineStyle(2, MINT, 0.35).strokePoints(pts, true);
+      // Un bouclier par charge en réserve (Nuage-Lune : 2 au plus).
+      for (let i = 0; i < Math.max(1, max); i++) {
+        const pts = shield(x0 + 4 + i * SHIELD_STEP, p.y, 9);
+        if (i < charges) g.fillStyle(MINT, 1).fillPoints(pts, true);
+        else g.lineStyle(2, MINT, 0.35).strokePoints(pts, true);
+      }
     } else {
       if (ring > 0) {
         // Volte : anneau qui se vide sur la durée de l'effet.
@@ -219,9 +225,9 @@ export class GameHud {
   }
 
   /** Seconde chance utilisée : le bouclier se brise en paillettes. */
-  private shatterShield(): void {
+  private shatterShield(index: number): void {
     const p = this.powerPos();
-    const cx = p.x + POWER_HEX / 2 + 16;
+    const cx = p.x + POWER_HEX / 2 + 16 + index * SHIELD_STEP;
     for (let i = 0; i < 8; i++) {
       const a = (i / 8) * Math.PI * 2;
       const bit = this.scene.add.circle(cx, p.y, 2.5, MINT).setDepth(20);

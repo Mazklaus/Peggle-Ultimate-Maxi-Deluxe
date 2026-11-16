@@ -35,6 +35,7 @@ import {
   RevealCharges,
   ShotCharges,
   magnetPull,
+  lowestHeart,
   secondChanceVelocity,
   type ChargeRule,
 } from '../core/powers';
@@ -94,26 +95,27 @@ const SHOCKWAVE = { radius: 110, seconds: 0.3 };
  */
 const TWIN = { speed: 0.9, maxCatches: 2, minSideShare: 0.35 };
 /**
- * Rebond fou de Volte (GD reglages-jalon1 et jalon2 §5) : au contact d'un cristal pouvoir,
- * restitution 1,05 pour le reste du tir, 8 s de jeu au plus ; vitesse plafonnée (900 px/s du
+ * Rebond fou de Volte (GD reglages-jalon1 et jalon2 §7) : au contact d'un cristal pouvoir,
+ * restitution 1,10 pour le reste du tir, 10 s de jeu au plus ; vitesse plafonnée (900 px/s du
  * prototype, mise à l'échelle du ralenti global) pour rester lisible.
  */
-const VOLTE = { restitution: 1.05, maxSpeed: 900 * ORB_PHYSICS.slowdown, seconds: 8 };
+const VOLTE = { restitution: 1.1, maxSpeed: 900 * ORB_PHYSICS.slowdown, seconds: 10 };
 /**
- * Ralenti du temps d'Horloge (GD reglages-jalon1, durée de reglages-jalon2 §5) : tir chargé
- * à l'échelle 0,5, 6,5 s réelles au plus ; le réceptacle suit le pointeur, 1,5 fois plus large.
+ * Ralenti du temps d'Horloge (GD reglages-jalon1, version finale de reglages-jalon2 §7) : tout
+ * le tir chargé à l'échelle 0,5, 10 s réelles au plus ; le réceptacle suit le pointeur, 2 fois
+ * plus large.
  * follow : vitesse de rattrapage du pointeur (fraction de l'écart par seconde de jeu) ;
  * keySpeed : au clavier, vitesse de la cible en multiple de la vitesse normale du réceptacle.
  */
-const HORLOGE = { scale: 0.5, realMs: 6500, bucketScale: 1.5, follow: 14, keySpeed: 3 };
+const HORLOGE = { scale: 0.5, realMs: 10000, bucketScale: 2, follow: 14, keySpeed: 3 };
 /**
  * Orbe éclair de Grelot (GD reglages-jalon1, charges de reglages-jalon2 §4 bis) : tir chargé
- * en ligne droite sans gravité, à 1,3 fois la vitesse ; perce 3 cristaux (allumés sans
+ * en ligne droite sans gravité, à 1,15 fois la vitesse (reglages-jalon2 §7) ; perce 3 cristaux (allumés sans
  * rebond ; les cristaux déjà allumés sont traversés sans compter, décision GD), puis physique
  * normale. Les murs renvoient l'orbe normalement pendant l'éclair.
  * maxSeconds : filet de sécurité (temps de jeu) si l'orbe ne trouve pas 3 cristaux.
  */
-const GRELOT = { speed: 1.3, pierce: 3, maxSeconds: 4 };
+const GRELOT = { speed: 1.15, pierce: 3, maxSeconds: 4 };
 /** Catégorie de collision des cristaux cassables (l'orbe éclair les traverse). */
 const CRYSTAL_CATEGORY = 0x0002;
 /** Les orbes d'un même tir se traversent (groupe de collision négatif commun). */
@@ -185,6 +187,8 @@ export class GameScene extends Phaser.Scene {
   private shotCatches = 0;
   /** Temps de jeu restant (s) du rebond fou de Volte ; 0 = inactif. */
   private crazyLeft = 0;
+  /** Seconde chance de Nuage-Lune déjà servie sur ce tir (une par tir, l'autre charge reste). */
+  private secondChanceUsed = false;
   /** Fin (horloge réelle) du ralenti d'Horloge ; 0 = inactif. */
   private warpUntil = 0;
   /** Cible du réceptacle pendant Horloge (pointeur ou flèches), dernière position du pointeur. */
@@ -1102,15 +1106,21 @@ export class GameScene extends Phaser.Scene {
    * (charge en réserve). Pas au tir final : l'orbe y finit dans les zones de bonus.
    */
   private secondChance(orb: Phaser.GameObjects.Arc): boolean {
-    if (this.companionId !== 'nuage-lune' || this.finalShot || !this.reveal.consume()) return false;
+    if (this.companionId !== 'nuage-lune' || this.finalShot || this.secondChanceUsed) return false;
+    if (!this.reveal.consume()) return false;
+    this.secondChanceUsed = true;
     const v = this.orbVelocity(orb);
-    const up = secondChanceVelocity(v.x * 60, v.y * 60);
     const x = Phaser.Math.Clamp(
       orb.x,
       PLAYFIELD.x + ORB_RADIUS,
       PLAYFIELD.x + PLAYFIELD.w - ORB_RADIUS,
     );
     const y = GAME_HEIGHT - ORB_RADIUS;
+    // Remontée balistique vers le cœur restant le plus bas (sommet à sa hauteur, à son aplomb).
+    const target = lowestHeart(
+      this.level.crystals.filter((c) => c.kind === 'heart' && !c.lit).map((c) => toWorld(c)),
+    );
+    const up = secondChanceVelocity({ x, y }, target, GRAVITY_PER_STEP * 3600, v.x * 60);
     orb.setPosition(x, y);
     (orb as unknown as Phaser.Physics.Matter.Components.Velocity).setVelocity(
       up.vx / 60,
@@ -1133,6 +1143,8 @@ export class GameScene extends Phaser.Scene {
       });
     }
     this.cameras.main.flash(120, 126, 224, 198);
+    // Réceptacle 2 fois plus large pour le reste du tir.
+    this.bucket.setScale(NUAGE_LUNE_POWER.bucketScale, 1).setStrokeStyle(2, PALETTE.success, 0.95);
     this.refreshPower();
     return true;
   }
@@ -1349,6 +1361,8 @@ export class GameScene extends Phaser.Scene {
     this.powerGfx.clear();
     this.endTimeWarp();
     this.endBolt();
+    this.bucket.setScale(1).setStrokeStyle(); // réceptacle élargi de Nuage-Lune
+    this.secondChanceUsed = false;
     this.hud.setPowerActivity(0, false);
     this.decor.setOrbs([]);
     this.hud.endShot();

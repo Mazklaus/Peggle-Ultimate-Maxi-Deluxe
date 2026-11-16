@@ -6,6 +6,7 @@ import {
   RevealCharges,
   ShotCharges,
   magnetPull,
+  lowestHeart,
   secondChanceVelocity,
 } from '../src/core/powers';
 import { predictPath } from '../src/core/trajectory';
@@ -130,20 +131,45 @@ describe('Pouvoirs « tir suivant » génériques', () => {
     expect(Math.abs(far?.ax ?? 0)).toBeLessThan(p?.ay ?? 0);
     expect(magnetPull({ x: 0, y: 0 }, [{ id: 3, x: 0, y: -500 }], 176, 400)).toBeNull();
   });
+
+  it('aimant : réglages finaux, rien dans la zone morte', () => {
+    expect(MOUSSE_POWER).toMatchObject({ range: 220, accel: 900, deadZone: 20 });
+    expect(magnetPull({ x: 0, y: 0 }, [{ id: 1, x: 15, y: 0 }])).toBeNull();
+    expect(magnetPull({ x: 0, y: 0 }, [{ id: 1, x: 110, y: 0 }])?.ax).toBeCloseTo(450, 6);
+  });
 });
 
 describe('Seconde chance (Nuage-Lune)', () => {
-  it('une charge en réserve, consommée une seule fois', () => {
+  it('réserve de 2 charges, consommées une à une', () => {
     const c = new ShotCharges(NUAGE_LUNE_POWER);
     c.gain();
     c.gain();
-    expect(c.charges).toBe(1);
+    c.gain();
+    expect(c.charges).toBe(2);
+    expect(c.consume()).toBe(true);
     expect(c.consume()).toBe(true);
     expect(c.consume()).toBe(false);
   });
 
-  it('remonte à 80 % de la vitesse de sortie, avec un minimum', () => {
-    expect(secondChanceVelocity(120, 900)).toEqual({ vx: 120, vy: -720 });
-    expect(secondChanceVelocity(-50, 200).vy).toBe(-NUAGE_LUNE_POWER.minSpeed);
+  it('remonte en visant le cœur : sommet à sa hauteur, à son aplomb', () => {
+    const g = 500;
+    const from = { x: 400, y: 700 };
+    const target = { x: 600, y: 200 };
+    const v = secondChanceVelocity(from, target, g);
+    const t = -v.vy / g;
+    expect(from.y + v.vy * t + 0.5 * g * t * t).toBeCloseTo(target.y, 6);
+    expect(from.x + v.vx * t).toBeCloseTo(target.x, 6);
+  });
+
+  it('vy au moins 450 px/s ; sans cœur, remonte droit en gardant vx', () => {
+    const low = secondChanceVelocity({ x: 0, y: 700 }, { x: 0, y: 690 }, 500);
+    expect(low.vy).toBe(-NUAGE_LUNE_POWER.minSpeed);
+    expect(NUAGE_LUNE_POWER.minSpeed).toBe(450);
+    expect(secondChanceVelocity({ x: 0, y: 700 }, null, 500, 80)).toEqual({ vx: 80, vy: -450 });
+  });
+
+  it('vise le cœur le plus bas', () => {
+    expect(lowestHeart([{ y: 100 }, { y: 400 }, { y: 250 }])).toEqual({ y: 400 });
+    expect(lowestHeart([])).toBeNull();
   });
 });
