@@ -2,8 +2,8 @@
 import math, random, json, sys
 
 W, H = 880, 656
-G = 0.001 * (1000/60)**2
-SPEED = 11.0
+G = 0.001 * (1000/60)**2 * 0.75**2   # PR 20 : orbe ralenti
+SPEED = 11.0 * 0.75
 ORB_R = 8
 REST = 0.75       # cristaux
 WALL_REST = 0.9   # murs (PR 20)
@@ -24,14 +24,30 @@ def brick_closest(p, b, px, py):
     qx, qy = max(-hw, min(hw, lx)), max(-hh, min(hh, ly))
     return b['x'] + qx*c - qy*s, b['y'] + qx*s + qy*c
 
-def simulate_shot(pegs, alive, angle, bucket_x0, bucket_dir, max_steps=3000):
+def group_motion(decor):
+    """id -> fonction (x0, y0, t_s) -> (x, y) pour les groupes en rotation / orbite."""
+    out = {}
+    for d in decor or []:
+        if d.get('type') in ('rotate', 'orbit'):
+            cx, cy = d['cx'], d['cy']; w = 2*math.pi*d.get('dir', 1)/d['periodS']
+            def f(x0, y0, t, cx=cx, cy=cy, w=w):
+                a = w*t; c, s = math.cos(a), math.sin(a)
+                return cx + (x0-cx)*c - (y0-cy)*s, cy + (x0-cx)*s + (y0-cy)*c
+            out[d['id']] = f
+    return out
+
+def simulate_shot(pegs, alive, angle, bucket_x0, bucket_dir, max_steps=4000, motion=None, t0=0.0, max_contacts=None):
     x = CANNON[0] + math.cos(angle)*MUZZLE; y = CANNON[1] + math.sin(angle)*MUZZLE
     vx, vy = math.cos(angle)*SPEED, math.sin(angle)*SPEED
     hits = []; hitset = set(); bx, bd = bucket_x0, bucket_dir
     bspeed = W / BUCKET_CROSS_S / 60
     stuck_ref = (x, y, 0); t = 0
+    motion = motion or {}
+    movers = [i for i in alive if pegs[i].get('group') in motion]
+    home = {i: (pegs[i].get('x0', pegs[i]['x']), pegs[i].get('y0', pegs[i]['y'])) for i in movers}
     grid = {}
     for i in alive:
+        if i in home: continue
         p = pegs[i]; ext = (p['w']/2 + 10) if p.get('shape') == 'brick' else 20
         for gx in range(int((p['x']-ext)//40), int((p['x']+ext)//40)+1):
             for gy in range(int((p['y']-ext)//40), int((p['y']+ext)//40)+1):
@@ -41,13 +57,15 @@ def simulate_shot(pegs, alive, angle, bucket_x0, bucket_dir, max_steps=3000):
         bx += bd*bspeed
         if bx > W - BUCKET_W/2: bd = -1
         if bx < BUCKET_W/2: bd = 1
+        for i in movers:
+            pegs[i]['x'], pegs[i]['y'] = motion[pegs[i]['group']](*home[i], t0 + t/60)
         for _ in range(SUB):
             vy += G / SUB
             x += vx / SUB; y += vy / SUB
             if x < ORB_R: x = ORB_R; vx = abs(vx)*WALL_REST
             if x > W-ORB_R: x = W-ORB_R; vx = -abs(vx)*WALL_REST
             if y < ORB_R: y = ORB_R; vy = abs(vy)*WALL_REST
-            for i in grid.get((int(x//40), int(y//40)), ()):
+            for i in list(grid.get((int(x//40), int(y//40)), ())) + movers:
                 if i not in alive: continue
                 p = pegs[i]
                 if p.get('shape') == 'brick':
@@ -63,21 +81,25 @@ def simulate_shot(pegs, alive, angle, bucket_x0, bucket_dir, max_steps=3000):
                         vx -= (1+REST)*vn*nx; vy -= (1+REST)*vn*ny
                     if i not in hitset and p.get('kind') != 'wall':
                         hitset.add(i); hits.append(i)
+                        if max_contacts and len(hits) >= max_contacts: return hits, False, bx, bd, t/60
         if y + ORB_R >= BUCKET_Y - 9 and y < H and abs(x - bx) <= BUCKET_W/2:
-            return hits, True, bx, bd
+            return hits, True, bx, bd, t/60
         if y > H + 16:
-            return hits, False, bx, bd
+            return hits, False, bx, bd, t/60
         if math.hypot(x-stuck_ref[0], y-stuck_ref[1]) > 12: stuck_ref = (x, y, t)
         elif t - stuck_ref[2] > 180:
             near = [i for i in hitset if i in alive and pegs[i].get('shape') != 'brick' and math.hypot(pegs[i]['x']-x, pegs[i]['y']-y) < 30]
             for i in near: alive.discard(i)
             stuck_ref = (x, y, t)
             if not near: vy += 1  # coup de pouce
-    return hits, False, bx, bd
+    return hits, False, bx, bd, t/60
 
 def play(level, policy='greedy', rng=None, samples=48):
     rng = rng or random.Random()
     pegs = [dict(p) for p in level['pegs']]
+    for p in pegs: p['x0'], p['y0'] = p['x'], p['y']
+    motion = group_motion(level.get('decor')); T = 0.0
+    comp = level.get('companion')
     free = [i for i, p in enumerate(pegs) if 'kind' not in p]
     rng.shuffle(free)
     a = level['assign']; k = 0
@@ -101,15 +123,23 @@ def play(level, policy='greedy', rng=None, samples=48):
         else:
             best = None
             left = sum(1 for i in alive if pegs[i]['kind'] == 'heart')
-            cands = [math.radians(8 + 0.5*k) for k in range(329)] if left <= 4 else \
-                [math.radians(rng.uniform(8, 172)) for _ in range(samples * (3 if pip else 1))]
+            # joueur « correct » : il ne voit que le guide de visée (1er contact), ou 3 contacts avec Pip
+            cands = [math.radians(8 + 0.5*k) for k in range(329)]
+            seen = 3 if pip else 1
             for ang_c in cands:
-                h, c, _, _ = simulate_shot(pegs, set(alive), ang_c, bx, bd)
-                val = sum((6 if pegs[i]['kind'] == 'heart' else 1) for i in h) + (4 if c else 0) + rng.random()*0.1
+                h, c, _, _, _ = simulate_shot(pegs, set(alive), ang_c, bx, bd, motion=motion, t0=T, max_contacts=seen)
+                val = sum((6 if pegs[i]['kind'] == 'heart' else 1) for i in h) + rng.random()*0.5
                 if best is None or val > best[0]: best = (val, ang_c)
-            ang = best[1] + (0 if pip else math.radians(rng.gauss(0, 1.0)))  # imprécision humaine
+            ang = best[1] + math.radians(rng.gauss(0, 0.3))  # imprécision humaine
             if pip: pip -= 1
-        hits, caught, bx, bd = simulate_shot(pegs, alive, ang, bx, bd)
+        hits, caught, bx, bd, dt = simulate_shot(pegs, alive, ang, bx, bd, motion=motion, t0=T)
+        T += dt + 1.5
+        if comp == 'bourdon':
+            for i in [i for i in hits if i in alive and pegs[i]['kind'] == 'power']:
+                for j in alive:
+                    if j not in hits and pegs[j].get('kind') != 'wall' and pegs[j].get('shape') != 'brick' \
+                            and math.hypot(pegs[j]['x']-pegs[i]['x'], pegs[j]['y']-pegs[i]['y']) <= 110:
+                        hits.append(j)
         shot = 0; lit = 0; free_given = False
         hearts_lit_before = hearts_total - sum(1 for i in alive if pegs[i]['kind'] == 'heart')
         hl = hearts_lit_before
@@ -124,7 +154,7 @@ def play(level, policy='greedy', rng=None, samples=48):
             if not free_given and shot >= FREE_ORB: free_given = True; orbs += 1
         shot = int(shot * (1 + min(1.0, max(0, len(hits)-10)*0.1)))
         score += shot
-        if any(pegs[i]['kind'] == 'power' for i in hits if i in alive): pip = 2
+        if comp == 'pip' and any(pegs[i]['kind'] == 'power' for i in hits if i in alive): pip = 2
         for i in hits: alive.discard(i)
         if caught: orbs += 1
         if not any(pegs[i]['kind'] == 'heart' for i in alive):
