@@ -112,6 +112,8 @@ export class CompanionView {
       this.unsubscribe.push(gameEvents.on(name as GameEventName, () => this.brain.onEvent(name)));
     }
     this.unsubscribe.push(gameEvents.on('cristal_allume', () => this.brain.onCrystalHit()));
+    this.unsubscribe.push(gameEvents.on('cristal_allume', () => this.brain.onBounce()));
+    this.unsubscribe.push(gameEvents.on('mur_touche', () => this.brain.onBounce()));
   }
 
   detach(): void {
@@ -273,7 +275,7 @@ export class CompanionView {
     const lx = Phaser.Math.Clamp(look.x, -1, 1) * 4;
     const ly = Phaser.Math.Clamp(look.y, -1, 1) * 3;
     for (const side of [-1, 1]) {
-      const e = P(side * 11 + lx, -5 + ly);
+      const e = P(side * 12 + lx, -5 + ly);
       switch (eyes) {
         case 'closed':
           g.lineStyle(3, INK, 1);
@@ -290,9 +292,9 @@ export class CompanionView {
           break;
         case 'wide':
           g.fillStyle(WHITE, 1);
-          g.fillCircle(e.x, e.y, 8);
+          g.fillCircle(e.x, e.y, 9.5);
           g.fillStyle(INK, 1);
-          g.fillCircle(e.x + lx * 0.6, e.y + ly * 0.6, 3);
+          g.fillCircle(e.x + lx * 0.6, e.y + ly * 0.6, 3.5);
           break;
         case 'stars':
           g.fillStyle(WHITE, 1);
@@ -604,9 +606,9 @@ function drawOpenEye(
   ly: number,
 ): void {
   g.fillStyle(INK, 1);
-  g.fillEllipse(e.x, e.y, 9, 12);
+  g.fillEllipse(e.x, e.y, 10.5, 14);
   g.fillStyle(WHITE, 1);
-  g.fillCircle(e.x - 1.5 + lx * 0.3, e.y - 2.5 + ly * 0.3, 2.2);
+  g.fillCircle(e.x - 1.8 + lx * 0.3, e.y - 3 + ly * 0.3, 2.6);
 }
 
 /** Angles (degrés depuis le haut, sens horaire) et longueurs des bras selon le geste. */

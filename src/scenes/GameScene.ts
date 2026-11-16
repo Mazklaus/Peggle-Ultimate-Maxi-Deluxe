@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { GAME_HEIGHT, GAME_WIDTH, PLAYFIELD, toWorld } from '../config';
 import { PIP } from '../companions/pip';
+import { debugEnabled, mountDebugPanel } from '../debug/debugPanel';
 import { gameEvents, type GameEventName } from '../core/events';
 import {
   breakLitNow,
@@ -16,6 +17,7 @@ import {
 } from '../core/level';
 import type { LevelData } from '../core/levelFormat';
 import { levelFromData } from '../core/levelSetup';
+import { PIP_POWER, RevealCharges } from '../core/powers';
 import type { SaveData } from '../core/save';
 import {
   ShotTracker,
@@ -23,7 +25,7 @@ import {
   type DetectedEvent,
   type HeartTarget,
 } from '../core/shotEvents';
-import { aimGuide } from '../core/trajectory';
+import { aimGuide, predictPath } from '../core/trajectory';
 import { TUNING } from '../core/tuning';
 import { REGISTRY, SCENES } from './keys';
 import { CompanionView } from './CompanionView';
@@ -56,6 +58,9 @@ const COMPANION_ANCHOR = { x: 100, y: 400 };
 /** L'orbe « frôle » un cœur (réaction « oh ! » de l'Astre). */
 const NEAR_HEART_PX = 20;
 const HEART_RADIUS = 10;
+/** Restitution effective des rebonds (Matter : max orbe / obstacle). */
+const ORB_RESTITUTION = 0.75;
+const PIP_COLOR = 0xffe45c;
 
 type CrystalView = Phaser.GameObjects.Arc | Phaser.GameObjects.Rectangle;
 
@@ -88,6 +93,8 @@ export class GameScene extends Phaser.Scene {
   private companion?: CompanionView;
   private slowmoUntil = 0;
   private gameScale = 1;
+  private reveal = new RevealCharges();
+  private chargeDots?: Phaser.GameObjects.Graphics;
 
   constructor() {
     super(SCENES.game);
@@ -104,6 +111,7 @@ export class GameScene extends Phaser.Scene {
     this.slowmoUntil = 0;
     this.setTimeScale(1);
     this.tracker = new ShotTracker();
+    this.reveal = new RevealCharges();
     const save = this.registry.get(REGISTRY.save) as SaveData | undefined;
     this.colors = save?.options.colorblind ? CRYSTAL_COLORS_CB : CRYSTAL_COLORS;
     this.level = levelFromData(this.sceneData.level);
@@ -162,12 +170,15 @@ export class GameScene extends Phaser.Scene {
       },
     );
 
+    const unmountDebug = debugEnabled() ? this.mountDebug() : undefined;
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.companion?.destroy();
       this.companion = undefined;
+      unmountDebug?.();
     });
 
     this.refreshHud();
+    this.refreshPower();
     this.emitAll(this.tracker.beginAiming(heartsRemaining(this.level), this.level.orbs));
   }
 
@@ -274,6 +285,7 @@ export class GameScene extends Phaser.Scene {
     if (id !== 'pip') return; // prologue sans Astre ; les autres Astres arrivent au jalon 2
     this.companion = new CompanionView(this, PIP, COMPANION_ANCHOR);
     this.companion.attach();
+    this.chargeDots = this.add.graphics();
   }
 
   private updateCompanion(dt: number, orb?: Phaser.GameObjects.Arc): void {
@@ -325,6 +337,10 @@ export class GameScene extends Phaser.Scene {
   private emitAll(events: DetectedEvent[]): void {
     for (const e of events) {
       if (e === 'final_ralenti') this.startSlowmo();
+      if (e === 'pouvoir_active' && this.companion) {
+        this.reveal.gain();
+        this.refreshPower();
+      }
       const data =
         e === 'gros_coup'
           ? { hits: this.tracker.shotHits }
@@ -339,6 +355,31 @@ export class GameScene extends Phaser.Scene {
                   : {};
       gameEvents.emit(e as GameEventName, data as never);
     }
+  }
+
+  /** ?debug=1 : panneau QA (événements, pouvoir, orbes, cœurs, état de l'Astre). */
+  private mountDebug(): () => void {
+    return mountDebugPanel({
+      gainPower: () => this.emitAll(['pouvoir_active']),
+      setOrbs: (n) => {
+        this.level.orbs = n;
+        this.refreshHud();
+      },
+      keepHearts: (n) => {
+        const hearts = this.level.crystals.filter((c) => c.kind === 'heart' && !c.lit);
+        const drop = hearts.slice(0, Math.max(0, hearts.length - n)).map((c) => c.id);
+        this.level.crystals = this.level.crystals.filter((c) => !drop.includes(c.id));
+        this.removeViews(drop);
+        this.refreshHud();
+      },
+      status: () => {
+        const s = this.companion?.brain.state;
+        const astre = s
+          ? `astre: phase=${s.phase} réaction=${s.reaction ?? '-'} tendu=${s.tense ?? '-'} dort=${s.sleeping} jauge=${s.excitement.toFixed(2)}`
+          : 'astre: aucun (?astre=pip pour forcer)';
+        return `${astre} · pouvoir=${this.reveal.charges} · orbes=${this.level.orbs} · cœurs=${heartsRemaining(this.level)} · échelle=${this.gameScale}`;
+      },
+    });
   }
 
   private startSlowmo(): void {
@@ -397,6 +438,8 @@ export class GameScene extends Phaser.Scene {
     this.slowmoUntil = 0;
     this.stuckRef = { x: start.x, y: start.y, t: this.time.now };
     this.companion?.setPhase('flight');
+    this.reveal.fire();
+    this.refreshPower();
     this.emitAll(this.tracker.shotFired());
     this.refreshHud();
   }
@@ -438,6 +481,8 @@ export class GameScene extends Phaser.Scene {
       if (!c.lit) this.views.get(c.id)?.setFillStyle(this.colors[c.kind]);
     }
     this.refreshHud();
+    this.reveal.endShot();
+    this.refreshPower();
     const bilan = this.tracker.shotEnded(caught, result.phase);
     if (result.phase === 'aiming') this.companion?.setPhase('aiming');
     else this.companion?.setPhase('over');
@@ -510,7 +555,7 @@ export class GameScene extends Phaser.Scene {
     this.guide.clear();
     if (this.ending || !canShoot(this.level)) return;
     const start = this.muzzle();
-    const points = aimGuide({
+    const input = {
       x: start.x,
       y: start.y,
       vx: Math.cos(this.aimAngle) * LAUNCH_SPEED,
@@ -525,11 +570,44 @@ export class GameScene extends Phaser.Scene {
         const r = c.shape?.type === 'brick' ? Math.min(c.shape.w, c.shape.h) / 2 : 10;
         return { x: w.x, y: w.y, r };
       }),
-    });
+    };
+    if (this.reveal.previewing) {
+      // Pouvoir de Pip : trajectoire révélée jusqu'au 3e rebond ou 1,5 s.
+      const path = predictPath({
+        ...input,
+        restitution: ORB_RESTITUTION,
+        maxBounces: PIP_POWER.previewBounces,
+        maxSteps: Math.round(PIP_POWER.previewSeconds * 60),
+      });
+      const pulse = 0.55 + 0.25 * Math.sin(this.time.now / 150);
+      this.guide.fillStyle(PIP_COLOR, pulse);
+      path.points.forEach((pt, i) => {
+        if (i % 3 === 0) this.guide.fillCircle(pt.x, pt.y, 3.5);
+      });
+      this.guide.lineStyle(2, PIP_COLOR, 0.8);
+      for (const b of path.bounces) this.guide.strokeCircle(b.x, b.y, 7);
+      return;
+    }
+    const points = aimGuide(input);
     this.guide.fillStyle(PALETTE.lit, 0.6);
     points.forEach((pt, i) => {
       if (i % 3 === 0) this.guide.fillCircle(pt.x, pt.y, 3);
     });
+  }
+
+  /** Charges du pouvoir sous l'Astre (pastilles) et mèche en antenne. */
+  private refreshPower(): void {
+    this.companion?.brain.setPowered(this.reveal.previewing || this.reveal.shotIsPowered);
+    const g = this.chargeDots;
+    if (!g) return;
+    g.clear();
+    const n = PIP_POWER.maxCharges;
+    for (let i = 0; i < n; i++) {
+      const x = COMPANION_ANCHOR.x - ((n - 1) * 18) / 2 + i * 18;
+      const y = COMPANION_ANCHOR.y + 34;
+      if (i < this.reveal.charges) g.fillStyle(PIP_COLOR, 1).fillCircle(x, y, 6);
+      else g.lineStyle(2, PIP_COLOR, 0.35).strokeCircle(x, y, 6);
+    }
   }
 
   private muzzle(): { x: number; y: number } {
