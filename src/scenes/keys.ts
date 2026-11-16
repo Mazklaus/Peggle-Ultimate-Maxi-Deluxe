@@ -10,6 +10,8 @@ export const SCENES = {
   cutscene: 'Cutscene',
   /** Calque de l'Astre au-dessus des overlays de fin. */
   companionLayer: 'CompanionLayer',
+  /** Sélecteur de compagnon, par-dessus la carte (jalon 2). */
+  companionSelect: 'CompanionSelect',
 } as const;
 
 /** Niveaux qui déclenchent une cinématique (ids du format v1). */

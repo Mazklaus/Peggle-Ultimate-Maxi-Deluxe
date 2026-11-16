@@ -38,6 +38,8 @@ export interface SaveData {
   scoreLog: ScoreLogEntry[];
   /** Cinématiques déjà vues (intro, reveil_pip, fin_ch1…). */
   seen: Record<string, boolean>;
+  /** Dernier Astre choisi dans le sélecteur (préselection des niveaux suivants). */
+  companion?: string;
 }
 
 export interface KeyValueStorage {
@@ -86,6 +88,7 @@ export function loadSave(storage: KeyValueStorage | null = browserStorage()): Sa
       scoreLog: Array.isArray(data.scoreLog) ? data.scoreLog : [],
       // Champ ajouté après la v1 : absent des anciennes sauvegardes.
       seen: typeof data.seen === 'object' && data.seen ? data.seen : {},
+      ...(typeof data.companion === 'string' ? { companion: data.companion } : {}),
     };
   } catch {
     return emptySave();

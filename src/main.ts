@@ -6,6 +6,7 @@ import { ORB_PHYSICS } from './core/physics';
 import { loadSave } from './core/save';
 import { BootScene } from './scenes/BootScene';
 import { CompanionLayer } from './scenes/CompanionLayer';
+import { CompanionSelectScene } from './scenes/CompanionSelectScene';
 import { CutsceneScene } from './scenes/CutsceneScene';
 import { GameScene } from './scenes/GameScene';
 import { MapScene } from './scenes/MapScene';
@@ -58,6 +59,7 @@ function startGame(): void {
       CutsceneScene,
       OptionsScene,
       CompanionLayer,
+      CompanionSelectScene,
     ],
   });
 }
