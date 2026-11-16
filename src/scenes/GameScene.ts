@@ -43,6 +43,7 @@ import { OPTIONS_CHANGED, REGISTRY, SCENES, STORY_LEVELS } from './keys';
 import { CompanionView } from './CompanionView';
 import type { ResultsData } from './ResultsScene';
 import { CRYSTAL_COLORS, CRYSTAL_COLORS_CB, PALETTE, textStyle } from './theme';
+import { DecorLayer } from './DecorLayer';
 import { LANTERN } from './gardienne';
 import { GameHud, HUD_LAYOUT } from './Hud';
 import { button } from './widgets';
@@ -139,6 +140,7 @@ export class GameScene extends Phaser.Scene {
   /** Pause : jeu figé, scène active (l'Astre continue de s'animer). */
   private paused = false;
   private stuckRef = { x: 0, y: 0, t: 0 };
+  private decor!: DecorLayer;
   /** Impulsions anti-blocage déjà données sur ce tir. */
   private stuckNudges = 0;
   /** orbe_coincee envoyé, en attente de orbe_debloquee. */
@@ -211,7 +213,15 @@ export class GameScene extends Phaser.Scene {
 
     this.drawFrame();
     this.makeWalls();
+    const decorGfx = this.add.graphics(); // supports du décor, sous les cristaux
     for (const c of this.level.crystals) this.views.set(c.id, this.makeCrystal(c));
+    this.decor = new DecorLayer(
+      this,
+      this.sceneData.level.decor,
+      this.level.crystals,
+      (id) => (this.views.get(id) as { body?: MatterJS.BodyType } | undefined)?.body,
+      decorGfx,
+    );
 
     this.cannon = this.add.rectangle(CANNON.x, CANNON.y, 36, 14, PALETTE.cannon).setOrigin(0, 0.5);
     this.add.circle(CANNON.x, CANNON.y, 16, PALETTE.cannon);
@@ -310,6 +320,7 @@ export class GameScene extends Phaser.Scene {
       this.tweens.resumeAll();
     }
     this.updateSlowmo(time);
+    this.decor.draw();
     const delta = realDelta * this.gameScale;
     this.moveBucket(delta);
     this.cannon.setRotation(this.aimAngle);
@@ -564,8 +575,10 @@ export class GameScene extends Phaser.Scene {
     // Orbe lente (roule ou tressaute sur un cristal) : Matter n'est plus prévisible ici,
     // on laisse le vrai contact déclencher le ralenti.
     if (Math.hypot(o.vx, o.vy) < FINAL_MIN_SPEED) return null;
+    // Cœur porté par le décor : cible mobile, seul le vrai contact déclenche le ralenti.
+    if (this.decor.isMoving(heart.id)) return null;
     const steps = Math.ceil(EVENT_THRESHOLDS.finalSlowmoLeadSeconds * 60);
-    const contactStep = robustContactStep({
+    const input = {
       x: o.x,
       y: o.y,
       vx: o.vx / 60,
@@ -584,8 +597,16 @@ export class GameScene extends Phaser.Scene {
       // Cible un peu réduite : on préfère rater un ralenti (le vrai contact le relance)
       // qu'en déclencher un faux.
       target: this.finalTarget(heart),
-    });
-    return contactStep === null ? null : contactStep / 60;
+    };
+    const contactStep = robustContactStep(input);
+    if (contactStep === null) return null;
+    // La prédiction suppose le décor immobile : un peg mobile près du trajet la rend douteuse.
+    if (
+      this.decor.active &&
+      this.decor.mayCross(predictPath(input).points, contactStep / 60, heart.id, ORB_RADIUS)
+    )
+      return null;
+    return contactStep / 60;
   }
 
   /** Relaie sur le bus les événements détectés par le ShotTracker. */

@@ -46,6 +46,7 @@ export function levelFromData(
     y: p.y,
     kind: p.kind ?? drawn.get(id) ?? 'common',
     lit: false,
+    ...(p.group ? { group: p.group } : {}),
     shape:
       p.shape === 'brick'
         ? { type: 'brick', w: p.w ?? 40, h: p.h ?? 12, angle: p.angle ?? 0 }
