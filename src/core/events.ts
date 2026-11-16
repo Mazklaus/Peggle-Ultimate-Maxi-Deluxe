@@ -32,6 +32,8 @@ export interface GameEventMap {
   final_ralenti: Empty;
   victoire: { score: number };
   echec: { score: number };
+  /** Orbe immobile : l'anti-blocage la pousse (essai 1, 2) ou la dissout (3). */
+  orbe_coincee: { attempt: number };
   /** 8 s sans tirer. */
   inactivite: Empty;
   // Événements fins (son, UI, Astres)

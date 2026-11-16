@@ -43,6 +43,7 @@ const REACTION_EVENTS: ReactionTrigger[] = [
   'victoire',
   'echec',
   'inactivite',
+  'orbe_coincee',
 ];
 
 interface Particle {

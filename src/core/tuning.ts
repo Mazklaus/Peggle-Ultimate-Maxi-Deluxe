@@ -2,7 +2,6 @@
  * Réglages de départ du prototype (Game Designer, boucle-et-regles.md, section 3).
  * Les valeurs non encore utilisées (pouvoir de compagnon) sont volontairement absentes.
  */
-import { ORB_PHYSICS } from './physics';
 
 export const TUNING = {
   startingOrbs: 10,
@@ -16,8 +15,10 @@ export const TUNING = {
   freeOrbShotScore: 25000,
   /** Le réceptacle traverse l'écran en 4 s. */
   bucketCrossSeconds: 4,
-  /** 3 s à la vitesse du prototype, allongé avec le ralenti de l'orbe (GD). */
-  antiStuckSeconds: 3 / ORB_PHYSICS.slowdown,
+  /** Anti-blocage : orbe quasi immobile plus de 2 s (règle GD, blocage QA ch1-10). */
+  antiStuckSeconds: 2,
+  /** Impulsions avant dissolution de l'orbe. */
+  antiStuckNudges: 2,
 };
 
 export type Tuning = typeof TUNING;

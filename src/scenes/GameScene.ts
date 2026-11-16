@@ -68,6 +68,12 @@ const FAIL_DELAY_MS = 400;
 const SLOWMO = { scale: 0.25, maxRealMs: 1500 };
 /** Gel d'image au contact du dernier cœur non anticipé (cas lent, demande GD), avant le ralenti. */
 const FINAL_HIT_STOP_MS = 80;
+/**
+ * Anti-blocage garanti (règle GD) : orbe quasi immobile (moins de 12 px en
+ * TUNING.antiStuckSeconds) -> cristaux allumés voisins brisés, sinon impulsion
+ * (TUNING.antiStuckNudges essais), sinon dissolution. Vitesse de l'impulsion :
+ */
+const STUCK_NUDGE_SPEED = 3 * ORB_PHYSICS.slowdown;
 /** Marge de prudence de la prédiction du final (px retirés au rayon du dernier cœur). */
 const FINAL_PREDICT_MARGIN_PX = 3;
 /** Vitesse minimale (px/s) pour anticiper le final ; en dessous, seul le contact compte. */
@@ -126,6 +132,8 @@ export class GameScene extends Phaser.Scene {
   /** Pause : jeu figé, scène active (l'Astre continue de s'animer). */
   private paused = false;
   private stuckRef = { x: 0, y: 0, t: 0 };
+  /** Impulsions anti-blocage déjà données sur ce tir. */
+  private stuckNudges = 0;
   private chain = 0;
   private ending = false;
   private tracker = new ShotTracker();
@@ -751,6 +759,7 @@ export class GameScene extends Phaser.Scene {
     this.chain = 0;
     this.slowmoUntil = 0;
     this.stuckRef = { x: start.x, y: start.y, t: this.time.now };
+    this.stuckNudges = 0;
     this.companion?.setPhase('flight');
     this.reveal.fire();
     this.lanternShots = Math.max(0, this.lanternShots - 1);
@@ -856,15 +865,56 @@ export class GameScene extends Phaser.Scene {
       return;
     }
     if (time - this.stuckRef.t < TUNING.antiStuckSeconds * 1000) return;
-    const near = this.level.crystals
-      .filter((c) => {
-        const w = toWorld(c);
-        const reach = c.shape?.type === 'brick' ? Math.max(c.shape.w, c.shape.h) / 2 : 10;
-        return Math.hypot(w.x - orb.x, w.y - orb.y) < reach + ORB_RADIUS + 12;
-      })
-      .map((c) => c.id);
-    this.removeViews(breakLitNow(this.level, near));
     this.stuckRef.t = time;
+    const near = this.level.crystals.filter((c) => {
+      const w = toWorld(c);
+      const reach = c.shape?.type === 'brick' ? Math.max(c.shape.w, c.shape.h) / 2 : 10;
+      return Math.hypot(w.x - orb.x, w.y - orb.y) < reach + ORB_RADIUS + 12;
+    });
+    // 1. Le classique du genre : les cristaux allumés qui la retiennent se brisent.
+    const broken = breakLitNow(
+      this.level,
+      near.map((c) => c.id),
+    );
+    if (broken.length > 0) {
+      this.removeViews(broken);
+      return;
+    }
+    // 2. Rien de cassable (mur incassable, cristal éteint) : petite impulsion, 2 essais.
+    this.stuckNudges += 1;
+    gameEvents.emit('orbe_coincee', { attempt: this.stuckNudges });
+    if (this.stuckNudges <= TUNING.antiStuckNudges) {
+      // Vers l'extérieur du plus proche obstacle, ou vers le centre du terrain.
+      const ref = near
+        .map(toWorld)
+        .sort((a, b) => Math.abs(a.x - orb.x) - Math.abs(b.x - orb.x))[0];
+      const side = ref && Math.abs(orb.x - ref.x) > 1 ? orb.x - ref.x : 640 - orb.x;
+      (orb as unknown as Phaser.Physics.Matter.Components.Velocity).setVelocity(
+        Math.sign(side || 1) * STUCK_NUDGE_SPEED,
+        -STUCK_NUDGE_SPEED,
+      );
+      return;
+    }
+    // 3. Toujours coincée : elle se dissout en particules, le tir se termine normalement.
+    this.dissolveOrb(orb.x, orb.y);
+    this.finishShot(false);
+  }
+
+  private dissolveOrb(x: number, y: number): void {
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2;
+      const dot = this.add.circle(x, y, 3, PALETTE.orb).setDepth(30);
+      this.tweens.add({
+        targets: dot,
+        x: x + Math.cos(a) * 34,
+        y: y + Math.sin(a) * 34 - 12,
+        alpha: 0,
+        scale: 0.3,
+        duration: 520,
+        ease: 'Cubic.Out',
+        onComplete: () => dot.destroy(),
+      });
+    }
   }
 
   private removeViews(ids: number[]): void {
