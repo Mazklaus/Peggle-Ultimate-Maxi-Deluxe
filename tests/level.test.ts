@@ -70,6 +70,15 @@ describe('tir', () => {
     expect(s.orbs).toBe(10);
   });
 
+  it('orbe scindé : chaque orbe attrapé rend un orbe', () => {
+    const s = newLevel();
+    startShot(s);
+    const r = endShot(s, 2, seeded());
+    expect(r.orbsGained).toBe(2);
+    expect(r.caught).toBe(true);
+    expect(s.orbs).toBe(11);
+  });
+
   it('déplace le cristal bonus après chaque tir', () => {
     const s = newLevel();
     const before = idsOf(s, 'bonus');

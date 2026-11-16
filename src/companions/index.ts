@@ -8,7 +8,7 @@
  */
 import type { CompanionDef } from '../core/companion/types';
 import type { Companion } from '../core/levelFormat';
-import { BOURDON } from './astres';
+import { BOURDON, JUMELLES } from './astres';
 import { PIP } from './pip';
 
 /** next = s'applique au tir suivant (charges), immediate = agit pendant le tir, reserve = charge gardée. */
@@ -52,7 +52,7 @@ export const COMPANION_ROSTER: readonly CompanionInfo[] = [
     id: 'jumelles',
     name: 'Twi & Nkl',
     color: 0x8fe3ff,
-    def: null,
+    def: JUMELLES,
     power: { name: 'Orbe scindé', kind: 'immediate', maxCharges: 0 },
     wakesAtChapter: 3,
   },
