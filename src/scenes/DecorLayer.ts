@@ -121,7 +121,9 @@ export class DecorLayer {
     d: MovingDecor,
     c: { x: number; y: number },
   ): void {
-    // Un rail par anneau du groupe (au moins 2 pegs au même rayon, à 8 px près), 3 au plus.
+    // Un rail par anneau du groupe (rayon à 8 px près), 3 au plus : les anneaux les plus
+    // peuplés d'abord ; un peg seul sur son anneau a aussi son rail s'il reste de la place
+    // (demande Level Designer, lisibilité).
     const count = new Map<number, number>();
     for (const p of this.pegs) {
       if (p.decor !== d) continue;
@@ -129,8 +131,7 @@ export class DecorLayer {
       if (r > 0) count.set(r, (count.get(r) ?? 0) + 1);
     }
     const radii = [...count]
-      .filter(([, n]) => n >= 2)
-      .sort((a, b) => b[1] - a[1])
+      .sort((a, b) => b[1] - a[1] || b[0] - a[0])
       .slice(0, 3)
       .map(([r]) => r);
     const turn = (d.dir * 2 * Math.PI * this.t) / d.periodS;
