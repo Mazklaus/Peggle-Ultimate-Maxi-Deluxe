@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  currentStreak,
+  previousDayKey,
+  recordDaily,
   emptySave,
   failsBeforeFirstWin,
   isUnlocked,
@@ -126,5 +129,56 @@ describe('ScoreBreakdown', () => {
     });
     b.reset();
     expect(b.finish(0, 0)).toMatchObject({ total: 0, chain: 0 });
+  });
+});
+
+describe('Constellation du jour (save.daily)', () => {
+  const mem = () => {
+    let stored: string | null = null;
+    return { getItem: () => stored, setItem: (_: string, v: string) => void (stored = v) };
+  };
+
+  it('garde le meilleur score du jour, essais illimités', () => {
+    const save = emptySave();
+    recordDaily(save, '20261116', 30000);
+    recordDaily(save, '20261116', 12000);
+    expect(recordDaily(save, '20261116', 41000)).toEqual({
+      date: '20261116',
+      best: 41000,
+      streak: 1,
+    });
+  });
+
+  it('série : +1 si la veille a été jouée, sinon on repart à 1', () => {
+    const save = emptySave();
+    recordDaily(save, '20261130', 100);
+    expect(recordDaily(save, '20261201', 50)).toEqual({
+      date: '20261201',
+      best: 50,
+      streak: 2,
+      lastDate: '20261130',
+    });
+    expect(recordDaily(save, '20261203', 10).streak).toBe(1);
+    expect(currentStreak(save, '20261203')).toBe(1);
+    expect(currentStreak(save, '20261204')).toBe(1);
+    expect(currentStreak(save, '20261205')).toBe(0);
+  });
+
+  it('veille dans le calendrier local (fin de mois, d’année, bissextile)', () => {
+    expect(previousDayKey('20270101')).toBe('20261231');
+    expect(previousDayKey('20280301')).toBe('20280229');
+  });
+
+  it('préservé par loadSave, ignoré s’il est mal formé', () => {
+    const storage = mem();
+    const save = emptySave();
+    recordDaily(save, '20261116', 999);
+    writeSave(save, storage);
+    expect(loadSave(storage).daily).toEqual({ date: '20261116', best: 999, streak: 1 });
+    storage.setItem(
+      'k',
+      JSON.stringify({ ...emptySave(), daily: { date: 'hier', best: 1, streak: 1 } }),
+    );
+    expect(loadSave(storage)).not.toHaveProperty('daily');
   });
 });

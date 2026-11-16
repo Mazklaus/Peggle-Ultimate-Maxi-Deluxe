@@ -7,6 +7,7 @@ import {
   TEST_LEVEL_KEY,
   type LevelCatalog,
 } from '../core/levelCatalog';
+import { generateDaily, localDateKey } from '../core/daily';
 import { parseLevel } from '../core/levelFormat';
 import { parseSequence } from '../core/story';
 import { browserStorage, loadSave } from '../core/save';
@@ -19,6 +20,7 @@ import { textStyle } from './theme';
  *   ./            -> écran titre
  *   ./?test       -> niveau envoyé par l'éditeur (localStorage « ricochet:test-level »)
  *   ./?level=<id> -> lance directement un niveau (QA, debug)
+ *   ./?daily      -> Constellation du jour (date locale) ; ./?daily=AAAAMMJJ pour un autre jour (QA)
  */
 export class BootScene extends Phaser.Scene {
   constructor() {
@@ -56,6 +58,7 @@ export class BootScene extends Phaser.Scene {
 
     const params = new URLSearchParams(window.location.search);
     if (params.has('test')) return this.startTestLevel();
+    if (params.has('daily')) return this.startDaily(params.get('daily') || localDateKey());
     // ?cutscene=intro | reveil_pip | fin_ch1 | reveil_ch2..8 | fin_ch2..8 : rejoue une
     // séquence de vignettes (tests).
     const cut = parseSequence(params.get('cutscene'));
@@ -87,6 +90,15 @@ export class BootScene extends Phaser.Scene {
     const res = parseLevel(raw);
     if (res.errors) return this.fail(['Niveau de test invalide :', ...res.errors]);
     this.scene.start(SCENES.game, { level: res.level, test: true });
+  }
+
+  private startDaily(key: string): void {
+    try {
+      const { level } = generateDaily(key);
+      this.scene.start(SCENES.game, { level, daily: key });
+    } catch (e) {
+      this.fail([`Constellation du jour indisponible : ${(e as Error).message}`]);
+    }
   }
 
   private fail(lines: string[]): void {
