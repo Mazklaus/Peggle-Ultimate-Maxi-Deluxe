@@ -8,6 +8,7 @@ import {
   type LevelCatalog,
 } from '../core/levelCatalog';
 import { parseLevel } from '../core/levelFormat';
+import { parseSequence } from '../core/story';
 import { browserStorage, loadSave } from '../core/save';
 import { REGISTRY, SCENES } from './keys';
 import { MAP_BACKGROUNDS } from './mapData';
@@ -55,9 +56,10 @@ export class BootScene extends Phaser.Scene {
 
     const params = new URLSearchParams(window.location.search);
     if (params.has('test')) return this.startTestLevel();
-    // ?cutscene=intro | reveil_pip | fin_ch1 : rejoue une séquence de vignettes (tests).
-    const cut = params.get('cutscene');
-    if (cut === 'intro' || cut === 'reveil_pip' || cut === 'fin_ch1') {
+    // ?cutscene=intro | reveil_pip | fin_ch1 | reveil_ch2..8 | fin_ch2..8 : rejoue une
+    // séquence de vignettes (tests).
+    const cut = parseSequence(params.get('cutscene'));
+    if (cut) {
       return void this.scene.start(SCENES.cutscene, {
         sequence: cut,
         next: { scene: SCENES.title },

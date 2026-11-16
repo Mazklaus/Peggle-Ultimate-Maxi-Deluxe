@@ -335,4 +335,40 @@
     ],
   });
 
+
+  /* ---------- 3. orbe_coincee / orbe_debloquee (fiches PENDANT, ajout du Narrative) ----------
+     Le moteur envoie orbe_coincee quand l'orbe est bloquée (pose tenue jusqu'à la suite),
+     puis orbe_debloquee au moment où elle repart. Priorité 8.5 (entre pouvoir_active et dernier_coeur). */
+  const STUCK = {
+    bourdon: { // ouvre un œil, soupire, long ronflement de tuba vers l'orbe ; se rendort content
+      c: R(1200, [{ reach: [k(500, 0), k(700, 1, 'Quad.out'), k(1200, 1)] }, G.grow(500, 1.12, 300, 700)], [F(0, 'sleepy', 'flat'), F(250, 'sleepy', 'moue', { brow: 'up' }), F(500, 'closed', 'open')], [[300, 'puff', 1], [600, 'note', 2], [900, 'zzz', 1]], { hold: true, track: true }),
+      d: R(1100, [G.squash(0, .1), G.tilt(200, 10, 250, 500)], [F(0, 'happy', 'smile', { zzz: true }), F(500, 'closed', 'o', { zzz: true })], [[400, 'zzz', 2]], { then: 'suivi' }),
+    },
+    jumelles: { // poussent chacune d'un côté (elles s'annulent), se regardent, poussent ensemble ; se tapent dans la main
+      c: R(1200, [{ bicker: [k(0, 0), k(150, 1), k(550, 1), k(650, 0)] }, G.sep(0, 26, 150, 400), G.huddle(700, 150, 350), G.arms(700, 90, 120, 350, 90), G.shake(150, 1.4, 450)], [F(0, 'squint', 'flat', { brow: 'stern' }), F(550, 'wide', 'o'), F(700, 'squint', 'grin', { brow: 'stern' })], [[600, 'excl', 1]], { hold: true, track: true }),
+      d: R(900, [G.huddle(0, 120, 300), G.arms(0, 160, 120, 300), G.hop(120, 14, 320)], [F(0, 'happy', 'grin')], [[200, 'sparkle', 3]], { then: 'suivi' }),
+    },
+    volte: { // claque sa queue comme un fouet « tchak » ; souffle sur le bout de sa queue comme sur un pistolet
+      c: R(1000, [{ rot: [k(0, 0), k(250, -30, 'Quad.out'), k(380, 40, 'Back.out'), k(600, 0), k(1000, 0)] }, G.squash(380, .14), G.armR(0, 120, 150, 400)], [F(0, 'squint', 'flat', { brow: 'cocky' }), F(380, 'open', 'grin', { brow: 'cocky' })], [[380, 'whoosh', 2], [400, 'burst', 1]], { hold: true, track: true }),
+      d: R(1100, [G.tilt(0, -25, 200, 600), G.armR(0, 160, 150, 600)], [F(0, 'open', 'o', { brow: 'cocky', shades: true }), F(700, 'happy', 'grin', { shades: true })], [[250, 'puff', 2]], { then: 'suivi' }),
+    },
+    mousse: { // regarde partout, gênée, tend un petit filet de brume et tire ; se cache derrière son éventail, fière
+      c: R(1200, [{ lookX: [k(0, -1), k(200, 1), k(400, -1), k(600, .8)] }, { reach: [k(550, 0), k(800, 1, 'Quad.out'), k(1000, .85), k(1200, .95)] }, G.cheeks(0, 1, 200, 800), G.fade(0, .7, 200, 800)], [F(0, 'wide', 'wavy'), F(600, 'squint', 'moue')], [], { hold: true }),
+      d: R(1000, [G.fan(0, 1, 150, 600), G.shrink(0, .85, 150, 500), G.cheeks(0, 1, 150, 600)], [F(0, 'happy', 'smile')], [[200, 'sparkle', 1]], { then: 'suivi' }),
+    },
+    horloge: { // chronomètre, tapote le cadran « inacceptable » ; ressort « boing » ; rajuste ses lunettes
+      c: R(1200, [{ armL: [k(0, 10), k(150, 100), k(300, 80), k(420, 100), k(540, 80), k(660, 100), k(800, 10)] }, { reach: [k(800, 0), k(950, 1.15, 'Back.out'), k(1100, .9), k(1200, 1)] }, G.squash(800, .12)], [F(0, 'squint', 'flat', { brow: 'stern' }), F(800, 'wide', 'o')], [[150, 'tick', 1], [420, 'tick', 1], [660, 'tick', 1], [820, 'excl', 1]], { hold: true, track: true }),
+      d: R(900, [{ reach: [k(0, 1), k(250, 0, 'Back.in')] }, G.armR(300, 120, 120, 250)], [F(0, 'open', 'flat', { brow: 'stern' }), F(500, 'open', 'smile')], [], { then: 'suivi' }),
+    },
+    grelot: { // trépigne à toute vitesse, roulement de clochettes « allez allez » ; elle repart déjà en avance
+      c: R(1200, [G.hops(0, 8, 6, 140), G.shake(0, 1, 1200), G.arms(0, 140, 100, 900)], [F(0, 'wide', 'open', { brow: 'up' })], [[0, 'note', 1], [300, 'note', 1], [600, 'note', 1], [900, 'note', 1]], { hold: true, track: true }),
+      d: R(900, [G.slide(0, 40, 150, 350), G.tilt(0, 18, 150, 350)], [F(0, 'happy', 'grin')], [[0, 'whoosh', 2]], { then: 'suivi' }),
+    },
+    nuagelune: { // ne s'en aperçoit pas tout de suite, puis chatouille l'orbe avec sa plume ; sourit, arpège de harpe
+      c: R(1200, [{ lookY: [k(0, -1), k(500, -1), k(600, 0)] }, { reach: [k(600, 0), k(850, 1, 'Quad.out'), k(1200, 1)] }, G.armR(600, 90, 200, 400)], [F(0, 'closed', 'smile'), F(500, 'open', 'o'), F(700, 'open', 'smile')], [[0, 'note', 1]], { hold: true, track: true }),
+      d: R(1100, [{ reach: [k(0, 1), k(300, 0)] }, G.tilt(200, -10, 250, 500)], [F(0, 'happy', 'smile')], [[200, 'note', 1], [400, 'note', 1], [600, 'note', 1]], { then: 'suivi' }),
+    },
+  };
+  Object.keys(STUCK).forEach(key => Object.assign(OVERRIDES[key] = OVERRIDES[key] || {}, { orbe_coincee: [STUCK[key].c], orbe_debloquee: [STUCK[key].d] }));
+
 })(typeof window !== 'undefined' ? window : globalThis);

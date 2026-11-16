@@ -50,7 +50,8 @@ import { aimGuide, predictPath, robustContactStep, type Circle } from '../core/t
 import { levelLabel } from '../core/levelCatalog';
 import { ScoreBreakdown } from '../core/scoreBreakdown';
 import { TUNING } from '../core/tuning';
-import { OPTIONS_CHANGED, REGISTRY, SCENES, STORY_LEVELS } from './keys';
+import { OPTIONS_CHANGED, REGISTRY, SCENES } from './keys';
+import { wakeSequenceFor } from '../core/story';
 import { CompanionView } from './CompanionView';
 import type { ResultsData } from './ResultsScene';
 import { CRYSTAL_COLORS, CRYSTAL_COLORS_CB, PALETTE, textStyle } from './theme';
@@ -257,18 +258,14 @@ export class GameScene extends Phaser.Scene {
     this.paused = false;
     this.input.enabled = true;
     if (this.input.keyboard) this.input.keyboard.enabled = true;
-    // Réveil de Pip (vignette B0) au tout premier lancement du 1-1.
+    // Réveil de l'Astre (vignette R0, B0 pour Pip) au tout premier lancement du niveau 1.
     const firstSave = this.registry.get(REGISTRY.save) as SaveData | undefined;
-    if (
-      !this.sceneData.test &&
-      this.sceneData.level.id === STORY_LEVELS.ch1First &&
-      firstSave &&
-      markSeen(firstSave, 'reveil_pip')
-    ) {
+    const wake = wakeSequenceFor(this.sceneData.level.id);
+    if (!this.sceneData.test && wake && firstSave && markSeen(firstSave, wake)) {
       writeSave(firstSave);
       this.redirecting = true;
       this.scene.start(SCENES.cutscene, {
-        sequence: 'reveil_pip',
+        sequence: wake,
         next: { scene: SCENES.game, data: this.sceneData },
       });
       return;
