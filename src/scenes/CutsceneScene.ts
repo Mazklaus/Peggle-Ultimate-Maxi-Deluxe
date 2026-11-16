@@ -53,7 +53,12 @@ export class CutsceneScene extends Phaser.Scene {
     // Scripts classiques du DA (globals AstresRig, Gardienne, Vignettes), chargés une fois.
     // Déjà exécutés lors d'une cinématique précédente : on ne les recharge pas.
     if ((window as unknown as { Vignettes?: unknown }).Vignettes) return;
-    for (const name of SCRIPTS) this.load.script(`da:${name}`, `da/${name}.js`);
+    // load.scripts (et non load.script en boucle) : exécution dans l'ordre de la liste,
+    // les scripts dépendent les uns des autres (AstresRig d'abord).
+    this.load.scripts(
+      'da-scripts',
+      SCRIPTS.map((name) => `da/${name}.js`),
+    );
   }
 
   create(): void {
