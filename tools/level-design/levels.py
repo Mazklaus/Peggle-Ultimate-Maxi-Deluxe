@@ -667,6 +667,91 @@ pts = holes(rows(60, 820, 140, 3, 38, 18) + thick(290, 440, 110, 2) + thick(590,
 g = [('beffroi', 440, 300, ring(440, 300, 90, 12) + ring(440, 300, 45, 6), None)]
 L.append(level('ch7-12', 7, 12, 'Le Beffroi', 'grande-constellation', 13, 27, 79, 1, 2, build(pts, GUARD_IMP_LIGHT, walls=walls, groups=g), decor=[rot('beffroi', 440, 300, 12), portal('b1', A1, B1), portal('b2', A2, B2)], **GRE))
 
+# ---------- CHAPITRE 8 : Nuage-Lune (seconde chance), élément : synthèse (jusqu'à 3 éléments, niveaux 7+) ----------
+NUA = dict(companion='nuage-lune')
+
+# 8-1 découverte : trois nuages (bols épais), un pouvoir au fond de chacun.
+imp = [(200, 330, 'power'), (680, 330, 'power'), (440, 460, 'power')]
+pts = thick(200, 220, 120, 2) + thick(680, 220, 120, 2) + thick(440, 350, 120, 2) + rows(100, 780, 150, 1, 0, 12) + rows(100, 780, 565, 1, 0, 14)
+L.append(level('ch8-01', 8, 1, 'Nuage-Lune flotte', 'decouverte', 14, 16, 59, 1, 3, build(pts, imp + GUARD_IMP), locked=True, **NUA))
+
+# 8-2 découverte : le croissant de lune.
+imp = [(440, 480, 'power'), (250, 380, 'power'), (630, 380, 'power')]
+pts = arc(440, 180, 300, 20, 160, 26) + arc(440, 150, 230, 25, 155, 18) + rows(140, 740, 150, 1, 0, 10) + arc(440, 250, 80, 15, 165, 8) + arc(110, 340, 80, 15, 165, 8) + arc(770, 340, 80, 15, 165, 8) + rows(120, 760, 565, 1, 0, 12)
+L.append(level('ch8-02', 8, 2, 'Le croissant', 'decouverte', 13, 18, 62, 1, 3, build(pts, imp + GUARD_IMP), locked=True, **NUA))
+
+# 8-3 application : la roue des nuages (rappel roue).
+pts = rows(60, 820, 150, 2, 44, 18) + thick(140, 420, 100, 2) + thick(740, 420, 100, 2) + rows(240, 640, 565, 1, 0, 9)
+g = [('roue', 440, 360, ring(440, 360, 115, 16) + ring(440, 360, 60, 8, phase=22), None)]
+L.append(level('ch8-03', 8, 3, 'La roue des nuages', 'application', 13, 25, 65, 1, 2, build(pts, GUARD_IMP, groups=g), decor=[rot('roue', 440, 360, 16)], **NUA))
+
+# 8-4 application : portail et aimant.
+A, B = (100, 250), (600, 330)
+pts = holes(rows(200, 820, 150, 3, 40, 15) + thick(600, 430, 100, 2) + thick(250, 400, 120, 2) + rows(100, 780, 565, 1, 0, 16) + arc(790, 420, 60, 15, 165, 6), [A, B, (440, 260)])
+L.append(level('ch8-04', 8, 4, 'La porte aimantée', 'application', 14, 21, 72, 1, 2, build(pts, GUARD_IMP_LIGHT), decor=[portal('porte', A, B), mag('aimant', 440, 260, 110, 1.2)], **NUA))
+
+# 8-5 application : lunes et régénération.
+g = []; dec = [regen('voile')]
+pts = rows(60, 820, 150, 2, 40, 18) + line(140, 260, 740, 260, 14) + rows(100, 780, 565, 1, 0, 16)
+for k, cx in enumerate((230, 650)):
+    pts += thick(cx, 380, 50, 1) + arc(cx, 380, 130, 15, 165, 13)
+    gg, dd = moons(f'lune{k+1}', cx, 380, 80, 2, 6, 1 if k == 0 else -1); g.append(gg); dec.append(dd)
+L.append(level('ch8-05', 8, 5, 'Le voile des lunes', 'application', 13, 23, 72, 1, 2,
+               tag_regen(build(pts, GUARD_IMP, groups=g), 'voile', lambda x, y: abs(y - 260) < 3), decor=dec, **NUA))
+
+# 8-6 respiration : ciel de traîne (cœurs en grappes, règle GD).
+pts = rows(50, 830, 190, 7, 44, 19)
+L.append(level('ch8-06', 8, 6, 'Ciel de traîne', 'respiration', 15, 16, 75, 1, 2, build(pts), **NUA, clusters=[(200, 260), (680, 260), (330, 420), (550, 420)]))
+
+# 8-7 synthèse : roue + aimant + portail.
+A, B = (90, 220), (790, 220)
+pts = holes(rows(160, 720, 150, 3, 36, 13) + thick(140, 440, 90, 2) + thick(740, 440, 90, 2) + rows(240, 640, 565, 1, 0, 9), [A, B, (440, 360)])
+g = [('roue', 440, 360, ring(440, 360, 130, 18) + ring(440, 360, 85, 12, phase=15), None)]
+L.append(level('ch8-07', 8, 7, 'Les trois veilleuses', 'combinaison', 13, 26, 69, 1, 2, build(pts, GUARD_IMP_LIGHT, groups=g),
+               decor=[rot('roue', 440, 360, 15), mag('coeur', 440, 360, 100, 1.2), portal('porte', A, B)], **NUA))
+
+# 8-8 synthèse : lunes + régénération + portail.
+A, B = (440, 230), (440, 470)
+g = []; dec = [regen('haie'), portal('porte', A, B)]
+pts = holes(rows(60, 820, 150, 2, 40, 18) + line(100, 300, 330, 300, 6) + line(550, 300, 780, 300, 6) + thick(440, 470, 100, 2) + rows(80, 800, 568, 1, 0, 18), [A, B])
+for k, cx in enumerate((210, 670)):
+    pts += arc(cx, 420, 110, 15, 165, 11)
+    gg, dd = moons(f'lune{k+1}', cx, 420, 60, 2, 5, 1 if k == 0 else -1); g.append(gg); dec.append(dd)
+L.append(level('ch8-08', 8, 8, 'Le passage des lunes', 'combinaison', 14, 22, 74, 1, 2,
+               tag_regen(build(pts, GUARD_IMP, groups=g), 'haie', lambda x, y: abs(y - 300) < 3), decor=dec, **NUA))
+
+# 8-9 synthèse : trois aimants autour d'une roue.
+M = [(160, 300), (720, 300), (440, 500)]
+pts = holes(rows(60, 820, 150, 2, 40, 18) + arc(160, 300, 100, 200, 340, 7) + arc(720, 300, 100, 200, 340, 7) + rows(100, 780, 568, 1, 0, 16) + arc(150, 460, 80, 15, 165, 8) + arc(730, 460, 80, 15, 165, 8), M)
+g = [('roue', 440, 330, ring(440, 330, 110, 15) + ring(440, 330, 55, 7), None)]
+L.append(level('ch8-09', 8, 9, 'Le triangle d’aimants', 'combinaison', 14, 22, 78, 1, 2, build(pts, GUARD_IMP_LIGHT, groups=g),
+               decor=[rot('roue', 440, 330, 14), mag('m1', 160, 300, 100, 1.1), mag('m2', 720, 300, 100, 1.1), mag('m3', 440, 500, 90, 1.1)], **NUA))
+
+# 8-10 maîtrise : roue + lunes + régénération.
+g = [('roue', 440, 330, ring(440, 330, 120, 16) + ring(440, 330, 60, 8), None)]; dec = [rot('roue', 440, 330, 15), regen('bas')]
+pts = rows(60, 820, 150, 2, 40, 18) + rows(80, 800, 530, 2, 34, 18)
+for k, cx in enumerate((130, 750)):
+    gg, dd = moons(f'lune{k+1}', cx, 340, 70, 3, 6, 1 if k == 0 else -1); g.append(gg); dec.append(dd)
+    pts += thick(cx, 340, 40, 1)
+L.append(level('ch8-10', 8, 10, 'La veille têtue', 'maitrise', 12, 27, 75, 1, 2,
+               tag_regen(build(pts, GUARD_IMP_LIGHT, groups=g), 'bas', lambda x, y: y > 520 and abs(x - 440) < 200), decor=dec, **NUA))
+
+# 8-11 maîtrise : deux portes, deux aimants, une haie qui repousse.
+A1, B1, A2, B2 = (90, 220), (600, 460), (790, 220), (280, 460)
+M = [(250, 300), (630, 300)]
+pts = holes(rows(160, 720, 150, 3, 36, 14) + line(330, 380, 550, 380, 6) + thick(280, 440, 110, 3, 34) + thick(600, 440, 110, 3, 34) + arc(80, 440, 50, 15, 165, 5) + arc(800, 440, 50, 15, 165, 5) + rows(80, 800, 568, 1, 0, 18), [A1, B1, A2, B2] + M)
+L.append(level('ch8-11', 8, 11, 'Les passages du ciel', 'maitrise', 13, 27, 75, 1, 2,
+               tag_regen(build(pts, GUARD_IMP_LIGHT), 'haie', lambda x, y: abs(y - 380) < 3),
+               decor=[portal('p1', A1, B1), portal('p2', A2, B2), mag('m1', 250, 300, 100, 1.1), mag('m2', 630, 300, 100, 1.1), regen('haie')], **NUA))
+
+# 8-12 Grande Constellation : la Grande Veilleuse, roue + lunes + aimant, deux auvents.
+walls = [(170, 250, 130, 20), (710, 250, 130, -20)]
+g = [('veilleuse', 440, 340, ring(440, 340, 120, 16) + ring(440, 340, 65, 9), None)]; dec = [rot('veilleuse', 440, 340, 16), mag('coeur', 440, 340, 50, 1.0)]
+pts = hole(rows(60, 820, 140, 2, 40, 18) + thick(150, 460, 100, 2) + thick(730, 460, 100, 2) + rows(80, 800, 568, 1, 0, 18), 440, 340, 30)
+for k, cx in enumerate((150, 730)):
+    gg, dd = moons(f'lune{k+1}', cx, 360, 60, 2, 6, 1 if k == 0 else -1); g.append(gg); dec.append(dd)
+L.append(level('ch8-12', 8, 12, 'La Grande Veilleuse', 'grande-constellation', 13, 28, 77, 1, 2, build(pts, GUARD_IMP_LIGHT, walls=walls, groups=g), decor=dec, **NUA))
+
 out = sys.argv[1] if len(sys.argv) > 1 else 'out'
 os.makedirs(out, exist_ok=True)
 for lv in L:
