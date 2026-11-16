@@ -46,6 +46,7 @@ const REACTION_EVENTS: ReactionTrigger[] = [
   'inactivite',
   'orbe_coincee',
   'orbe_debloquee',
+  'duel_avantage',
 ];
 
 interface Particle {
@@ -224,6 +225,11 @@ export class CompanionView {
   }
 
   /** Pause : l'Astre s'endort ; il se réveille (sursaut) à la reprise. */
+  /** Duel : l'Astre porte les couleurs de son joueur (rig de la DA). */
+  setPlayer(player: 'J1' | 'J2' | null): void {
+    this.da?.setPlayer(player);
+  }
+
   setSleeping(on: boolean): void {
     this.brain.setSleeping(on);
   }

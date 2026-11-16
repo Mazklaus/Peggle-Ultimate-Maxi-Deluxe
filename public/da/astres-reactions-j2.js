@@ -371,4 +371,146 @@
   };
   Object.keys(STUCK).forEach(key => Object.assign(OVERRIDES[key] = OVERRIDES[key] || {}, { orbe_coincee: [STUCK[key].c], orbe_debloquee: [STUCK[key].d] }));
 
+
+  /* ---------- 4. Jalon 3 : variantes anti-répétition + duel (09-jalon3-variantes-et-duel.md) ----------
+     orbe_coincee Vn est toujours suivie de orbe_debloquee Vn (appariement dans le rig : PAIR).
+     prop : accessoire tenu au bout du bras droit (hammer, pompom, pillow, pen, stamp, umbrella, notebook, parcel). */
+  const BASE = global.AstresRig.REACTIONS;
+  const H = { hold: true, track: true }, S = { then: 'suivi' };
+  const J3 = {
+    pip: {
+      c: [ // V2 le marteau (tape en rythme) · V3 les pompons
+        R(1200, [{ armR: [k(0, 60), k(150, 150, 'Back.out'), k(300, 70, 'Quad.in'), k(450, 150), k(600, 70, 'Quad.in'), k(750, 150), k(900, 70, 'Quad.in'), k(1050, 150), k(1200, 70, 'Quad.in')] }, G.shake(300, .6, 900)], [F(0, 'squint', 'tongue', { brow: 'stern' })], [[300, 'sparkle', 1], [600, 'sparkle', 1], [900, 'sparkle', 1]], Object.assign({ prop: 'hammer' }, H)),
+        R(1200, [G.hops(0, 4, 12, 300), { armL: [k(0, 10), k(150, 150), k(300, 110), k(450, 150), k(600, 110), k(750, 150), k(900, 110), k(1050, 150)], armR: [k(0, 10), k(150, 110), k(300, 150), k(450, 110), k(600, 150), k(750, 110), k(900, 150), k(1050, 110)] }], [F(0, 'happy', 'grin', { meche: 'antenna' })], [[0, 'note', 1], [600, 'note', 1]], Object.assign({ prop: 'pompom' }, H)),
+      ],
+      d: [
+        R(1300, [{ propRot: [k(0, 0), k(250, -200, 'Quad.out'), k(450, -380, 'Quad.in')], propA: [k(450, 1), k(900, 1), k(1000, 0)], armR: [k(0, 150), k(250, 150)] }, G.squash(450, .3, 500)], [F(0, 'wide', 'o'), F(450, 'spiral', 'wavy'), F(950, 'happy', 'smile')], [[450, 'sparkle', 4]], Object.assign({ prop: 'hammer' }, S)),
+        R(1200, [{ propA: [k(0, 1), k(200, 0)] }, G.spin(250, 1, 600), G.arms(250, 160, 120, 500), G.hop(250, 22, 500)], [F(0, 'wide', 'grin'), F(400, 'happy', 'grin')], [[100, 'confetti', 10]], Object.assign({ prop: 'pompom' }, S)),
+      ],
+      r: [ // V3 gardien de but · V4 le bisou
+        R(1100, [G.lieBack(0, 200, 400), G.arms(0, 160, 100, 400), G.hop(700, 18, 400)], [F(0, 'squint', 'open'), F(700, 'happy', 'grin', { brow: 'up' })], [[700, 'sparkle', 3]]),
+        R(1000, [G.armR(0, 100, 150, 300), G.tilt(0, -10, 150, 400), G.cheeks(200, 1, 150, 500)], [F(0, 'closed', 'moue'), F(400, 'happy', 'smile')], [[250, 'heart', 3]]),
+      ],
+    },
+    bourdon: {
+      c: [ // V2 le coussin · V3 le roulé
+        R(1200, [{ armR: [k(0, 10), k(250, 160, 'Back.out'), k(350, 60), k(1200, 60)], propA: [k(0, 1), k(300, 1), k(320, 0)] }, { lookX: [k(400, -1), k(700, 1), k(1000, -1), k(1200, 0)] }], [F(0, 'sleepy', 'flat'), F(400, 'sleepy', 'moue', { brow: 'worried' })], [[300, 'whoosh', 1]], Object.assign({ prop: 'pillow' }, H)),
+        R(1200, [{ rot: [k(0, 0), k(1200, 360, 'Linear')], dx: [k(0, 0), k(1200, 10)] }], [F(0, 'closed', 'o', { zzz: true })], [], Object.assign({ loop: false }, H)),
+      ],
+      d: [
+        R(1200, [G.grow(0, 1.08, 300, 300), G.tilt(500, 10, 250, 400)], [F(0, 'closed', 'baille'), F(500, 'closed', 'smile', { zzz: true })], [[600, 'zzz', 2]], S),
+        R(1500, [{ rot: [k(0, 360), k(700, 900, 'Linear'), k(701, 900), k(1500, 1080, 'Quad.out')], dx: [k(0, 10), k(700, 90, 'Quad.in'), k(701, -90), k(1500, 0, 'Quad.out')], alpha: [k(600, 1), k(700, 0), k(760, 0), k(860, 1)] }], [F(0, 'closed', 'o', { zzz: true })], [], S),
+      ],
+      r: [ // V3 le pouce · V4 la sieste méritée
+        R(900, [G.armR(0, 150, 150, 400)], [F(0, 'closed', 'smile', { zzz: true })], []),
+        R(1100, [G.tuck(0, 250, 600), G.tilt(0, 12, 250, 600)], [F(0, 'closed', 'o', { zzz: true })], [[200, 'zzz', 3]]),
+      ],
+    },
+    jumelles: {
+      c: [ // V2 le chifoumi (égalités) · V3 la pyramide
+        R(1200, [G.piston(0, 6, 6, 200), G.arms(0, 70, 100, 1000, 70)], [F(0, 'squint', 'flat', { brow: 'stern' }), F(600, 'wide', 'o')], [[400, 'excl', 1], [1000, 'excl', 1]], H),
+        R(1200, [{ duoSep: [k(0, 0), k(300, -44, 'Back.out'), k(1200, -44)], duoDy: [k(0, 0), k(300, 24, 'Back.out'), k(1200, 24)], duoRot: [k(300, 0), k(500, 8), k(700, -8), k(900, 8), k(1100, -8)] }, G.shake(300, .8, 900)], [F(0, 'wide', 'puff'), F(400, 'squint', 'puff')], [], H),
+      ],
+      d: [
+        R(1100, [G.duoRot(0, 10, 150, 500), { lookX: [k(0, 0), k(200, 1), k(700, 1), k(900, 0)] }], [F(0, 'wide', 'o'), F(300, 'squint', 'moue', { brow: 'stern' })], [[300, 'excl', 2]], S),
+        R(1300, [{ duoSep: [k(0, -44), k(250, 30, 'Bounce.out'), k(1000, 30), k(1300, 0)], duoDy: [k(0, 24), k(250, 0, 'Bounce.out')], duoRot: [k(0, 0), k(250, 40), k(1000, 40), k(1300, 0)] }, G.shake(300, 1.2, 700)], [F(0, 'wide', 'open'), F(300, 'happy', 'grin')], [[300, 'sparkle', 4]], S),
+      ],
+      r: [ // V3 la ola · V4 le compte
+        R(1100, [{ armL: [k(0, 10), k(200, 160, 'Back.out'), k(400, 10), k(700, 160, 'Back.out'), k(1000, 10)], armR: [k(150, 10), k(350, 160, 'Back.out'), k(550, 10), k(700, 160, 'Back.out'), k(1000, 10)] }, G.hop(700, 14, 300)], [F(0, 'happy', 'grin')], [[700, 'sparkle', 2]]),
+        R(1200, [G.arms(0, 150, 120, 500), G.bicker(500, 2, 300)], [F(0, 'open', 'smile'), F(500, 'squint', 'open', { brow: 'stern' })], [[600, 'excl', 1]]),
+      ],
+    },
+    volte: {
+      c: [ // V2 le lasso · V3 le regard qui tue
+        R(1200, [{ armR: [k(0, 10), k(200, 170, 'Back.out'), k(1200, 170)], rot: [k(0, 0), k(300, -8), k(600, 8), k(900, -8), k(1200, 8)] }], [F(0, 'squint', 'grin', { brow: 'cocky', shades: true })], [[200, 'whoosh', 1], [500, 'whoosh', 1], [800, 'whoosh', 1]], H),
+        R(1200, [G.slide(0, 8, 250, 900), G.shake(400, .5, 800)], [F(0, 'squint', 'flat', { brow: 'stern', shades: false })], [], H),
+      ],
+      d: [
+        R(1200, [{ rot: [k(0, 0), k(150, -25, 'Quad.out'), k(400, 0, 'Back.out')], armR: [k(0, 170), k(150, 60), k(600, 160), k(1000, 160), k(1200, 10)] }, G.squash(150, .12)], [F(0, 'open', 'grin', { brow: 'cocky', shades: true })], [[150, 'burst', 2], [700, 'puff', 2]], S),
+        R(900, [G.armR(0, 150, 150, 300)], [F(0, 'squint', 'grin', { brow: 'cocky', shades: true })], [[200, 'sparkle', 1]], S),
+      ],
+      r: [ // V3 le skate · V4 l'autographe
+        R(1200, [{ dx: [k(0, 0), k(500, 30, 'Quad.out'), k(650, 26), k(1200, 0)], rot: [k(0, 0), k(500, -15), k(650, 18, 'Back.out'), k(1200, 0)] }, G.arms(0, 120, 150, 500)], [F(0, 'happy', 'grin', { shades: true })], [[550, 'puff', 3]]),
+        R(1200, [{ armR: [k(0, 10), k(200, 110), k(350, 140), k(500, 100), k(650, 140), k(800, 120), k(1200, 10)] }], [F(0, 'squint', 'grin', { brow: 'cocky' })], [[800, 'sparkle', 2]], { prop: 'pen' }),
+      ],
+    },
+    mousse: {
+      c: [ // V2 le vent · V3 la prière
+        R(1200, [G.grow(0, 1.25, 500, 700), { cheeks: [k(0, 0), k(1200, 1)] }, { reach: [k(300, 0), k(600, .7), k(1200, 1)] }], [F(0, 'squint', 'puff')], [], Object.assign({}, H)),
+        R(1200, [G.arms(0, 60, 150, 1000, 60), G.tuck(0, 200, 900), G.shake(200, .7, 1000)], [F(0, 'closed', 'flat')], [], { hold: true }),
+      ],
+      d: [
+        R(1100, [G.shrink(0, .8, 250, 200), G.fan(300, .9, 150, 400), G.cheeks(0, 1, 150, 600)], [F(0, 'closed', 'wavy'), F(400, 'squint', 'smile')], [[0, 'puff', 3]], S),
+        R(1200, [G.fan(500, 1, 150, 400)], [F(0, 'squint', 'o'), F(300, 'wide', 'o'), F(500, 'happy', 'smile')], [[600, 'sparkle', 1]], S),
+      ],
+      r: [ // V3 le cœur de brume · V4 le soupir
+        R(1100, [G.armR(0, 110, 200, 400), G.cheeks(0, 1, 200, 600), G.fan(700, 1, 150, 200)], [F(0, 'open', 'smile'), F(700, 'squint', 'smile')], [[250, 'heart', 1]]),
+        R(1100, [G.fade(200, .4, 200, 300), { sx: [k(0, 1), k(300, 1.2), k(700, 1, 'Elastic.out')], sy: [k(0, 1), k(300, .85), k(700, 1, 'Elastic.out')] }], [F(0, 'closed', 'o'), F(700, 'open', 'smile')], [[200, 'puff', 4]]),
+      ],
+    },
+    horloge: {
+      c: [ // V2 le règlement · V3 la pendule
+        R(1200, [{ armR: [k(0, 10), k(200, 80), k(1200, 80)], propRot: [k(200, 0), k(400, 6), k(600, -6), k(800, 6), k(1000, -6), k(1200, 6)] }, G.look(0, .3, .8)], [F(0, 'squint', 'flat', { brow: 'stern' })], [[300, 'tick', 1], [800, 'tick', 1]], Object.assign({ prop: 'notebook' }, H)),
+        R(1200, [{ rot: [k(0, 0), k(200, 6), k(400, -9), k(600, 12), k(800, -15), k(1000, 18), k(1200, -20)] }], [F(0, 'open', 'flat', { brow: 'stern' })], [], H),
+      ],
+      d: [
+        R(1000, [{ armR: [k(0, 80), k(150, 150, 'Back.out'), k(500, 150), k(700, 10)], propA: [k(0, 1), k(450, 1), k(500, 0)] }], [F(0, 'open', 'flat', { brow: 'stern' }), F(500, 'open', 'smile')], [[200, 'puff', 2]], Object.assign({ prop: 'notebook' }, S)),
+        R(900, [{ rot: [k(0, -20), k(90, 0, 'Quad.out')] }, G.cuckoo(150, 1, 400)], [F(0, 'open', 'flat'), F(300, 'open', 'smile')], [[150, 'note', 1]], S),
+      ],
+      r: [ // V3 pile à l'heure · V4 le carillon
+        R(1000, [G.armL(0, 90, 150, 400), { dy: [k(500, 0), k(600, 4), k(700, 0), k(800, 4), k(900, 0)] }], [F(0, 'squint', 'flat'), F(500, 'open', 'smile')], [[200, 'tick', 1]]),
+        R(1100, [G.cuckoo(0, 3, 300)], [F(0, 'closed', 'smile')], [[0, 'note', 1], [300, 'note', 1], [600, 'note', 1]]),
+      ],
+    },
+    grelot: {
+      c: [ // V2 le facteur · V3 la course (recule)
+        R(1200, [{ armR: [k(0, 10), k(100, 90), k(200, 70), k(300, 90), k(400, 70), k(500, 90), k(600, 70), k(700, 90), k(800, 70), k(900, 90), k(1000, 70), k(1100, 90)] }, G.shake(0, .6, 1200)], [F(0, 'wide', 'open', { brow: 'up' })], [[0, 'note', 1], [400, 'note', 1], [800, 'note', 1]], H),
+        R(1200, [{ dx: [k(0, 0), k(1200, -28, 'Quad.out')], rot: [k(0, 0), k(300, -12)], sx: [k(0, 1), k(1200, 1.1)], sy: [k(0, 1), k(1200, .9)] }], [F(0, 'squint', 'grin', { brow: 'stern' })], [[600, 'sweat', 1]], H),
+      ],
+      d: [
+        R(1100, [{ armR: [k(0, 90), k(200, 110), k(500, 110), k(700, 10)], propA: [k(0, 1), k(450, 1), k(550, 0)] }, G.slide(500, 50, 200, 200)], [F(0, 'happy', 'open'), F(500, 'happy', 'grin')], [[500, 'whoosh', 2]], Object.assign({ prop: 'parcel' }, S)),
+        R(1300, [{ dx: [k(0, -28), k(300, 34, 'Quad.in'), k(500, 30, 'Back.out'), k(1300, 0)], rot: [k(0, -12), k(300, 20), k(600, 0)] }, G.shrink(700, .9, 200, 300)], [F(0, 'wide', 'open'), F(500, 'open', 'frown', { brow: 'worried' })], [[300, 'puff', 3]], S),
+      ],
+      r: [ // V3 en retard (essoufflée) · V4 le tampon
+        R(1300, [G.slide(0, 16, 300, 0), G.clap(300, 4, 160), { sy: [k(0, 1), k(150, .9), k(300, 1.05), k(450, .9), k(600, 1)] }], [F(0, 'squint', 'open'), F(400, 'happy', 'grin')], [[0, 'sweat', 2]]),
+        R(1000, [{ armR: [k(0, 10), k(200, 150, 'Back.out'), k(350, 60, 'Quad.in'), k(800, 60), k(1000, 10)] }, G.squash(350, .1)], [F(0, 'squint', 'flat'), F(350, 'happy', 'grin')], [[350, 'burst', 2]], { prop: 'stamp' }),
+      ],
+    },
+    nuagelune: {
+      c: [ // V2 la berceuse · V3 la pluie
+        R(1200, [{ rot: [k(0, 0), k(300, 8), k(600, -8), k(900, 8), k(1200, -8)] }], [F(0, 'closed', 'o')], [[0, 'note', 1], [400, 'note', 1], [800, 'note', 1]], H),
+        R(1200, [G.look(0, .4, .6)], [F(0, 'open', 'smile', { mood: 'rain' })], [], H),
+      ],
+      d: [
+        R(1100, [G.armR(0, 60, 200, 600), G.cheeks(0, 1, 200, 600)], [F(0, 'happy', 'wavy')], [[200, 'heart', 1]], S),
+        R(1300, [{ propOpen: [k(300, 1), k(900, 0)] }, G.armR(0, 130, 150, 700)], [F(0, 'happy', 'smile', { mood: 'joy' })], [[0, 'sparkle', 2]], Object.assign({ prop: 'umbrella' }, S)),
+      ],
+      r: [ // V3 le poème · V4 le hamac
+        R(1200, [G.armR(0, 130, 200, 600), G.tilt(0, -6, 200, 600)], [F(0, 'closed', 'o')], [[100, 'note', 1], [400, 'note', 1], [700, 'note', 1]]),
+        R(1200, [G.lieBack(0, 350, 500)], [F(0, 'closed', 'smile')], [[300, 'sigh', 1]]),
+      ],
+    },
+  };
+  // duel_avantage : taquine l'Astre adverse (le moteur pose target vers l'autre marge, ou flip pour J2)
+  const TAUNT = {
+    pip: R(1200, [G.look(0, 1, 0), G.tilt(0, 10, 150, 500), G.wave(700, 3, 120)], [F(0, 'squint', 'tongue'), F(700, 'happy', 'grin')], []),
+    bourdon: R(1200, [G.look(0, 1, 0), G.grow(0, 1.08, 300, 300), G.tilt(600, 10, 200, 400)], [F(0, 'sleepy', 'baille'), F(600, 'closed', 'o', { zzz: true })], [[700, 'zzz', 1]]),
+    jumelles: R(1100, [G.look(0, 1, 0), G.duoRot(0, 12, 150, 450), G.huddle(750, 100, 200), G.arms(750, 160, 100, 200)], [F(0, 'squint', 'tongue'), F(750, 'happy', 'grin')], [[800, 'sparkle', 2]]),
+    volte: R(1200, [G.look(0, 1, 0), { armL: [k(0, 10), k(200, 70), k(600, 70), k(700, 10)], armR: [k(600, 10), k(800, 110, 'Back.out'), k(1100, 110), k(1200, 10)] }], [F(0, 'squint', 'smile', { brow: 'cocky', shades: true })], [[300, 'puff', 1]]),
+    mousse: R(1100, [G.look(0, 1, 0), G.fan(0, .5, 150, 300), G.fan(600, 1, 100, 300, .5), G.cheeks(300, 1, 150, 500)], [F(0, 'squint', 'moue'), F(600, 'squint', 'smile')], [[350, 'heart', 1]]),
+    horloge: R(1200, [G.look(0, 1, 0), { armL: [k(0, 10), k(150, 100), k(350, 80), k(500, 100), k(650, 80), k(800, 100), k(1100, 10)] }], [F(0, 'squint', 'smile', { brow: 'stern' })], [[350, 'tick', 1], [650, 'tick', 1]]),
+    grelot: R(1200, [G.dash(0, 3, 30, 260), G.look(0, 1, 0)], [F(0, 'happy', 'grin')], [[800, 'note', 1]]),
+    nuagelune: R(1200, [G.look(0, 1, 0), { rot: [k(700, 0), k(900, -25), k(1100, 0)] }, G.armR(700, 100, 150, 200)], [F(0, 'squint', 'smile', { mood: 'rain' }), F(700, 'closed', 'smile')], []),
+  };
+  // Astre taquiné : moue, bras croisés, puis se reconcentre (générique, même pour tous)
+  BASE.duel_taquine = [R(1200, [{ armL: [k(0, 10), k(200, 70), k(800, 70), k(1000, 10)], armR: [k(0, 10), k(200, 70), k(800, 70), k(1000, 10)] }, G.look(0, -.6, .3), G.tilt(0, -6, 200, 600)], [F(0, 'squint', 'moue', { brow: 'stern' }), F(900, 'open', 'flat', { brow: null })], [[100, 'puff', 1]])];
+  Object.keys(J3).forEach(key => {
+    const O = OVERRIDES[key] = OVERRIDES[key] || {}, j = J3[key];
+    O.orbe_coincee = [...(O.orbe_coincee || BASE.orbe_coincee), ...j.c];
+    O.orbe_debloquee = [...(O.orbe_debloquee || BASE.orbe_debloquee), ...j.d];
+    O.orbe_recupere = [...(O.orbe_recupere || BASE.orbe_recupere), ...j.r];
+    O.duel_avantage = [TAUNT[key]];
+  });
+  OVERRIDES.bourdon.duel_taquine = [R(1300, [G.look(0, -.6, .3)], [F(0, 'sleepy', 'moue'), F(500, 'closed', 'o', { zzz: true })], [[600, 'zzz', 2]])]; // boude... en dormant
+
 })(typeof window !== 'undefined' ? window : globalThis);

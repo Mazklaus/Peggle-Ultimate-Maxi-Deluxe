@@ -109,6 +109,8 @@ const CANNON = { x: PLAYFIELD.x + PLAYFIELD.w / 2, y: PLAYFIELD.y + 24 };
 const BUCKET = { width: 100, height: 18, y: GAME_HEIGHT - 14 };
 /** Duel : délai entre la fin du tir et l'entrée de l'Astre suivant (réaction du tireur). */
 const DUEL_SWITCH_MS = 900;
+/** Idem quand le tireur passe en tête (duel_avantage de la DA : 1,2 à 1,3 s). */
+const DUEL_TAUNT_MS = 1400;
 const MIN_AIM = Phaser.Math.DegToRad(8);
 const MAX_AIM = Phaser.Math.DegToRad(172);
 const WALL_THICKNESS = 40;
@@ -925,6 +927,7 @@ export class GameScene extends Phaser.Scene {
     }
     this.companion = new CompanionView(this, def, COMPANION_ANCHOR);
     this.companion.attach();
+    if (this.duel) this.companion.setPlayer(this.duel.active === 0 ? 'J1' : 'J2');
     // Avec Pip : le 1er tir montre sa trajectoire révélée ; sinon la lanterne.
     if (needsHelp) {
       if (id === 'pip') this.reveal.grant(1);
@@ -1564,7 +1567,9 @@ export class GameScene extends Phaser.Scene {
     if (result.phase === 'won') this.endLevel(true);
     else if (result.phase === 'lost') this.endLevel(false);
     else {
-      if (turn?.switched && shooter !== undefined) this.beginTurnSwitch(shooter);
+      // Passage en tête : l'Astre du tireur a le temps de taquiner avant de céder la loge.
+      const wait = turn?.newLeader != null ? DUEL_TAUNT_MS : DUEL_SWITCH_MS;
+      if (turn?.switched && shooter !== undefined) this.beginTurnSwitch(shooter, wait);
       this.emitAll(this.tracker.beginAiming(heartsRemaining(this.level), this.level.orbs));
     }
   }
@@ -1580,10 +1585,10 @@ export class GameScene extends Phaser.Scene {
    * Duel : l'Astre du tireur finit sa réaction, puis celui du joueur suivant prend la loge
    * (avec son pouvoir et son HUD) ; la bannière annonce le tour.
    */
-  private beginTurnSwitch(shooter: PlayerIndex): void {
+  private beginTurnSwitch(shooter: PlayerIndex, wait: number): void {
     this.duelCharges[shooter] = this.reveal;
     this.turnSwitching = true;
-    this.time.delayedCall(DUEL_SWITCH_MS, () => {
+    this.time.delayedCall(wait, () => {
       const d = this.duel;
       if (!d || this.ending) return;
       this.companion?.destroy();

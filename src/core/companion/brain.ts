@@ -36,6 +36,7 @@ export const PRIORITY: Record<ReactionTrigger | 'idle', number> = {
   orbe_debloquee: 58,
   dernier_coeur: 55,
   dernier_orbe: 50,
+  duel_avantage: 47,
   orbe_recupere: 45,
   rate: 40,
   tir_moyen: 35,
