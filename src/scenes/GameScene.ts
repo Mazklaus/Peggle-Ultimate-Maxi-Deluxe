@@ -18,6 +18,7 @@ import {
 } from '../core/level';
 import type { LevelData } from '../core/levelFormat';
 import { levelFromData } from '../core/levelSetup';
+import { FINAL_ZONES, finalZoneAt } from '../core/finalZones';
 import { PIP_POWER, RevealCharges } from '../core/powers';
 import type { SaveData } from '../core/save';
 import {
@@ -95,6 +96,10 @@ export class GameScene extends Phaser.Scene {
   private slowmoUntil = 0;
   private gameScale = 1;
   private reveal = new RevealCharges();
+  /** Le dernier cœur est touché : l'orbe finit sa course dans les zones de bonus. */
+  private finalShot = false;
+  private finalZonesGfx?: Phaser.GameObjects.Container;
+  private debugForceFinal = false;
   private chargeDots?: Phaser.GameObjects.Graphics;
 
   constructor() {
@@ -110,6 +115,8 @@ export class GameScene extends Phaser.Scene {
     this.orb = undefined;
     this.ending = false;
     this.slowmoUntil = 0;
+    this.finalShot = false;
+    this.finalZonesGfx = undefined;
     this.setTimeScale(1);
     this.tracker = new ShotTracker();
     this.reveal = new RevealCharges();
@@ -206,6 +213,7 @@ export class GameScene extends Phaser.Scene {
     audio.flight(Phaser.Math.Clamp((orb.y - PLAYFIELD.y) / PLAYFIELD.h, 0, 1));
     this.trackOrb(orb);
     const caught =
+      !this.finalShot &&
       orb.y + ORB_RADIUS >= BUCKET.y - BUCKET.height / 2 &&
       orb.y < GAME_HEIGHT &&
       Math.abs(orb.x - this.bucket.x) <= BUCKET.width / 2;
@@ -366,6 +374,59 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  /** Tir final : le réceptacle laisse place aux zones 1 000 / 2 500 / 5 000. */
+  private showFinalZones(): void {
+    if (this.finalShot) return;
+    this.finalShot = true;
+    this.bucket.setVisible(false);
+    const h = 34;
+    const y = GAME_HEIGHT - h;
+    const c = this.add.container(0, 0).setDepth(5).setAlpha(0);
+    FINAL_ZONES.forEach((z, i) => {
+      const x0 = PLAYFIELD.x + z.from * PLAYFIELD.w;
+      const w = (z.to - z.from) * PLAYFIELD.w;
+      const strength = z.points / 5000;
+      const rect = this.add
+        .rectangle(x0 + 1, y, w - 2, h, PALETTE.bucket, 0.25 + strength * 0.45)
+        .setOrigin(0)
+        .setName(`zone-${i}`);
+      const label = this.add
+        .text(x0 + w / 2, y + h / 2, z.points.toLocaleString('fr-FR'), textStyle(18))
+        .setOrigin(0.5);
+      c.add([rect, label]);
+    });
+    this.finalZonesGfx = c;
+    this.tweens.add({ targets: c, alpha: 1, duration: 250 });
+  }
+
+  private scoreFinalZone(orbX: number): void {
+    const { index, zone } = finalZoneAt((orbX - PLAYFIELD.x) / PLAYFIELD.w);
+    this.level.score += zone.points; // hors multiplicateur
+    const rect = this.finalZonesGfx?.getByName(
+      `zone-${index}`,
+    ) as Phaser.GameObjects.Rectangle | null;
+    if (rect) {
+      rect.setFillStyle(PALETTE.lit, 1);
+      const pop = this.add
+        .text(
+          rect.x + rect.width / 2,
+          rect.y - 24,
+          `+${zone.points.toLocaleString('fr-FR')}`,
+          textStyle(28, '#FFE45C'),
+        )
+        .setOrigin(0.5)
+        .setDepth(6);
+      this.tweens.add({
+        targets: pop,
+        y: pop.y - 50,
+        alpha: 0,
+        duration: 1200,
+        ease: 'Cubic.easeOut',
+      });
+    }
+    this.cameras.main.flash(160, 255, 228, 92);
+  }
+
   /** ?debug=1 : panneau QA (événements, pouvoir, orbes, cœurs, état de l'Astre). */
   private mountDebug(): () => void {
     return mountDebugPanel({
@@ -380,6 +441,9 @@ export class GameScene extends Phaser.Scene {
         this.level.crystals = this.level.crystals.filter((c) => !drop.includes(c.id));
         this.removeViews(drop);
         this.refreshHud();
+      },
+      forceFinal: () => {
+        this.debugForceFinal = true;
       },
       status: () => {
         const s = this.companion?.brain.state;
@@ -450,6 +514,11 @@ export class GameScene extends Phaser.Scene {
     this.reveal.fire();
     this.refreshPower();
     this.emitAll(this.tracker.shotFired());
+    if (this.debugForceFinal) {
+      this.debugForceFinal = false;
+      for (const c of this.level.crystals)
+        if (c.kind === 'heart' && !c.lit) this.onCrystalHit(c.id);
+    }
     this.refreshHud();
   }
 
@@ -470,12 +539,16 @@ export class GameScene extends Phaser.Scene {
     this.views.get(id)?.setFillStyle(PALETTE.lit);
     gameEvents.emit('cristal_allume', { kind: crystal.kind, chain: this.chain, points });
     this.emitAll(this.tracker.crystalLit(crystal.kind, this.level.shotScore, crystal.id));
-    // Filet de sécurité : le dernier cœur touché sans prédiction préalable.
-    if (isFinalHeartLit(this.level) && this.slowmoUntil === 0) this.emitAll(['final_ralenti']);
+    if (isFinalHeartLit(this.level)) {
+      // Filet de sécurité : le dernier cœur touché sans prédiction préalable.
+      if (this.slowmoUntil === 0) this.emitAll(['final_ralenti']);
+      this.showFinalZones();
+    }
     this.refreshHud();
   }
 
   private finishShot(caught: boolean): void {
+    if (this.finalShot && this.orb) this.scoreFinalZone(this.orb.x);
     this.orb?.destroy();
     this.orb = undefined;
     this.applyGameScale(1);

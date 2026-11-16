@@ -9,6 +9,8 @@ export interface DebugTarget {
   setOrbs(n: number): void;
   /** Allume tous les cœurs sauf n (ils se brisent à la fin du tir suivant). */
   keepHearts(n: number): void;
+  /** Le prochain tir allume tous les cœurs restants (tester le final). */
+  forceFinal(): void;
   status(): string;
 }
 
@@ -63,6 +65,7 @@ export function mountDebugPanel(target: DebugTarget): () => void {
   add('orbes=10', () => target.setOrbs(10));
   add('cœurs=1', () => target.keepHearts(1));
   add('cœurs=3', () => target.keepHearts(3));
+  add('tir final', () => target.forceFinal());
   const status = document.createElement('span');
   status.style.cssText = 'flex-basis:100%;font-family:monospace';
   panel.appendChild(status);
