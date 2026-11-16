@@ -49,6 +49,8 @@ PORTAL_R, PORTAL_RE = 18, 18
 MAGNETS = []  # aimants du niveau en cours (x, y, radius, strength)
 SHOT = {}  # infos du dernier tir : relance Nuage-Lune consommée
 
+BOUNCE_MIN = 90 * 0.75  # px/s, BOUNCE_MIN_SPEED de GameScene
+
 def simulate_shot(pegs, alive, angle, bucket_x0, bucket_dir, max_steps=4000, motion=None, t0=0.0, max_contacts=None, start=None, mode=None):
     """mode : {'volte', 'mousse', 'clock', 'grelot', 'relaunch'} (pouvoirs actifs pendant ce tir)."""
     mode = mode or {}
@@ -59,6 +61,11 @@ def simulate_shot(pegs, alive, angle, bucket_x0, bucket_dir, max_steps=4000, mot
     volte_until = -1; wide = 1.0; p_inside = None; p_ready = 0; bolt = GRELOT_N if mode.get('grelot') else 0; relaunch = bool(mode.get('relaunch'))
     if bolt: vx, vy = vx*GRELOT_K, vy*GRELOT_K
     hits = []; hitset = set(); bx, bd = bucket_x0, bucket_dir
+    SHOT['bounces'] = 0
+    def bounce(approach):
+        # rebond de chaîne (définition GD du 2026-11-16) : contact avec un cristal, allumé ou non ;
+        # murs et bords exclus ; vitesse >= 67,5 px/s comme GameScene.countBounce
+        if approach and math.hypot(vx, vy) * 60 >= BOUNCE_MIN: SHOT['bounces'] += 1
     bspeed = W / BUCKET_CROSS_S / 60
     stuck_ref = (x, y, 0); t = 0
     motion = motion or {}
@@ -119,7 +126,7 @@ def simulate_shot(pegs, alive, angle, bucket_x0, bucket_dir, max_steps=4000, mot
                 if d2 < rr*rr:
                     if bolt and p.get('kind') != 'wall':  # l'éclair perce sans rebondir
                         if i not in hitset:
-                            hitset.add(i); hits.append(i); bolt -= 1
+                            bounce(True); hitset.add(i); hits.append(i); bolt -= 1
                             if p.get('kind') == 'power' and not LAST_POWER: LAST_POWER.update(x=x, y=y, vx=vx, vy=vy, t=t)
                             if max_contacts and len(hits) >= max_contacts: return hits, False, bx, bd, t/60
                         continue
@@ -127,6 +134,7 @@ def simulate_shot(pegs, alive, angle, bucket_x0, bucket_dir, max_steps=4000, mot
                     x, y = cx + nx*rr, cy + ny*rr
                     vn = vx*nx + vy*ny
                     if vn < 0:
+                        if p.get('kind') != 'wall': bounce(True)
                         vx -= (1+rest)*vn*nx; vy -= (1+rest)*vn*ny
                         if rest > 1:
                             sp = math.hypot(vx, vy)
@@ -159,7 +167,10 @@ def simulate_shot(pegs, alive, angle, bucket_x0, bucket_dir, max_steps=4000, mot
             if not near: vy += 1  # coup de pouce
     return hits, False, bx, bd, t/60
 
-def play(level, policy='greedy', rng=None, samples=48):
+def play(level, policy='greedy', rng=None, samples=48, constraint=None, stats=None, goal=None):
+    """constraint : contrainte de défi (sans_receptacle, orbes_reduits, astre_impose, sans_guide, chrono).
+    stats : dict rempli avec les mesures utiles aux objectifs de défi."""
+    stats = stats if stats is not None else {}
     rng = rng or random.Random()
     pegs = [dict(p) for p in level['pegs']]
     for p in pegs: p['x0'], p['y0'] = p['x'], p['y']
@@ -167,6 +178,8 @@ def play(level, policy='greedy', rng=None, samples=48):
     PORTALS[:] = [(d['a']['x'], d['a']['y'], d['b']['x'], d['b']['y']) for d in level.get('decor') or [] if d.get('type') == 'portal']
     MAGNETS[:] = [(d['x'], d['y'], d['radius'], d['strength']) for d in level.get('decor') or [] if d.get('type') == 'magnet']
     comp = level.get('companion')
+    if constraint == 'sans_guide' and comp == 'pip': comp = None
+    if constraint == 'sans_pouvoir': comp = None  # cristaux pouvoir neutres
     free = [i for i, p in enumerate(pegs) if 'kind' not in p]
     rng.shuffle(free)
     a = level['assign']; k = 0
@@ -179,7 +192,7 @@ def play(level, policy='greedy', rng=None, samples=48):
         if p.get('group') in regen: p['kind'] = 'common'  # régénération : toujours communs
     back = {}  # peg -> numéro du tir où il réapparaît
     hearts_total = sum(1 for p in pegs if p['kind'] == 'heart')
-    orbs = level.get('orbs', 10); score = 0; bx, bd = W/2, 1; shots = 0
+    orbs = level.get('orbs', 10) - (3 if constraint == 'orbes_reduits' else 0); score = 0; bx, bd = W/2, 1; shots = 0
     def place_bonus():
         for p in pegs:
             if p['kind'] == 'bonus': p['kind'] = 'common'
@@ -187,6 +200,7 @@ def play(level, policy='greedy', rng=None, samples=48):
         for _ in range(a.get('bonus', 1)):
             if commons: pegs[commons.pop(rng.randrange(len(commons)))]['kind'] = 'bonus'
     place_bonus(); pip = 0; charge = 0; reserve = 0
+    stats.update(max_hearts=0, max_hits=0, powers=0, total=len(pegs), broken=0, time=0.0, orbs_left=0)
     while orbs > 0:
         orbs -= 1; shots += 1
         for i in [i for i, k in back.items() if k <= shots]: alive.add(i); del back[i]
@@ -201,9 +215,13 @@ def play(level, policy='greedy', rng=None, samples=48):
             gm = {'grelot': True} if (comp == 'grelot' and charge) else None  # le guide montre la ligne de l'éclair
             for ang_c in cands:
                 h, c, _, _, _ = simulate_shot(pegs, set(alive), ang_c, bx, bd, motion=motion, t0=T, max_contacts=seen, mode=gm)
-                val = sum((6 if pegs[i]['kind'] == 'heart' else 1) for i in h) + rng.random()*0.5
+                if goal == 'nettoyage':  # tout briser : chaque cristal compte, garder le dernier cœur pour la fin
+                    val = len(h) + rng.random()*0.5
+                    if left and sum(1 for i in h if pegs[i]['kind'] == 'heart') >= left and sum(1 for i in alive if pegs[i]['kind'] != 'wall') > len(h): val -= 50
+                else:
+                    val = sum((6 if pegs[i]['kind'] == 'heart' else 1) for i in h) + rng.random()*0.5
                 if best is None or val > best[0]: best = (val, ang_c)
-            ang = best[1] + math.radians(rng.gauss(0, 0.3))  # imprécision humaine
+            ang = best[1] + math.radians(rng.gauss(0, 1.5 if constraint == 'sans_guide' else 0.3))  # sans guide : visée à l'œil  # imprécision humaine
             if pip: pip -= 1
         mode = {}
         if comp == 'volte': mode['volte'] = True
@@ -213,6 +231,7 @@ def play(level, policy='greedy', rng=None, samples=48):
         hits, caught, bx, bd, dt = simulate_shot(pegs, alive, ang, bx, bd, motion=motion, t0=T, mode=mode)
         if SHOT.get('relaunched'): reserve -= 1
         T += dt + 1.5
+        if constraint == 'chrono' and T > 90: stats['time'] = T; return False, score, shots
         if comp == 'jumelles' and LAST_POWER:
             # Twi & Nkl : 2e orbe au point d'impact, vitesse horizontale inversée à 90 %
             lp = dict(LAST_POWER)
@@ -237,17 +256,25 @@ def play(level, policy='greedy', rng=None, samples=48):
             for j, t in enumerate(TH):
                 if broken >= t: m = STEPS[j+1]
             g = PTS[pegs[i]['kind']] * m; shot += g
-            if not free_given and shot >= FREE_ORB: free_given = True; orbs += 1
+            if constraint != 'sans_receptacle' and not free_given and shot >= FREE_ORB: free_given = True; orbs += 1
         shot = int(shot * (1 + min(1.0, max(0, len(hits)-10)*0.1)))
         score += shot
         got = any(pegs[i]['kind'] == 'power' for i in hits if i in alive)
+        stats['powers'] += sum(1 for i in hits if i in alive and pegs[i]['kind'] == 'power')
+        stats['max_hearts'] = max(stats['max_hearts'], sum(1 for i in hits if i in alive and pegs[i]['kind'] == 'heart'))
+        stats['max_hits'] = max(stats['max_hits'], len([i for i in hits if i in alive]))
+        stats['max_bounces'] = max(stats.get('max_bounces', 0), SHOT.get('bounces', 0))
+        stats.setdefault('bounce_list', []).append(SHOT.get('bounces', 0))
+        stats['broken'] += sum(1 for i in hits if i in alive and pegs[i]['kind'] != 'wall')
         if comp == 'pip' and got: pip = min(4, pip + 2)
         if comp in ('mousse', 'horloge', 'grelot') and got: charge = min(2, charge + 1)
         if comp == 'nuage-lune' and got: reserve = min(2, reserve + 1)
         for i in hits:
             if i in alive and pegs[i].get('group') in regen: back[i] = shots + 1 + regen[pegs[i]['group']]
             alive.discard(i)
-        if caught: orbs += 1
+        if caught and constraint != 'sans_receptacle': orbs += 1
+        stats['time'] = T; stats['orbs_left'] = orbs
+        stats['all_clear'] = not any(pegs[i]['kind'] not in ('wall',) and pegs[i].get('group') not in regen for i in alive)
         if not any(pegs[i]['kind'] == 'heart' for i in alive):
             score += orbs * 1000 + 2500
             return True, score, shots

@@ -1,4 +1,11 @@
 {
   "format": 1,
-  "duel": []
+  "duel": [
+    "duel-01",
+    "duel-02",
+    "duel-03",
+    "duel-04",
+    "duel-05",
+    "duel-06"
+  ]
 }
