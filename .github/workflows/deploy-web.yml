@@ -27,6 +27,12 @@ jobs:
       - run: npm ci
       - run: npm run build
       - uses: actions/configure-pages@v5
+      # Archive prête pour itch.io (téléchargeable depuis le run, 30 jours).
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ricochet-celeste-web
+          path: dist
+          retention-days: 30
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

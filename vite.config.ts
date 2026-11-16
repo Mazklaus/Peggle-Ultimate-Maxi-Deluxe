@@ -1,11 +1,12 @@
 import { defineConfig } from 'vite';
 
 // base relative : le build fonctionne aussi bien sur GitHub Pages que sur itch.io.
-export default defineConfig({
+// Build release : pas de sourcemaps publiées (11 Mo) ; `npx vite build --mode debug` pour enquêter.
+export default defineConfig(({ mode }) => ({
   base: './',
   build: {
     outDir: 'dist',
-    sourcemap: true,
+    sourcemap: mode === 'debug',
     chunkSizeWarningLimit: 2000,
     // Trois pages : le jeu, l'éditeur de niveaux et le banc d'écoute audio.
     rollupOptions: {
@@ -13,4 +14,4 @@ export default defineConfig({
     },
   },
   test: { environment: 'node', include: ['tests/**/*.test.ts'] },
-});
+}));
