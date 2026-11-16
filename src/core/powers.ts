@@ -33,6 +33,29 @@ export const MOUSSE_POWER = {
   accel: 400 * ORB_PHYSICS.slowdown * ORB_PHYSICS.slowdown,
 };
 
+/**
+ * Seconde chance de Nuage-Lune (GD reglages-jalon1, min de reglages-jalon2 §5) : une charge
+ * en réserve, gardée tant qu'elle sert pas ; l'orbe qui sort par le bas sans être rattrapée
+ * remonte, vx conservée, vy = 80 % de la vitesse d'entrée vers le haut, au moins 450 px/s
+ * (600 px/s du prototype, ralenti global compris).
+ */
+export const NUAGE_LUNE_POWER = {
+  chargesPerActivation: 1,
+  maxCharges: 1,
+  bounceBack: 0.8,
+  /** px/s de temps de jeu. */
+  minSpeed: 600 * ORB_PHYSICS.slowdown,
+};
+
+/** Vitesse de remontée de la seconde chance (px/s), depuis la vitesse de sortie. */
+export function secondChanceVelocity(
+  vx: number,
+  vy: number,
+  rule = NUAGE_LUNE_POWER,
+): { vx: number; vy: number } {
+  return { vx, vy: -Math.max(Math.abs(vy) * rule.bounceBack, rule.minSpeed) };
+}
+
 /** Charges d'un pouvoir « tir suivant » : gagnées au cristal pouvoir, consommées au tir. */
 export class ShotCharges {
   private n = 0;
@@ -73,6 +96,13 @@ export class ShotCharges {
 
   endShot(): void {
     this.activeShot = false;
+  }
+
+  /** Charge en réserve (Nuage-Lune) : utilisée au besoin, pas au tir. */
+  consume(): boolean {
+    if (this.n <= 0) return false;
+    this.n -= 1;
+    return true;
   }
 }
 

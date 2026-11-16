@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
   MOUSSE_POWER,
+  NUAGE_LUNE_POWER,
   PIP_POWER,
   RevealCharges,
   ShotCharges,
   magnetPull,
+  secondChanceVelocity,
 } from '../src/core/powers';
 import { predictPath } from '../src/core/trajectory';
 
@@ -127,5 +129,21 @@ describe('Pouvoirs « tir suivant » génériques', () => {
     const far = magnetPull({ x: 0, y: 0 }, [{ id: 1, x: 150, y: 0 }], 176, 400);
     expect(Math.abs(far?.ax ?? 0)).toBeLessThan(p?.ay ?? 0);
     expect(magnetPull({ x: 0, y: 0 }, [{ id: 3, x: 0, y: -500 }], 176, 400)).toBeNull();
+  });
+});
+
+describe('Seconde chance (Nuage-Lune)', () => {
+  it('une charge en réserve, consommée une seule fois', () => {
+    const c = new ShotCharges(NUAGE_LUNE_POWER);
+    c.gain();
+    c.gain();
+    expect(c.charges).toBe(1);
+    expect(c.consume()).toBe(true);
+    expect(c.consume()).toBe(false);
+  });
+
+  it('remonte à 80 % de la vitesse de sortie, avec un minimum', () => {
+    expect(secondChanceVelocity(120, 900)).toEqual({ vx: 120, vy: -720 });
+    expect(secondChanceVelocity(-50, 200).vy).toBe(-NUAGE_LUNE_POWER.minSpeed);
   });
 });

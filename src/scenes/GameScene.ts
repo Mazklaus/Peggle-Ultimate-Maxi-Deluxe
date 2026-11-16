@@ -30,10 +30,12 @@ import {
 } from '../core/physics';
 import {
   MOUSSE_POWER,
+  NUAGE_LUNE_POWER,
   PIP_POWER,
   RevealCharges,
   ShotCharges,
   magnetPull,
+  secondChanceVelocity,
   type ChargeRule,
 } from '../core/powers';
 import { failsBeforeFirstWin, markSeen, writeSave, type SaveData } from '../core/save';
@@ -99,9 +101,19 @@ const VOLTE = { restitution: 1.05, maxSpeed: 900 * ORB_PHYSICS.slowdown, seconds
 /**
  * Ralenti du temps d'Horloge (GD reglages-jalon1, durée de reglages-jalon2 §5) : tir chargé
  * à l'échelle 0,5, 6,5 s réelles au plus ; le réceptacle suit le pointeur, 1,5 fois plus large.
- * follow : vitesse de rattrapage du pointeur (fraction de l'écart par seconde de jeu).
+ * follow : vitesse de rattrapage du pointeur (fraction de l'écart par seconde de jeu) ;
+ * keySpeed : au clavier, vitesse de la cible en multiple de la vitesse normale du réceptacle.
  */
-const HORLOGE = { scale: 0.5, realMs: 6500, bucketScale: 1.5, follow: 14 };
+const HORLOGE = { scale: 0.5, realMs: 6500, bucketScale: 1.5, follow: 14, keySpeed: 3 };
+/**
+ * Orbe éclair de Grelot (GD reglages-jalon1, charges de reglages-jalon2 §4 bis) : tir chargé
+ * en ligne droite sans gravité, à 1,3 fois la vitesse ; perce 3 cristaux (allumés sans
+ * rebond), puis physique normale. Les murs renvoient l'orbe normalement pendant l'éclair.
+ * maxSeconds : filet de sécurité (temps de jeu) si l'orbe ne trouve pas 3 cristaux.
+ */
+const GRELOT = { speed: 1.3, pierce: 3, maxSeconds: 4 };
+/** Catégorie de collision des cristaux cassables (l'orbe éclair les traverse). */
+const CRYSTAL_CATEGORY = 0x0002;
 /** Les orbes d'un même tir se traversent (groupe de collision négatif commun). */
 const ORB_COLLISION_GROUP = -1;
 /**
@@ -173,6 +185,14 @@ export class GameScene extends Phaser.Scene {
   private crazyLeft = 0;
   /** Fin (horloge réelle) du ralenti d'Horloge ; 0 = inactif. */
   private warpUntil = 0;
+  /** Cible du réceptacle pendant Horloge (pointeur ou flèches), dernière position du pointeur. */
+  private warpTargetX = 0;
+  private warpPointerX = 0;
+  /** Orbe éclair de Grelot : cristaux restant à percer (0 = inactif), déjà percés, durée. */
+  private pierceLeft = 0;
+  private pierced = new Set<number>();
+  private boltLeft = 0;
+  private boltPrev = { x: 0, y: 0 };
   private aimAngle = Math.PI / 2;
   private guide!: Phaser.GameObjects.Graphics;
   /** Effets des pouvoirs en zone de jeu (menthe), redessinés chaque frame. */
@@ -184,6 +204,8 @@ export class GameScene extends Phaser.Scene {
   private hudDimmed = false;
   /** Pause : jeu figé, scène active (l'Astre continue de s'animer). */
   private paused = false;
+  /** Instant (horloge réelle) de la mise en pause : les minuteries réelles sont décalées. */
+  private pausedAt = 0;
   private stuckRef = { x: 0, y: 0, t: 0 };
   private decor!: DecorLayer;
   /** Astre en jeu (id de la liste), null sans Astre. */
@@ -389,12 +411,14 @@ export class GameScene extends Phaser.Scene {
       return;
     }
     audio.flight(Phaser.Math.Clamp((orb.y - PLAYFIELD.y) / PLAYFIELD.h, 0, 1));
+    this.updateBolt(delta / 1000);
     this.trackOrb(orb);
     this.updateCrazyBounce(delta / 1000);
     this.updateMagnet(delta / 1000);
     this.updateTwin(time);
     const caught = this.inBucket(orb);
     if (caught || orb.y > GAME_HEIGHT + ORB_RADIUS * 2) {
+      if (!caught && this.secondChance(orb)) return;
       this.orbGone(caught);
       return;
     }
@@ -406,6 +430,7 @@ export class GameScene extends Phaser.Scene {
       !this.finalShot &&
       orb.y + ORB_RADIUS >= BUCKET.y - BUCKET.height / 2 &&
       orb.y < GAME_HEIGHT &&
+      this.orbVelocity(orb).y > 0 && // une orbe qui remonte (seconde chance) ne tombe pas dedans
       Math.abs(orb.x - this.bucket.x) <= (BUCKET.width * this.bucket.scaleX) / 2
     );
   }
@@ -680,7 +705,7 @@ export class GameScene extends Phaser.Scene {
     const label = `crystal:${c.id}`;
     if (shape.type === 'brick') {
       const view = this.add.rectangle(x, y, shape.w, shape.h, color);
-      this.matter.add.gameObject(view, { isStatic: true, label });
+      this.matter.add.gameObject(view, { isStatic: true, label, ...crystalFilter(c) });
       view.setRotation(Phaser.Math.DegToRad(shape.angle));
       return view;
     }
@@ -695,6 +720,7 @@ export class GameScene extends Phaser.Scene {
       isStatic: true,
       label,
       shape: { type: 'circle', radius: r },
+      ...crystalFilter(c),
     });
     return view;
   }
@@ -827,6 +853,8 @@ export class GameScene extends Phaser.Scene {
     // Orbe lente (roule ou tressaute sur un cristal) : Matter n'est plus prévisible ici,
     // on laisse le vrai contact déclencher le ralenti.
     if (Math.hypot(o.vx, o.vy) < FINAL_MIN_SPEED) return null;
+    // Orbe éclair de Grelot : ni gravité ni rebond, la prédiction ne s'applique pas.
+    if (this.pierceLeft > 0) return null;
     // Cœur porté par le décor : cible mobile, seul le vrai contact déclenche le ralenti.
     if (this.decor.isMoving(heart.id)) return null;
     const steps = Math.ceil(EVENT_THRESHOLDS.finalSlowmoLeadSeconds * 60);
@@ -865,7 +893,7 @@ export class GameScene extends Phaser.Scene {
   private emitAll(events: DetectedEvent[]): void {
     for (const e of events) {
       if (e === 'final_ralenti') this.startSlowmo();
-      if (e === 'pouvoir_active' && companionById(this.companionId)?.power.kind === 'next') {
+      if (e === 'pouvoir_active' && companionById(this.companionId)?.power.kind !== 'immediate') {
         this.reveal.gain();
         this.refreshPower();
       }
@@ -997,6 +1025,8 @@ export class GameScene extends Phaser.Scene {
   /** Pouvoir d'Horloge : tout le jeu ralentit, le réceptacle s'élargit et suit le pointeur. */
   private startTimeWarp(): void {
     this.warpUntil = this.time.now + HORLOGE.realMs;
+    this.warpTargetX = this.bucket.x;
+    this.warpPointerX = this.input.activePointer.worldX;
     this.bucket.setScale(HORLOGE.bucketScale, 1).setStrokeStyle(2, PALETTE.success, 0.95);
     if (this.slowmoUntil <= 0) this.applyGameScale(HORLOGE.scale);
   }
@@ -1007,6 +1037,106 @@ export class GameScene extends Phaser.Scene {
     this.bucket.setScale(1).setStrokeStyle();
     // Le ralenti du final, s'il joue, garde la main.
     if (this.slowmoUntil <= 0) this.applyGameScale(1);
+  }
+
+  /**
+   * Pouvoir de Nuage-Lune : l'orbe qui sort par le bas sans être rattrapée remonte une fois
+   * (charge en réserve). Pas au tir final : l'orbe y finit dans les zones de bonus.
+   */
+  private secondChance(orb: Phaser.GameObjects.Arc): boolean {
+    if (this.companionId !== 'nuage-lune' || this.finalShot || !this.reveal.consume()) return false;
+    const v = this.orbVelocity(orb);
+    const up = secondChanceVelocity(v.x * 60, v.y * 60);
+    const x = Phaser.Math.Clamp(
+      orb.x,
+      PLAYFIELD.x + ORB_RADIUS,
+      PLAYFIELD.x + PLAYFIELD.w - ORB_RADIUS,
+    );
+    const y = GAME_HEIGHT - ORB_RADIUS;
+    orb.setPosition(x, y);
+    (orb as unknown as Phaser.Physics.Matter.Components.Velocity).setVelocity(
+      up.vx / 60,
+      up.vy / 60,
+    );
+    this.stuckRef = { x, y, t: this.time.now };
+    // La pastille-bouclier se brise en paillettes menthe, l'orbe repart vers le haut.
+    for (let i = 0; i < 14; i++) {
+      const a = Math.PI + (i / 13) * Math.PI;
+      const dot = this.add.circle(x, y, 3, PALETTE.success, 0.9).setDepth(30);
+      this.tweens.add({
+        targets: dot,
+        x: x + Math.cos(a) * 46,
+        y: y + Math.sin(a) * 46,
+        alpha: 0,
+        scale: 0.3,
+        duration: 480,
+        ease: 'Cubic.Out',
+        onComplete: () => dot.destroy(),
+      });
+    }
+    this.cameras.main.flash(120, 126, 224, 198);
+    this.refreshPower();
+    return true;
+  }
+
+  /** Pouvoir de Grelot : l'orbe part en éclair, droit et rapide, à travers les cristaux. */
+  private startBolt(): void {
+    const orb = this.orb;
+    if (!orb) return;
+    const v = this.orbVelocity(orb);
+    const mo = orb as unknown as Phaser.Physics.Matter.Components.Velocity &
+      Phaser.Physics.Matter.Components.Gravity;
+    mo.setIgnoreGravity(true);
+    mo.setVelocity(v.x * GRELOT.speed, v.y * GRELOT.speed);
+    const body = orb.body as MatterJS.BodyType;
+    body.collisionFilter.mask = 0xffffffff & ~CRYSTAL_CATEGORY;
+    orb.setStrokeStyle(3, PALETTE.success, 0.95);
+    this.pierceLeft = GRELOT.pierce;
+    this.pierced.clear();
+    this.boltLeft = GRELOT.maxSeconds;
+    this.boltPrev = { x: orb.x, y: orb.y };
+  }
+
+  /** Éclair : les cristaux balayés depuis la frame précédente s'allument, sans rebond. */
+  private updateBolt(dt: number): void {
+    const orb = this.orb;
+    if (this.pierceLeft <= 0 || !orb) return;
+    const from = this.boltPrev;
+    const to = { x: orb.x, y: orb.y };
+    this.boltPrev = to;
+    const hits = this.level.crystals
+      .filter((c) => c.kind !== 'wall' && !this.pierced.has(c.id))
+      .map((c) => ({ c, t: sweepHit(from, to, c, ORB_RADIUS) }))
+      .filter((h): h is { c: Crystal; t: number } => h.t !== null)
+      .sort((a, b) => a.t - b.t);
+    for (const { c } of hits) {
+      if (this.pierceLeft <= 0) break;
+      this.pierced.add(c.id);
+      this.pierceLeft -= 1;
+      this.onCrystalHit(c.id);
+    }
+    const spark = this.add.circle(to.x, to.y, 4, PALETTE.success, 0.7).setDepth(orb.depth - 1);
+    this.tweens.add({
+      targets: spark,
+      alpha: 0,
+      scale: 0.3,
+      duration: 260,
+      onComplete: () => spark.destroy(),
+    });
+    this.boltLeft -= dt;
+    if (this.pierceLeft <= 0 || this.boltLeft <= 0) this.endBolt();
+  }
+
+  /** Fin de l'éclair : gravité et collisions avec les cristaux reviennent. */
+  private endBolt(): void {
+    if (this.pierceLeft <= 0 && this.boltLeft <= 0) return;
+    this.pierceLeft = 0;
+    this.boltLeft = 0;
+    const orb = this.orb;
+    if (!orb?.body) return;
+    (orb as unknown as Phaser.Physics.Matter.Components.Gravity).setIgnoreGravity(false);
+    (orb.body as MatterJS.BodyType).collisionFilter.mask = 0xffffffff;
+    orb.setStrokeStyle();
   }
 
   /** Échelle de temps de tout le jeu : physique, réceptacle, tweens, Astre. */
@@ -1054,8 +1184,9 @@ export class GameScene extends Phaser.Scene {
     this.stuckNudges = 0;
     this.stuckAnnounced = false;
     this.companion?.setPhase('flight');
-    this.reveal.fire();
+    if (companionById(this.companionId)?.power.kind !== 'reserve') this.reveal.fire();
     if (this.companionId === 'horloge' && this.reveal.shotIsPowered) this.startTimeWarp();
+    if (this.companionId === 'grelot' && this.reveal.shotIsPowered) this.startBolt();
     this.lanternShots = Math.max(0, this.lanternShots - 1);
     this.refreshPower();
     this.emitAll(this.tracker.shotFired());
@@ -1159,6 +1290,7 @@ export class GameScene extends Phaser.Scene {
     this.crazyLeft = 0;
     this.powerGfx.clear();
     this.endTimeWarp();
+    this.endBolt();
     this.hud.endShot();
     this.applyGameScale(1);
     const result = endShot(this.level, catches);
@@ -1304,6 +1436,7 @@ export class GameScene extends Phaser.Scene {
   private openPause(): void {
     if (this.ending || this.paused) return;
     this.paused = true;
+    this.pausedAt = this.time.now;
     this.matter.world.pause();
     this.tweens.pauseAll();
     this.input.enabled = false;
@@ -1317,6 +1450,10 @@ export class GameScene extends Phaser.Scene {
   resumeFromPause(): void {
     if (!this.paused) return;
     this.paused = false;
+    // Le ralenti d'Horloge et celui du final comptent en temps réel : la pause ne les use pas.
+    const away = this.time.now - this.pausedAt;
+    if (this.warpUntil > 0) this.warpUntil += away;
+    if (this.slowmoUntil > 0) this.slowmoUntil += away;
     this.matter.world.resume();
     this.tweens.resumeAll();
     this.input.enabled = true;
@@ -1335,8 +1472,14 @@ export class GameScene extends Phaser.Scene {
     const min = PLAYFIELD.x + half;
     const max = PLAYFIELD.x + PLAYFIELD.w - half;
     if (this.warpUntil > 0) {
-      // Ralenti d'Horloge : le réceptacle rattrape le pointeur.
-      const target = Phaser.Math.Clamp(this.input.activePointer.worldX, min, max);
+      // Ralenti d'Horloge : le réceptacle rattrape le pointeur, ou suit les flèches (clavier).
+      const px = this.input.activePointer.worldX;
+      if (px !== this.warpPointerX) this.warpTargetX = this.warpPointerX = px;
+      const keys = this.input.keyboard?.createCursorKeys();
+      const dir = (keys?.right.isDown ? 1 : 0) - (keys?.left.isDown ? 1 : 0);
+      this.warpTargetX += dir * speed * HORLOGE.keySpeed * (delta / 1000);
+      this.warpTargetX = Phaser.Math.Clamp(this.warpTargetX, min, max);
+      const target = this.warpTargetX;
       const k = Math.min(1, HORLOGE.follow * (delta / 1000));
       this.bucket.x += (target - this.bucket.x) * k;
       return;
@@ -1463,11 +1606,55 @@ function obstacleOf(c: Crystal): Circle {
 /** Charges « tir suivant » selon l'Astre (réglages GD) ; Pip garde son aperçu de visée. */
 function chargesFor(id: string | null): ShotCharges {
   if (id === 'pip') return new RevealCharges();
-  const rules: Record<string, ChargeRule> = { mousse: MOUSSE_POWER };
+  const rules: Record<string, ChargeRule> = {
+    mousse: MOUSSE_POWER,
+    'nuage-lune': NUAGE_LUNE_POWER,
+  };
   const info = companionById(id);
   const rule = (id ? rules[id] : undefined) ?? {
     chargesPerActivation: 1,
-    maxCharges: info?.power.kind === 'next' ? info.power.maxCharges : 0,
+    maxCharges: info?.power.kind === 'immediate' ? 0 : (info?.power.maxCharges ?? 0),
   };
   return new ShotCharges(rule);
+}
+
+/** Les cristaux cassables sont dans leur propre catégorie ; les murs restent solides. */
+function crystalFilter(c: Crystal): { collisionFilter?: { category: number } } {
+  return c.kind === 'wall' ? {} : { collisionFilter: { category: CRYSTAL_CATEGORY } };
+}
+
+/**
+ * Premier instant (0..1) où un orbe de rayon `r` allant de `a` à `b` touche le cristal,
+ * ou null. Cercles exacts ; briques échantillonnées tous les 3 px dans leur repère.
+ */
+function sweepHit(
+  a: { x: number; y: number },
+  b: { x: number; y: number },
+  c: Crystal,
+  r: number,
+): number | null {
+  const w = toWorld(c);
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const len = Math.hypot(dx, dy);
+  const shape = c.shape ?? { type: 'circle' as const, r: 10 };
+  if (shape.type !== 'brick') {
+    const reach = shape.r + r;
+    if (len < 1e-6) return Math.hypot(a.x - w.x, a.y - w.y) <= reach ? 0 : null;
+    const t = Phaser.Math.Clamp(((w.x - a.x) * dx + (w.y - a.y) * dy) / (len * len), 0, 1);
+    return Math.hypot(a.x + dx * t - w.x, a.y + dy * t - w.y) <= reach ? t : null;
+  }
+  const ang = -Phaser.Math.DegToRad(shape.angle);
+  const cos = Math.cos(ang);
+  const sin = Math.sin(ang);
+  const n = Math.max(1, Math.ceil(len / 3));
+  for (let i = 0; i <= n; i++) {
+    const t = i / n;
+    const px = a.x + dx * t - w.x;
+    const py = a.y + dy * t - w.y;
+    const lx = px * cos - py * sin;
+    const ly = px * sin + py * cos;
+    if (Math.abs(lx) <= shape.w / 2 + r && Math.abs(ly) <= shape.h / 2 + r) return t;
+  }
+  return null;
 }
