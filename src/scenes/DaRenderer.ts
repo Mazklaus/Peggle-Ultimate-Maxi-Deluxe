@@ -111,6 +111,8 @@ export class DaRenderer {
     if (res !== this.res) {
       this.res = res;
       this.texture.setSize(CANVAS * res, CANVAS * res);
+      // L'image garde sinon l'ancienne taille de cadre : son origine (le corps) se décale.
+      this.image.setSizeToFrame().setOrigin(CENTER.x / CANVAS, CENTER.y / CANVAS);
     }
     const ctx = this.texture.context;
     ctx.setTransform(1, 0, 0, 1, 0, 0);

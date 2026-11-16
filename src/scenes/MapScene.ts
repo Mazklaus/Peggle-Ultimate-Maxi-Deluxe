@@ -26,12 +26,14 @@ import type { CompanionSelectData } from './CompanionSelectScene';
 import { drawPortrait, drawPowerHex, drawPowerIcon } from './powerIcons';
 import { OPTIONS_CHANGED, REGISTRY, SCENES } from './keys';
 import { MapCompanion } from './MapCompanion';
+import { starPoints, starPoints8 } from './shapes';
 import {
   astreDef,
   chapter as chapterDef,
   CHAPTERS,
   MAP_BACKGROUNDS,
   miniPoints,
+  OBSERVATORY,
   PROLOGUE_NODES,
   SKY,
   type ChapterDef,
@@ -365,9 +367,10 @@ export class MapScene extends Phaser.Scene {
       g.fillStyle(PALETTE.lit, done ? 1 : 0.5).fillPoints(starPoints(0, 0, 9, 4), true);
     });
     this.add
-      .zone(330, 420, 360, 200)
+      .zone(465, 410, 330, 160)
       .setInteractive({ useHandCursor: true })
       .on('pointerup', () => this.toChapter(1));
+    this.observatoryEntrance();
 
     // Chemin entre les miniatures, dans l'ordre de l'aventure.
     const states = CHAPTERS.map((c) => chapterState(save, c.n));
@@ -399,6 +402,32 @@ export class MapScene extends Phaser.Scene {
 
     if (from) this.zoomOutFrom(from);
     if (unlock) this.playSkyUnlock(unlock, minis, (p) => pathTo(unlock - 1, p));
+  }
+
+  /** Observatoire : survol = la fenêtre s'illumine et une note flotte ; clic = galerie des souvenirs. */
+  private observatoryEntrance(): void {
+    const at = OBSERVATORY;
+    const glow = this.add
+      .image(at.x, at.y - 50, veilleuseGlowTexture(this))
+      .setDisplaySize(120, 120)
+      .setAlpha(0);
+    const note = this.add
+      .text(at.x + 34, at.y - 120, '♪', textStyle(26))
+      .setOrigin(0.5)
+      .setAlpha(0);
+    this.add
+      .zone(at.x, at.y - 60, 130, 220)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerover', () => {
+        this.tweens.add({ targets: [glow, note], alpha: 0.9, duration: 200 });
+        this.tweens.add({ targets: note, y: at.y - 132, duration: 600, yoyo: true, repeat: -1 });
+      })
+      .on('pointerout', () => {
+        this.tweens.killTweensOf(note);
+        this.tweens.add({ targets: [glow, note], alpha: 0, duration: 200 });
+        note.setY(at.y - 120);
+      })
+      .on('pointerup', () => fadeTo(this, SCENES.memories));
   }
 
   /** La Grande Veilleuse endormie : lueur qui grossit avec les chapitres terminés, respiration. */
@@ -852,24 +881,6 @@ export class MapScene extends Phaser.Scene {
     this.input.keyboard?.off('keydown-SPACE');
     this.input.keyboard?.off('keydown-ENTER');
   }
-}
-
-/** Étoile à 5 branches centrée en (x, y). */
-function starPoints(x: number, y: number, outer: number, inner: number): Phaser.Math.Vector2[] {
-  return Array.from({ length: 10 }, (_, i) => {
-    const a = -Math.PI / 2 + (i * Math.PI) / 5;
-    const r = i % 2 === 0 ? outer : inner;
-    return new Phaser.Math.Vector2(x + Math.cos(a) * r, y + Math.sin(a) * r);
-  });
-}
-
-/** Étoile douce à 8 branches (la Grande Veilleuse). */
-function starPoints8(x: number, y: number, outer: number, inner: number): Phaser.Math.Vector2[] {
-  return Array.from({ length: 16 }, (_, i) => {
-    const a = -Math.PI / 2 + (i * Math.PI) / 8;
-    const r = i % 2 === 0 ? outer : inner;
-    return new Phaser.Math.Vector2(x + Math.cos(a) * r, y + Math.sin(a) * r);
-  });
 }
 
 function dotted(
