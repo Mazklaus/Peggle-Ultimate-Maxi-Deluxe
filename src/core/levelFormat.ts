@@ -41,8 +41,48 @@ export const RHYTHMS = [
   'combinaison',
   'maitrise',
   'grande-constellation',
+  'duel',
 ] as const;
 export type Rhythm = (typeof RHYTHMS)[number];
+
+/** Défis : objectif chiffré, contrainte facultative (voir LevelChallenge). */
+export const CHALLENGE_GOALS = [
+  'score',
+  'nettoyage',
+  'tir_unique',
+  'economie',
+  'pouvoir',
+  'chaine',
+] as const;
+export type ChallengeGoal = (typeof CHALLENGE_GOALS)[number];
+export const CHALLENGE_CONSTRAINTS = [
+  'sans_receptacle',
+  'orbes_reduits',
+  'astre_impose',
+  'sans_guide',
+  'chrono',
+  'sans_pouvoir',
+] as const;
+export type ChallengeConstraint = (typeof CHALLENGE_CONSTRAINTS)[number];
+
+/**
+ * Unité de value selon goal : score = points, tir_unique = cœurs dans un tir,
+ * economie = orbes restants, pouvoir = activations, chaine = cristaux touchés dans un tir,
+ * nettoyage = % de cœurs (absent = 100, voir challengeValue).
+ */
+export interface LevelChallenge {
+  goal: ChallengeGoal;
+  /** Nombre > 0 ; facultatif seulement pour « nettoyage ». */
+  value?: number;
+  constraint?: ChallengeConstraint;
+  /** Astre imposé, seulement avec « astre_impose » (sinon le companion du niveau). */
+  astre?: Companion;
+}
+
+/** Seuil effectif d'un défi (nettoyage sans value = 100 %). */
+export function challengeValue(c: LevelChallenge): number {
+  return c.value ?? 100;
+}
 
 export interface LevelPeg {
   x: number;
@@ -155,6 +195,8 @@ export interface LevelData {
   orbs: number;
   /** Guide de visée : 0 (défaut) = court, jusqu'au premier contact ; n = jusqu'au n-ième rebond. */
   guideBounces?: number;
+  /** Niveau de défi (public/levels/challenges.json) : objectif et contrainte. */
+  challenge?: LevelChallenge;
   stars: [number, number];
   assign: LevelAssign;
   pegs: LevelPeg[];
@@ -170,6 +212,47 @@ const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFin
 const isInt = (v: unknown): v is number => Number.isInteger(v);
 const isOneOf = <T extends string>(list: readonly T[], v: unknown): v is T =>
   typeof v === 'string' && (list as readonly string[]).includes(v);
+
+const CHALLENGE_KEYS = ['goal', 'value', 'constraint', 'astre'] as const;
+
+function parseChallenge(
+  raw: unknown,
+  levelCompanion: unknown,
+  errors: string[],
+): LevelChallenge | null {
+  if (!isObj(raw)) {
+    errors.push('challenge : objet { goal, value, constraint?, astre? }.');
+    return null;
+  }
+  const before = errors.length;
+  if (!isOneOf(CHALLENGE_GOALS, raw.goal))
+    errors.push(`challenge.goal inconnu « ${String(raw.goal)} » (${CHALLENGE_GOALS.join(', ')}).`);
+  if (raw.value === undefined) {
+    if (raw.goal !== 'nettoyage') errors.push('challenge.value : obligatoire (sauf nettoyage).');
+  } else if (!isNum(raw.value) || raw.value <= 0) errors.push('challenge.value : nombre > 0.');
+  else if (raw.goal === 'nettoyage' && raw.value > 100)
+    errors.push('challenge.value : pourcentage 1..100 pour nettoyage.');
+  if (raw.constraint !== undefined && !isOneOf(CHALLENGE_CONSTRAINTS, raw.constraint))
+    errors.push(
+      `challenge.constraint inconnue « ${String(raw.constraint)} » (${CHALLENGE_CONSTRAINTS.join(', ')}).`,
+    );
+  if (raw.astre !== undefined) {
+    if (!isOneOf(COMPANIONS, raw.astre))
+      errors.push(`challenge.astre inconnu « ${String(raw.astre)} ».`);
+    if (raw.constraint !== 'astre_impose')
+      errors.push('challenge.astre : seulement avec la contrainte « astre_impose ».');
+  } else if (raw.constraint === 'astre_impose' && levelCompanion == null)
+    errors.push('challenge : « astre_impose » demande challenge.astre ou companion du niveau.');
+  for (const k of Object.keys(raw))
+    if (!(CHALLENGE_KEYS as readonly string[]).includes(k))
+      errors.push(`challenge.${k} : clé inconnue.`);
+  if (errors.length > before) return null;
+  const out: LevelChallenge = { goal: raw.goal as ChallengeGoal };
+  if (raw.value !== undefined) out.value = raw.value as number;
+  if (raw.constraint !== undefined) out.constraint = raw.constraint as ChallengeConstraint;
+  if (raw.astre !== undefined) out.astre = raw.astre as Companion;
+  return out;
+}
 
 function parsePeg(raw: unknown, i: number, errors: string[]): LevelPeg | null {
   const where = `pegs[${i}]`;
@@ -475,6 +558,8 @@ export function parseLevel(input: string | unknown): ParseResult {
     (!isInt(raw.guideBounces) || raw.guideBounces < 0 || raw.guideBounces > 5)
   )
     errors.push('guideBounces : entier 0..5.');
+  const challenge =
+    raw.challenge === undefined ? undefined : parseChallenge(raw.challenge, companion, errors);
   const orbs = raw.orbs ?? DEFAULT_ORBS;
   if (!isInt(orbs) || orbs < 1) errors.push('orbs : entier >= 1.');
 
@@ -530,6 +615,7 @@ export function parseLevel(input: string | unknown): ParseResult {
   if (raw.title !== undefined) level.title = raw.title as string;
   if (raw.rhythm !== undefined) level.rhythm = raw.rhythm as Rhythm;
   if (raw.guideBounces !== undefined) level.guideBounces = raw.guideBounces as number;
+  if (challenge) level.challenge = challenge;
   return { level };
 }
 
@@ -568,6 +654,7 @@ const LEVEL_KEYS = [
   'rhythm',
   'orbs',
   'guideBounces',
+  'challenge',
   'stars',
   'assign',
 ] as const;
@@ -591,7 +678,16 @@ export function serializeLevel(level: LevelData): string {
         ? `[\n    ${(v as number[]).join(',\n    ')}\n  ]`
         : k === 'assign'
           ? JSON.stringify(v, null, 2).replace(/\n/g, '\n  ')
-          : JSON.stringify(v);
+          : k === 'challenge'
+            ? inline(
+                Object.fromEntries(
+                  CHALLENGE_KEYS.filter((c) => (v as LevelChallenge)[c] !== undefined).map((c) => [
+                    c,
+                    (v as LevelChallenge)[c],
+                  ]),
+                ),
+              )
+            : JSON.stringify(v);
     return `  "${k}": ${text}`;
   });
   const pegs = level.pegs.map((p) => {
