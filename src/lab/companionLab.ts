@@ -107,6 +107,7 @@ class CompanionLab extends Phaser.Scene {
       'victoire',
       'echec',
       'inactivite',
+      'orbe_coincee',
     ];
     for (const e of events) {
       add(e, () =>
@@ -117,6 +118,7 @@ class CompanionLab extends Phaser.Scene {
           astre: 'pip',
           score: 1000,
           angle: 0,
+          attempt: 1,
         } as never),
       );
     }

@@ -29,6 +29,7 @@ const EVENTS: GameEventName[] = [
   'victoire',
   'echec',
   'inactivite',
+  'orbe_coincee',
 ];
 
 const PAYLOAD = {
@@ -38,6 +39,7 @@ const PAYLOAD = {
   astre: 'pip',
   score: 0,
   angle: 0,
+  attempt: 1,
 } as never;
 
 export function debugEnabled(): boolean {

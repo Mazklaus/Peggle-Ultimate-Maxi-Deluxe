@@ -805,8 +805,9 @@ export class GameScene extends Phaser.Scene {
     this.refreshHud();
   }
 
-  private finishShot(caught: boolean): void {
-    if (this.finalShot && this.orb) this.scoreFinalZone(this.orb.x);
+  /** finalX : abscisse retenue pour la zone finale (par défaut, celle de l'orbe). */
+  private finishShot(caught: boolean, finalX = this.orb?.x): void {
+    if (this.finalShot && finalX !== undefined) this.scoreFinalZone(finalX);
     this.orb?.destroy();
     this.orb = undefined;
     this.hud.endShot();
@@ -897,7 +898,11 @@ export class GameScene extends Phaser.Scene {
     }
     // 3. Toujours coincée : elle se dissout en particules, le tir se termine normalement.
     this.dissolveOrb(orb.x, orb.y);
-    this.finishShot(false);
+    // Tir final : l'orbe n'est tombée dans aucune zone, elle vaut la plus faible (la plus proche).
+    this.finishShot(
+      false,
+      orb.x < PLAYFIELD.x + PLAYFIELD.w / 2 ? PLAYFIELD.x : PLAYFIELD.x + PLAYFIELD.w - 1,
+    );
   }
 
   private dissolveOrb(x: number, y: number): void {
