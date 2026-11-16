@@ -61,7 +61,7 @@ def build(pts, imposed=(), walls=()):
         return math.hypot(px - (x + t*c), py - (y + t*s_))
     pegs = [p for p in pegs if all(seg_d(p['x'], p['y'], x, y, w, a) >= 26 for x, y, w, a in walls)]
     for x, y, w, ang in walls:
-        if min(abs(ang) % 180, 180 - abs(ang) % 180) < 8: raise SystemExit(f'mur trop plat ({ang}°) : 8° minimum')
+        if min(abs(ang) % 90, 90 - abs(ang) % 90) < 8: raise SystemExit(f'mur trop plat ({ang}°) : 8° minimum par rapport à l\'horizontale et à la verticale')
         pegs.append({'x': round(x), 'y': round(y), 'shape': 'brick', 'w': w, 'h': 12, 'angle': ang, 'kind': 'wall'})
     return pegs
 
