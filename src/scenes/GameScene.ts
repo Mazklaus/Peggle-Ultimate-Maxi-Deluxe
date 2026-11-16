@@ -78,6 +78,8 @@ export interface GameSceneData {
   test?: boolean;
   /** Astre choisi dans le sélecteur (sinon celui du niveau). */
   companion?: string;
+  /** Constellation du jour : clé AAAAMMJJ (score à enregistrer avec recordDaily). */
+  daily?: string;
 }
 
 const ORB_RADIUS = 8;
