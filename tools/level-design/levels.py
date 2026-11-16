@@ -375,6 +375,69 @@ for k, (cx, cy, r) in enumerate(((180, 420, 60), (700, 450, 50))):
     gg, dd = moons(f'b{k+1}', cx, cy, r, 3, 6, 1 if k == 0 else -1); g.append(gg); dec.append(dd)
 L.append(level('ch3-12', 3, 12, 'La Balançoire', 'grande-constellation', 14, 22, 84, 1, 2, build(pts, groups=g, walls=walls), decor=dec, **TWI))
 
+# ---------- CHAPITRE 4 : Volte (rebond fou), élément : aimants (niveaux 7+) ----------
+# Règle GD : niveaux d'application et de maîtrise denses (Volte ne sert que dans la masse).
+VOL = dict(companion='volte')
+def mag(gid, x, y, r=120, s=1.2): return {'id': gid, 'type': 'magnet', 'x': x, 'y': y, 'radius': r, 'strength': s}
+def pyr(cx, y0, n, step=44, dy=40):
+    """Triangle pointe en haut : n rangées de 1 à n cristaux."""
+    return [(cx + (i - k/2)*step, y0 + k*dy) for k in range(n) for i in range(k+1)]
+def hole(pts, x, y, r=40): return [(a, b) for a, b in pts if math.hypot(a-x, b-y) >= r]
+
+# 4-1 découverte : une ruche au centre, trois pouvoirs dedans.
+imp = [(300, 300, 'power'), (580, 300, 'power'), (440, 400, 'power')]
+pts = hexa(160, 720, 200, 470, 46)
+L.append(level('ch4-01', 4, 1, 'Volte bondit', 'decouverte', 13, 18, 57, 1, 3, build(pts, imp + GUARD_IMP), locked=True, **VOL))
+
+# 4-2 découverte : deux pyramides, les pouvoirs à leur sommet et entre elles.
+imp = [(240, 200, 'power'), (640, 200, 'power'), (440, 400, 'power')]
+pts = mirror(pyr(240, 200, 8)) + line(440, 200, 440, 330, 3)
+L.append(level('ch4-02', 4, 2, 'Les trampolines', 'decouverte', 15, 16, 64, 1, 3, build(pts, imp + GUARD_IMP), locked=True, **VOL))
+
+# 4-3 application (dense) : la ruche pleine largeur.
+pts = hexa(70, 810, 215, 450, 46)
+L.append(level('ch4-03', 4, 3, 'La grande ruche', 'application', 13, 24, 65, 1, 2, build(pts, GUARD_IMP), **VOL))
+
+# 4-4 application (dense) : quatre grappes serrées.
+pts = hexa(100, 780, 450, 545, 44) + [(440, 160)]
+for cx in (180, 440, 700): pts += arc(cx, 230, 115, 15, 165, 12) + arc(cx, 230, 75, 25, 155, 8)
+L.append(level('ch4-04', 4, 4, 'Les nids', 'application', 13, 20, 69, 1, 2, build(pts, GUARD_IMP), **VOL))
+
+# 4-5 application (dense) : nuée et deux rampes qui renvoient dedans.
+walls = [(200, 540, 150, 22), (680, 540, 150, -22)]
+pts = rows(70, 810, 200, 6, 40, 18)
+L.append(level('ch4-05', 4, 5, 'Le mur aux rebonds', 'application', 13, 24, 70, 1, 2, build(pts, GUARD_IMP, walls=walls), **VOL))
+
+# 4-6 respiration : pluie serrée.
+pts = rows(50, 830, 190, 7, 42, 19)
+L.append(level('ch4-06', 4, 6, 'Averse d’étoiles', 'respiration', 14, 17, 94, 1, 2, build(pts), **VOL))
+
+# 4-7 combinaison : le premier aimant, au centre d'une couronne.
+pts = hole(ring(440, 340, 150, 24) + ring(440, 340, 200, 26) + rows(70, 810, 130, 1, 0, 18) + rows(90, 790, 560, 1, 0, 16) + arc(130, 400, 80, 15, 165, 7) + arc(750, 400, 80, 15, 165, 7), 440, 340)
+L.append(level('ch4-07', 4, 7, 'Le premier aimant', 'combinaison', 15, 21, 74, 1, 2, build(pts, GUARD_IMP), decor=[mag('aimant', 440, 340)], **VOL))
+
+# 4-8 combinaison : deux aimants hauts qui rabattent l'orbe vers la nuée.
+pts = hole(hole(arc(220, 250, 105, 190, 350, 10) + arc(660, 250, 105, 190, 350, 10) + rows(70, 810, 390, 5, 42, 18) + line(440, 150, 440, 300, 4), 220, 250), 660, 250)
+L.append(level('ch4-08', 4, 8, 'Les deux pôles', 'combinaison', 13, 23, 72, 1, 2, build(pts, GUARD_IMP), decor=[mag('pole1', 220, 250), mag('pole2', 660, 250, s=1.2)], **VOL))
+
+# 4-9 combinaison : un aimant bas qui aspire l'orbe dans un bol serré.
+pts = hole(arc(440, 450, 150, 200, 340, 13) + arc(440, 450, 110, 0, 180, 11) + rows(70, 810, 170, 3, 42, 19) + arc(150, 430, 90, 15, 165, 8) + arc(730, 430, 90, 15, 165, 8), 440, 450, 60)
+L.append(level('ch4-09', 4, 9, 'Le puits', 'combinaison', 13, 25, 75, 1, 2, build(pts, GUARD_IMP), decor=[mag('puits', 440, 450, 130, 1.3)], **VOL))
+
+# 4-10 maîtrise (dense) : nuée serrée, deux aimants dans les coins hauts qui dévient.
+pts = hole(hole(hexa(70, 810, 300, 545, 44), 150, 220, 50), 730, 220, 50)
+L.append(level('ch4-10', 4, 10, 'Les déviations', 'maitrise', 13, 22, 79, 1, 2, build(pts, GUARD_IMP), decor=[mag('coin1', 150, 220, 110), mag('coin2', 730, 220, 110)], **VOL))
+
+# 4-11 maîtrise (dense) : l'œil, un aimant au cœur d'une nuée en anneau.
+pts = hole(hexa(80, 800, 230, 500, 44), 440, 350, 70)
+L.append(level('ch4-11', 4, 11, 'L’œil de Volte', 'maitrise', 13, 24, 82, 1, 2, build(pts, GUARD_IMP), decor=[mag('oeil', 440, 350, 130, 1.3)], **VOL))
+
+# 4-12 Grande Constellation : la Forge, deux aimants et deux poutres au-dessus d'une nuée.
+walls = [(280, 320, 140, 18), (600, 320, 140, -18)]
+pts = hole(hole(rows(70, 810, 140, 2, 40, 18) + arc(440, 240, 90, 20, 160, 10) + arc(250, 400, 140, 15, 165, 14) + arc(250, 400, 95, 25, 155, 10)
+               + arc(630, 400, 140, 15, 165, 14) + arc(630, 400, 95, 25, 155, 10) + line(440, 400, 440, 560, 4) + rows(80, 800, 570, 1, 0, 18), 130, 220, 50), 750, 220, 50)
+L.append(level('ch4-12', 4, 12, 'La Forge', 'grande-constellation', 15, 22, 82, 1, 2, build(pts, GUARD_IMP_LIGHT, walls=walls), decor=[mag('forge1', 130, 220, 100), mag('forge2', 750, 220, 100)], **VOL))
+
 out = sys.argv[1] if len(sys.argv) > 1 else 'out'
 os.makedirs(out, exist_ok=True)
 for lv in L:

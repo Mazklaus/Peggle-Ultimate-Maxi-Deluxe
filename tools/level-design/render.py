@@ -21,4 +21,7 @@ for k, f in enumerate(files):
     for dd in lv.get('decor', []):
         if dd.get('type') in ('rotate', 'orbit'):
             cx, cy = ox+dd['cx']*S, oy+dd['cy']*S; d.ellipse([cx-3, cy-3, cx+3, cy+3], outline=(230, 140, 255))
+        if dd.get('type') == 'magnet':
+            cx, cy, rr = ox+dd['x']*S, oy+dd['y']*S, dd['radius']*S
+            d.ellipse([cx-rr, cy-rr, cx+rr, cy+rr], outline=(255, 120, 120)); d.ellipse([cx-4, cy-4, cx+4, cy+4], fill=(255, 120, 120))
 img.save(sys.argv[2])
