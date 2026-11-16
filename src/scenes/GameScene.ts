@@ -96,6 +96,12 @@ const TWIN = { speed: 0.9, maxCatches: 2, minSideShare: 0.35 };
  * prototype, mise à l'échelle du ralenti global) pour rester lisible.
  */
 const VOLTE = { restitution: 1.05, maxSpeed: 900 * ORB_PHYSICS.slowdown, seconds: 8 };
+/**
+ * Ralenti du temps d'Horloge (GD reglages-jalon1, durée de reglages-jalon2 §5) : tir chargé
+ * à l'échelle 0,5, 6,5 s réelles au plus ; le réceptacle suit le pointeur, 1,5 fois plus large.
+ * follow : vitesse de rattrapage du pointeur (fraction de l'écart par seconde de jeu).
+ */
+const HORLOGE = { scale: 0.5, realMs: 6500, bucketScale: 1.5, follow: 14 };
 /** Les orbes d'un même tir se traversent (groupe de collision négatif commun). */
 const ORB_COLLISION_GROUP = -1;
 /**
@@ -165,6 +171,8 @@ export class GameScene extends Phaser.Scene {
   private shotCatches = 0;
   /** Temps de jeu restant (s) du rebond fou de Volte ; 0 = inactif. */
   private crazyLeft = 0;
+  /** Fin (horloge réelle) du ralenti d'Horloge ; 0 = inactif. */
+  private warpUntil = 0;
   private aimAngle = Math.PI / 2;
   private guide!: Phaser.GameObjects.Graphics;
   /** Effets des pouvoirs en zone de jeu (menthe), redessinés chaque frame. */
@@ -364,6 +372,7 @@ export class GameScene extends Phaser.Scene {
       this.tweens.resumeAll();
     }
     this.updateSlowmo(time);
+    if (this.warpUntil > 0 && time >= this.warpUntil) this.endTimeWarp();
     this.decor.draw();
     const delta = realDelta * this.gameScale;
     this.moveBucket(delta);
@@ -397,7 +406,7 @@ export class GameScene extends Phaser.Scene {
       !this.finalShot &&
       orb.y + ORB_RADIUS >= BUCKET.y - BUCKET.height / 2 &&
       orb.y < GAME_HEIGHT &&
-      Math.abs(orb.x - this.bucket.x) <= BUCKET.width / 2
+      Math.abs(orb.x - this.bucket.x) <= (BUCKET.width * this.bucket.scaleX) / 2
     );
   }
 
@@ -981,16 +990,31 @@ export class GameScene extends Phaser.Scene {
   private updateSlowmo(now: number): void {
     if (this.slowmoUntil > 0 && now >= this.slowmoUntil) {
       this.slowmoUntil = -1; // une seule fois par tir
-      this.applyGameScale(1);
+      this.applyGameScale(this.warpUntil > 0 ? HORLOGE.scale : 1);
     }
+  }
+
+  /** Pouvoir d'Horloge : tout le jeu ralentit, le réceptacle s'élargit et suit le pointeur. */
+  private startTimeWarp(): void {
+    this.warpUntil = this.time.now + HORLOGE.realMs;
+    this.bucket.setScale(HORLOGE.bucketScale, 1).setStrokeStyle(2, PALETTE.success, 0.95);
+    if (this.slowmoUntil <= 0) this.applyGameScale(HORLOGE.scale);
+  }
+
+  private endTimeWarp(): void {
+    if (this.warpUntil <= 0) return;
+    this.warpUntil = 0;
+    this.bucket.setScale(1).setStrokeStyle();
+    // Le ralenti du final, s'il joue, garde la main.
+    if (this.slowmoUntil <= 0) this.applyGameScale(1);
   }
 
   /** Échelle de temps de tout le jeu : physique, réceptacle, tweens, Astre. */
   private applyGameScale(scale: number): void {
     this.gameScale = scale;
     // Ralenti final : le HUD s'estompe (le spectacle prime), la loge reste visible.
-    if (scale < 1 !== this.hudDimmed) {
-      this.hudDimmed = scale < 1;
+    if (scale <= SLOWMO.scale !== this.hudDimmed) {
+      this.hudDimmed = scale <= SLOWMO.scale;
       this.hud?.setDimmed(this.hudDimmed);
     }
     this.setTimeScale(scale);
@@ -1031,6 +1055,7 @@ export class GameScene extends Phaser.Scene {
     this.stuckAnnounced = false;
     this.companion?.setPhase('flight');
     this.reveal.fire();
+    if (this.companionId === 'horloge' && this.reveal.shotIsPowered) this.startTimeWarp();
     this.lanternShots = Math.max(0, this.lanternShots - 1);
     this.refreshPower();
     this.emitAll(this.tracker.shotFired());
@@ -1133,6 +1158,7 @@ export class GameScene extends Phaser.Scene {
     this.twin = undefined;
     this.crazyLeft = 0;
     this.powerGfx.clear();
+    this.endTimeWarp();
     this.hud.endShot();
     this.applyGameScale(1);
     const result = endShot(this.level, catches);
@@ -1305,9 +1331,16 @@ export class GameScene extends Phaser.Scene {
 
   private moveBucket(delta: number): void {
     const speed = PLAYFIELD.w / TUNING.bucketCrossSeconds; // px par seconde
-    const half = BUCKET.width / 2;
+    const half = (BUCKET.width * this.bucket.scaleX) / 2;
     const min = PLAYFIELD.x + half;
     const max = PLAYFIELD.x + PLAYFIELD.w - half;
+    if (this.warpUntil > 0) {
+      // Ralenti d'Horloge : le réceptacle rattrape le pointeur.
+      const target = Phaser.Math.Clamp(this.input.activePointer.worldX, min, max);
+      const k = Math.min(1, HORLOGE.follow * (delta / 1000));
+      this.bucket.x += (target - this.bucket.x) * k;
+      return;
+    }
     this.bucket.x += this.bucketDir * speed * (delta / 1000);
     if (this.bucket.x > max) this.bucketDir = -1;
     if (this.bucket.x < min) this.bucketDir = 1;

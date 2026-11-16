@@ -8,7 +8,7 @@
  */
 import type { CompanionDef } from '../core/companion/types';
 import type { Companion } from '../core/levelFormat';
-import { BOURDON, JUMELLES, MOUSSE, VOLTE } from './astres';
+import { BOURDON, HORLOGE, JUMELLES, MOUSSE, VOLTE } from './astres';
 import { PIP } from './pip';
 
 /** next = s'applique au tir suivant (charges), immediate = agit pendant le tir, reserve = charge gardée. */
@@ -76,7 +76,7 @@ export const COMPANION_ROSTER: readonly CompanionInfo[] = [
     id: 'horloge',
     name: 'Horloge',
     color: 0xe8d9b0,
-    def: null,
+    def: HORLOGE,
     power: { name: 'Ralenti du temps', kind: 'next', maxCharges: 2 },
     wakesAtChapter: 6,
   },
