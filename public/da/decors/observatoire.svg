@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720"><defs><linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0B1026"/><stop offset=".55" stop-color="#1A1745"/><stop offset="1" stop-color="#2A2260"/></linearGradient>
+<radialGradient id="neb1" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#3B2E6E" stop-opacity=".85"/><stop offset="1" stop-color="#3B2E6E" stop-opacity="0"/></radialGradient>
+<radialGradient id="neb2" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#5A3E8C" stop-opacity=".45"/><stop offset="1" stop-color="#5A3E8C" stop-opacity="0"/></radialGradient>
+<radialGradient id="veil" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#FFE9C2" stop-opacity=".35"/><stop offset=".3" stop-color="#FFE9C2" stop-opacity=".12"/><stop offset="1" stop-color="#FFE9C2" stop-opacity="0"/></radialGradient><radialGradient id="lamp" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#FFF6E0" stop-opacity=".7"/><stop offset="1" stop-color="#FFF6E0" stop-opacity="0"/></radialGradient>
+<radialGradient id="avail" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#FFF6E0" stop-opacity=".6"/><stop offset="1" stop-color="#FFF6E0" stop-opacity="0"/></radialGradient></defs><g id="observatoire" transform="translate(150 420)">
+<path d="M-150 250 Q-120 120 -40 140 Q10 70 90 120 Q170 100 210 170 Q260 190 270 250Z" fill="#232A5C"/>
+<path d="M-150 250 Q-90 170 -20 185 Q40 140 110 175 Q190 165 270 250Z" fill="#1B2350"/>
+<rect x="20" y="10" width="80" height="150" rx="14" fill="#8C93C9"/>
+<rect x="20" y="10" width="26" height="150" rx="12" fill="#A9B0D6" opacity=".5"/>
+<path d="M10 20 A50 50 0 0 1 110 20 Z" fill="#6F78B8"/>
+<path d="M60 -30 L60 20" stroke="#6F78B8" stroke-width="0"/>
+<rect x="58" y="-34" width="16" height="50" rx="8" fill="#B9A6FF" transform="rotate(35 60 20)"/><circle cx="91" cy="-20" r="9" fill="#FFF6E0" opacity=".8"/>
+<circle cx="60" cy="70" r="70" fill="url(#lamp)"/>
+<rect x="46" y="55" width="28" height="34" rx="12" fill="#FFF6E0"/>
+<rect x="44" y="115" width="32" height="45" rx="14" fill="#232A5C"/>
+<circle cx="60" cy="72" r="5" fill="#FFB23F" opacity=".0"/>
+</g></svg>
