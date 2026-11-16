@@ -7,7 +7,7 @@
   "companionLocked": false,
   "title": "La Grande Veilleuse",
   "rhythm": "grande-constellation",
-  "orbs": 13,
+  "orbs": 14,
   "stars": [
     19600,
     33600
@@ -131,7 +131,7 @@
   ],
   "decor": [
     {"id": "veilleuse", "type": "rotate", "cx": 440, "cy": 340, "periodS": 16, "dir": 1},
-    {"id": "coeur", "type": "magnet", "x": 440, "y": 340, "radius": 50, "strength": 1},
+    {"id": "coeur", "type": "magnet", "x": 440, "y": 340, "radius": 90, "strength": 1},
     {"id": "lune1", "type": "orbit", "cx": 150, "cy": 360, "rx": 60, "ry": 60, "periodS": 6, "dir": 1},
     {"id": "lune2", "type": "orbit", "cx": 730, "cy": 360, "rx": 60, "ry": 60, "periodS": 6, "dir": -1}
   ]
