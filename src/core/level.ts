@@ -20,6 +20,8 @@ export interface Crystal {
   kind: CrystalKind;
   lit: boolean;
   shape?: CrystalShape;
+  /** Élément de décor qui porte ce cristal (format v2). */
+  group?: string;
 }
 
 export interface LevelState {
