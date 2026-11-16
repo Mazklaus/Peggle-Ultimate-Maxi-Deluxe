@@ -291,6 +291,90 @@ pts = arc(440, 40, 400, 35, 145, 26) + arc(440, 60, 330, 40, 140, 20) + rows(300
 g = [('gauche', 160, 220, ring(160, 220, 100, 13) + ring(160, 220, 50, 6), None), ('droite', 720, 220, ring(720, 220, 100, 13) + ring(720, 220, 50, 6), None)]
 L.append(level('ch2-12', 2, 12, 'Le Grand Hamac', 'grande-constellation', 12, 25, 80, 1, 2, build(pts, groups=g, walls=walls), decor=[rot('gauche', 160, 220, 14), rot('droite', 720, 220, 14, -1)], **BOU))
 
+
+# ---------- CHAPITRE 3 : Twi & Nkl (orbe scindé), élément : orbite (niveaux 7+) ----------
+TWI = dict(companion='jumelles')
+def orb(gid, cx, cy, r, period, d=1): return {'id': gid, 'type': 'orbit', 'cx': cx, 'cy': cy, 'rx': r, 'ry': r, 'periodS': period, 'dir': d}
+def moons(prefix, cx, cy, r, n, period, d=1, phase=0):
+    """Une orbite de n pegs (1 à 4) : renvoie (groupe pour build, entrée decor)."""
+    return (prefix, cx, cy, ring(cx, cy, r, n, phase=phase), None), orb(prefix, cx, cy, r, period, d)
+
+# 3-1 découverte : deux bols jumeaux, un cristal pouvoir au centre de chacun et un au milieu.
+imp = [(250, 300, 'power'), (630, 300, 'power'), (440, 200, 'power')]
+pts = mirror(arc(250, 220, 150, 15, 165, 15) + arc(250, 230, 100, 25, 155, 10) + arc(250, 240, 50, 35, 145, 5)) + rows(200, 680, 470, 2, 44, 12)
+L.append(level('ch3-01', 3, 1, 'Twi et Nkl arrivent', 'decouverte', 15, 16, 59, 1, 3, build(pts, imp + GUARD_IMP), locked=True, **TWI))
+
+# 3-2 découverte : deux nuées en miroir, les pouvoirs entre les deux.
+imp = [(440, 230, 'power'), (440, 330, 'power'), (440, 430, 'power')]
+pts = mirror(hexa(90, 360, 190, 470, 46) + [(395, 280), (395, 380), (395, 480)])
+L.append(level('ch3-02', 3, 2, 'Le miroir', 'decouverte', 15, 16, 64, 1, 3, build(pts, imp + GUARD_IMP), locked=True, **TWI))
+
+# 3-3 application : deux spirales jumelles.
+pts = spiral(240, 340, 25, 160, 2.2, 54) + spiral(640, 340, 25, 160, 2.2, 54, phase=180) + line(440, 250, 440, 520, 4)
+L.append(level('ch3-03', 3, 3, 'Les spirales sœurs', 'application', 13, 21, 62, 1, 2, build(pts, GUARD_IMP), **TWI))
+
+# 3-4 application : deux cascades de bols et rampes.
+walls = [(440, 300, 120, 30), (440, 470, 120, -30)]
+pts = []
+for cx in (190, 690):
+    pts += arc(cx, 150, 120, 15, 165, 12) + arc(cx, 300, 110, 15, 165, 11) + arc(cx, 440, 100, 15, 165, 10)
+pts += line(330, 160, 550, 160, 6) + rows(110, 770, 565, 1, 0, 16)
+L.append(level('ch3-04', 3, 4, 'Les deux cascades', 'application', 13, 21, 67, 1, 2, build(pts, GUARD_IMP, walls=walls), **TWI))
+
+# 3-5 application : voûte en miroir, couloir central.
+pts = mirror(rows(60, 380, 170, 7, 46, 8)) + line(440, 200, 440, 500, 6)
+L.append(level('ch3-05', 3, 5, 'Les deux voûtes', 'application', 13, 20, 69, 1, 2, build(pts, GUARD_IMP), **TWI))
+
+# 3-6 respiration : nuée dense.
+pts = rows(50, 830, 190, 7, 46, 19)
+L.append(level('ch3-06', 3, 6, 'Pluie d’étincelles', 'respiration', 15, 17, 94, 1, 2, build(pts), **TWI))
+
+# 3-7 combinaison : premières lunes, deux pegs tournent autour de chaque bol.
+g = []; dec = []
+pts = rows(60, 820, 150, 2, 44, 18) + rows(100, 780, 545, 1, 0, 18)
+for k, cx in enumerate((220, 660)):
+    pts += arc(cx, 290, 70, 20, 160, 7) + arc(cx, 300, 30, 40, 140, 3)
+    gg, dd = moons(f'lune{k+1}', cx, 330, 90, 2, 6, 1 if k == 0 else -1); g.append(gg); dec.append(dd)
+pts += arc(440, 400, 90, 20, 160, 8)
+L.append(level('ch3-07', 3, 7, 'Les premières lunes', 'combinaison', 13, 20, 66, 1, 2, build(pts, GUARD_IMP, groups=g), decor=dec, **TWI))
+
+# 3-8 combinaison : trois petites planètes et leurs lunes.
+g = []; dec = []; pts = rows(60, 820, 150, 2, 44, 18) + rows(120, 760, 550, 1, 0, 14) + rows(100, 780, 480, 1, 0, 12)
+for k, (cx, cy) in enumerate(((180, 340), (440, 300), (700, 340))):
+    pts += disc(cx, cy, 50, 30)
+    gg, dd = moons(f'p{k+1}', cx, cy, 90, 2 if k == 1 else 3, 7, 1 if k % 2 == 0 else -1, phase=30*k); g.append(gg); dec.append(dd)
+L.append(level('ch3-08', 3, 8, 'Les trois planètes', 'combinaison', 15, 21, 69, 1, 2, build(pts, GUARD_IMP, groups=g), decor=dec, **TWI))
+
+# 3-9 combinaison : une rangée de six lunes au-dessus d'une nuée.
+g = []; dec = []; pts = rows(60, 820, 400, 4, 44, 18) + line(80, 125, 800, 125, 17)
+for k, cx in enumerate((140, 260, 380, 500, 620, 740)):
+    pts += [(cx, 230)]
+    gg, dd = moons(f'm{k+1}', cx, 230, 50, 1, 4 + (k % 3), 1 if k % 2 == 0 else -1, phase=90*k); g.append(gg); dec.append(dd)
+L.append(level('ch3-09', 3, 9, 'La ronde des lunes', 'combinaison', 14, 21, 74, 1, 2, build(pts, GUARD_IMP, groups=g), decor=dec, **TWI))
+
+# 3-10 maîtrise : voûte dense et quatre lunes qui portent peut-être un cœur.
+g = []; dec = []; pts = rows(60, 820, 150, 3, 44, 18) + arc(150, 430, 110, 15, 165, 11) + arc(730, 430, 110, 15, 165, 11) + arc(440, 470, 100, 15, 165, 10)
+for k, (cx, cy) in enumerate(((240, 330), (640, 330))):
+    pts += ring(cx, cy, 35, 5)
+    gg, dd = moons(f'o{k+1}', cx, cy, 85, 2, 5, 1 if k == 0 else -1); g.append(gg); dec.append(dd)
+L.append(level('ch3-10', 3, 10, 'Les gardiennes', 'maitrise', 13, 24, 72, 1, 2, build(pts, GUARD_IMP, groups=g), decor=dec, **TWI))
+
+# 3-11 maîtrise : deux anneaux fixes, des lunes qui tournent à l'intérieur.
+g = []; dec = []; pts = line(100, 150, 780, 150, 18) + rows(80, 800, 550, 1, 0, 17)
+for k, cx in enumerate((250, 630)):
+    pts += ring(cx, 340, 150, 26) + [(cx, 340)]
+    for j, (r, n, per) in enumerate(((90, 3, 6), (50, 1, 4))):
+        gg, dd = moons(f'a{k+1}{j}', cx, 340, r, n, per, 1 if (k + j) % 2 == 0 else -1); g.append(gg); dec.append(dd)
+L.append(level('ch3-11', 3, 11, 'Les sœurs lunaires', 'maitrise', 13, 22, 79, 1, 2, build(pts, GUARD_IMP, groups=g), decor=dec, **TWI))
+
+# 3-12 Grande Constellation : la Balançoire, une longue poutre inclinée et des lunes à chaque bout.
+walls = [(440, 400, 160, 10)]
+g = []; dec = []
+pts = line(80, 300, 800, 380, 26) + rows(80, 800, 120, 2, 40, 18) + arc(250, 170, 90, 20, 160, 9) + arc(630, 200, 90, 20, 160, 9) + rows(80, 800, 540, 2, 30, 18)
+for k, (cx, cy, r) in enumerate(((180, 420, 60), (700, 450, 50))):
+    gg, dd = moons(f'b{k+1}', cx, cy, r, 3, 6, 1 if k == 0 else -1); g.append(gg); dec.append(dd)
+L.append(level('ch3-12', 3, 12, 'La Balançoire', 'grande-constellation', 14, 22, 84, 1, 2, build(pts, groups=g, walls=walls), decor=dec, **TWI))
+
 out = sys.argv[1] if len(sys.argv) > 1 else 'out'
 os.makedirs(out, exist_ok=True)
 for lv in L:
