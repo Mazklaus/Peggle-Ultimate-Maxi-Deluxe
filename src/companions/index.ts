@@ -8,7 +8,7 @@
  */
 import type { CompanionDef } from '../core/companion/types';
 import type { Companion } from '../core/levelFormat';
-import { BOURDON, GRELOT, HORLOGE, JUMELLES, MOUSSE, VOLTE } from './astres';
+import { BOURDON, GRELOT, HORLOGE, JUMELLES, MOUSSE, NUAGE_LUNE, VOLTE } from './astres';
 import { PIP } from './pip';
 
 /** next = s'applique au tir suivant (charges), immediate = agit pendant le tir, reserve = charge gardée. */
@@ -92,7 +92,7 @@ export const COMPANION_ROSTER: readonly CompanionInfo[] = [
     id: 'nuage-lune',
     name: 'Nuage-Lune',
     color: 0xd6dcff,
-    def: null,
+    def: NUAGE_LUNE,
     power: { name: 'Seconde chance', kind: 'reserve', maxCharges: 1 },
     wakesAtChapter: 8,
   },

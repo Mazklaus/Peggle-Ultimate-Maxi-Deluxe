@@ -30,10 +30,12 @@ import {
 } from '../core/physics';
 import {
   MOUSSE_POWER,
+  NUAGE_LUNE_POWER,
   PIP_POWER,
   RevealCharges,
   ShotCharges,
   magnetPull,
+  secondChanceVelocity,
   type ChargeRule,
 } from '../core/powers';
 import { failsBeforeFirstWin, markSeen, writeSave, type SaveData } from '../core/save';
@@ -410,6 +412,7 @@ export class GameScene extends Phaser.Scene {
     this.updateTwin(time);
     const caught = this.inBucket(orb);
     if (caught || orb.y > GAME_HEIGHT + ORB_RADIUS * 2) {
+      if (!caught && this.secondChance(orb)) return;
       this.orbGone(caught);
       return;
     }
@@ -421,6 +424,7 @@ export class GameScene extends Phaser.Scene {
       !this.finalShot &&
       orb.y + ORB_RADIUS >= BUCKET.y - BUCKET.height / 2 &&
       orb.y < GAME_HEIGHT &&
+      this.orbVelocity(orb).y > 0 && // une orbe qui remonte (seconde chance) ne tombe pas dedans
       Math.abs(orb.x - this.bucket.x) <= (BUCKET.width * this.bucket.scaleX) / 2
     );
   }
@@ -883,7 +887,7 @@ export class GameScene extends Phaser.Scene {
   private emitAll(events: DetectedEvent[]): void {
     for (const e of events) {
       if (e === 'final_ralenti') this.startSlowmo();
-      if (e === 'pouvoir_active' && companionById(this.companionId)?.power.kind === 'next') {
+      if (e === 'pouvoir_active' && companionById(this.companionId)?.power.kind !== 'immediate') {
         this.reveal.gain();
         this.refreshPower();
       }
@@ -1027,6 +1031,46 @@ export class GameScene extends Phaser.Scene {
     if (this.slowmoUntil <= 0) this.applyGameScale(1);
   }
 
+  /**
+   * Pouvoir de Nuage-Lune : l'orbe qui sort par le bas sans être rattrapée remonte une fois
+   * (charge en réserve). Pas au tir final : l'orbe y finit dans les zones de bonus.
+   */
+  private secondChance(orb: Phaser.GameObjects.Arc): boolean {
+    if (this.companionId !== 'nuage-lune' || this.finalShot || !this.reveal.consume()) return false;
+    const v = this.orbVelocity(orb);
+    const up = secondChanceVelocity(v.x * 60, v.y * 60);
+    const x = Phaser.Math.Clamp(
+      orb.x,
+      PLAYFIELD.x + ORB_RADIUS,
+      PLAYFIELD.x + PLAYFIELD.w - ORB_RADIUS,
+    );
+    const y = GAME_HEIGHT - ORB_RADIUS;
+    orb.setPosition(x, y);
+    (orb as unknown as Phaser.Physics.Matter.Components.Velocity).setVelocity(
+      up.vx / 60,
+      up.vy / 60,
+    );
+    this.stuckRef = { x, y, t: this.time.now };
+    // La pastille-bouclier se brise en paillettes menthe, l'orbe repart vers le haut.
+    for (let i = 0; i < 14; i++) {
+      const a = Math.PI + (i / 13) * Math.PI;
+      const dot = this.add.circle(x, y, 3, PALETTE.success, 0.9).setDepth(30);
+      this.tweens.add({
+        targets: dot,
+        x: x + Math.cos(a) * 46,
+        y: y + Math.sin(a) * 46,
+        alpha: 0,
+        scale: 0.3,
+        duration: 480,
+        ease: 'Cubic.Out',
+        onComplete: () => dot.destroy(),
+      });
+    }
+    this.cameras.main.flash(120, 126, 224, 198);
+    this.refreshPower();
+    return true;
+  }
+
   /** Pouvoir de Grelot : l'orbe part en éclair, droit et rapide, à travers les cristaux. */
   private startBolt(): void {
     const orb = this.orb;
@@ -1132,7 +1176,7 @@ export class GameScene extends Phaser.Scene {
     this.stuckNudges = 0;
     this.stuckAnnounced = false;
     this.companion?.setPhase('flight');
-    this.reveal.fire();
+    if (companionById(this.companionId)?.power.kind !== 'reserve') this.reveal.fire();
     if (this.companionId === 'horloge' && this.reveal.shotIsPowered) this.startTimeWarp();
     if (this.companionId === 'grelot' && this.reveal.shotIsPowered) this.startBolt();
     this.lanternShots = Math.max(0, this.lanternShots - 1);
@@ -1543,11 +1587,14 @@ function obstacleOf(c: Crystal): Circle {
 /** Charges « tir suivant » selon l'Astre (réglages GD) ; Pip garde son aperçu de visée. */
 function chargesFor(id: string | null): ShotCharges {
   if (id === 'pip') return new RevealCharges();
-  const rules: Record<string, ChargeRule> = { mousse: MOUSSE_POWER };
+  const rules: Record<string, ChargeRule> = {
+    mousse: MOUSSE_POWER,
+    'nuage-lune': NUAGE_LUNE_POWER,
+  };
   const info = companionById(id);
   const rule = (id ? rules[id] : undefined) ?? {
     chargesPerActivation: 1,
-    maxCharges: info?.power.kind === 'next' ? info.power.maxCharges : 0,
+    maxCharges: info?.power.kind === 'immediate' ? 0 : (info?.power.maxCharges ?? 0),
   };
   return new ShotCharges(rule);
 }
