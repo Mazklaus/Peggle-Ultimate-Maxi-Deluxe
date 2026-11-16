@@ -115,3 +115,21 @@ describe('briques, sous-pas et contact sûr', () => {
     expect(robustContactStep(fragile)).toBeNull();
   });
 });
+
+describe('predictPath : champ du décor (aimants)', () => {
+  it('le champ dévie la trajectoire prédite', () => {
+    const input = {
+      ...base,
+      vx: 0,
+      vy: 4,
+      obstacles: [],
+      restitution: 0.75,
+      maxBounces: 9,
+      maxSteps: 60,
+    };
+    const free = predictPath(input).points.at(-1)!;
+    const pulled = predictPath({ ...input, field: () => ({ ax: -0.05, ay: 0 }) }).points.at(-1)!;
+    expect(free.x).toBeCloseTo(400, 6);
+    expect(pulled.x).toBeLessThan(free.x - 10);
+  });
+});

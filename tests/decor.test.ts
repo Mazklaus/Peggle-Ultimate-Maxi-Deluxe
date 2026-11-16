@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { isMovingDecor, pegPoseAt, pegTravel, type MovingDecor } from '../src/core/decor';
+import {
+  isMovingDecor,
+  MAGNET,
+  magnetAccel,
+  pegPoseAt,
+  pegTravel,
+  type MovingDecor,
+} from '../src/core/decor';
 
 const roue: MovingDecor = { id: 'roue', type: 'rotate', cx: 440, cy: 330, periodS: 12, dir: 1 };
 const lune: MovingDecor = {
@@ -46,5 +53,26 @@ describe('décor animé', () => {
   it('reconnaît les éléments qui déplacent leurs pegs', () => {
     expect(isMovingDecor(roue)).toBe(true);
     expect(isMovingDecor({ type: 'magnet' })).toBe(false);
+  });
+});
+
+describe('aimants', () => {
+  const m = { id: 'a', type: 'magnet' as const, x: 0, y: 0, radius: 110, strength: 1 };
+  it('attire vers le centre, plus fort de près', () => {
+    const near = magnetAccel([m], 30, 0);
+    const far = magnetAccel([m], 100, 0);
+    expect(near.ax).toBeLessThan(0);
+    expect(Math.abs(near.ax)).toBeGreaterThan(Math.abs(far.ax));
+    expect(near.ay).toBeCloseTo(0, 6);
+  });
+  it('rien dans la zone morte ni hors du rayon', () => {
+    expect(magnetAccel([m], 10, 0)).toEqual({ ax: 0, ay: 0 });
+    expect(magnetAccel([m], 0, 120)).toEqual({ ax: 0, ay: 0 });
+  });
+  it('strength multiplie la force', () => {
+    const a1 = magnetAccel([m], 50, 0).ax;
+    const a2 = magnetAccel([{ ...m, strength: 2 }], 50, 0).ax;
+    expect(a2).toBeCloseTo(2 * a1, 6);
+    expect(Math.abs(a1)).toBeLessThanOrEqual(MAGNET.accel);
   });
 });

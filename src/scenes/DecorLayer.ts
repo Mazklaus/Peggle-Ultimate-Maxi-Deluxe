@@ -9,7 +9,16 @@
  */
 import Phaser from 'phaser';
 import { toWorld } from '../config';
-import { isMovingDecor, pegPoseAt, pegTravel, type MovingDecor } from '../core/decor';
+import {
+  isMagnet,
+  isMovingDecor,
+  magnetAccel,
+  magnetWeight,
+  pegPoseAt,
+  pegTravel,
+  type MovingDecor,
+} from '../core/decor';
+import type { DecorMagnet } from '../core/levelFormat';
 import type { Crystal } from '../core/level';
 
 const TRACK = 0xb9a6ff;
@@ -31,6 +40,9 @@ interface MatterBodyApi {
 export class DecorLayer {
   private readonly pegs: MovingPeg[] = [];
   private readonly decor: MovingDecor[];
+  private readonly magnets: DecorMagnet[];
+  /** Orbes en vol (monde) : l'aimant qui les tient pulse. */
+  private orbs: ReadonlyArray<{ x: number; y: number }> = [];
   private readonly body: MatterBodyApi;
   /** Temps du décor (s) : temps de la physique, donc ralenti et pause compris. */
   private t = 0;
@@ -45,6 +57,7 @@ export class DecorLayer {
     private readonly gfx: Phaser.GameObjects.Graphics,
   ) {
     this.decor = decor.filter(isMovingDecor);
+    this.magnets = decor.filter(isMagnet);
     const byId = new Map(this.decor.map((d) => [d.id, d]));
     for (const c of crystals) {
       const d = c.group ? byId.get(c.group) : undefined;
@@ -63,6 +76,29 @@ export class DecorLayer {
 
   get active(): boolean {
     return this.pegs.length > 0;
+  }
+
+  get hasMagnets(): boolean {
+    return this.magnets.length > 0;
+  }
+
+  /** Accélération des aimants sur l'orbe en (x, y) monde, en px/s² de temps de jeu. */
+  magnetAt(x: number, y: number): { ax: number; ay: number } {
+    const o = toWorld({ x: 0, y: 0 });
+    return magnetAccel(this.magnets, x - o.x, y - o.y);
+  }
+
+  /** Champ des aimants pour les prédictions (px par pas de référence au carré), ou undefined. */
+  get field(): ((x: number, y: number) => { ax: number; ay: number }) | undefined {
+    if (this.magnets.length === 0) return undefined;
+    return (x, y) => {
+      const a = this.magnetAt(x, y);
+      return { ax: a.ax / 3600, ay: a.ay / 3600 };
+    };
+  }
+
+  setOrbs(orbs: ReadonlyArray<{ x: number; y: number }>): void {
+    this.orbs = orbs;
   }
 
   /** Le cristal bouge-t-il avec le décor ? */
@@ -114,6 +150,32 @@ export class DecorLayer {
       if (d.type === 'rotate') this.drawRotate(g, d, c);
       else this.drawOrbit(g, d, c);
     }
+    for (const m of this.magnets) this.drawMagnet(g, m);
+  }
+
+  /**
+   * Aimant (DA elements-decor.js, « lentille d'attraction ») : rayon d'effet en pointillé,
+   * ondes qui se resserrent vers le centre, lentille ardoise au cœur chaud. Elle pulse
+   * quand elle tient l'orbe.
+   */
+  private drawMagnet(g: Phaser.GameObjects.Graphics, m: DecorMagnet): void {
+    const c = toWorld(m);
+    const now = this.scene.time.now;
+    let pulse = 0;
+    for (const o of this.orbs)
+      pulse = Math.max(pulse, magnetWeight(m, Math.hypot(o.x - c.x, o.y - c.y)));
+    dashedEllipse(g, c.x, c.y, m.radius, m.radius, 1.4, 0.22, 2, 8, 0);
+    for (let i = 0; i < 3; i++) {
+      const s = 1 - ((now / 1400 + i / 3) % 1);
+      g.lineStyle(1.6, WARM, 0.35 * (1 - s) + 0.05).strokeCircle(
+        c.x,
+        c.y,
+        14 + s * (m.radius - 14),
+      );
+    }
+    g.fillStyle(SLATE, 1).fillCircle(c.x, c.y, 13 + pulse * 3);
+    g.fillStyle(WARM, 1).fillCircle(c.x, c.y, 6 + pulse * 2);
+    g.lineStyle(2, SLATE_L, 1).strokeCircle(c.x, c.y, 13 + pulse * 3);
   }
 
   private drawRotate(
