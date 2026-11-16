@@ -58,6 +58,12 @@ export const BRAIN_TUNING = {
   /** Garde-fou du Game Designer : au plus une réaction majeure par seconde pendant le vol. */
   majorMinGapSeconds: 1,
   maxPending: 2,
+  /** Une réaction en attente plus vieille que ça n'a plus de sens : on l'oublie. */
+  pendingMaxAgeSeconds: 1.6,
+  /** « oh ! » complet (voix + animation) seulement s'il reste au plus 3 cœurs (GD). */
+  nearHeartFullMaxHearts: 3,
+  /** Micro-réaction muette (yeux écarquillés) au-delà. */
+  nearHeartMicroSeconds: 0.35,
   hopSeconds: 0.28,
 };
 
@@ -71,6 +77,8 @@ export interface OrbInput {
   depth: number;
   /** L'orbe frôle un cœur non allumé. */
   nearHeart: boolean;
+  /** Cœurs restant à toucher (règle du « oh ! » du Game Director). */
+  heartsLeft?: number;
 }
 
 export interface BrainInput {
@@ -86,6 +94,8 @@ interface Playing {
   elapsed: number;
   speed: number;
   lastP: number;
+  /** Instant de mise en file (cerveau). */
+  queuedAt?: number;
 }
 
 const lerp = (a: number, b: number, u: number) => a + (b - a) * u;
@@ -113,6 +123,9 @@ export class CompanionBrain {
   private flushLevel = 0;
   private aftermath: { tuft: Tuft; until: number } | null = null;
   private wasNearHeart = false;
+  /** « oh ! » déjà joué pendant ce tir (au plus une fois, version complète ou muette). */
+  private nearHeartDone = false;
+  private microUntil = 0;
   private blink = { next: 3, until: 0, double: false };
   private smoothed: BodyPose = { x: 0, y: 0, sx: 1, sy: 1, rot: 0 };
   private bursts: Burst[] = [];
@@ -134,11 +147,15 @@ export class CompanionBrain {
     if (phase === this.phase) return;
     if (phase === 'flight') {
       this.shotHits = 0;
+      this.nearHeartDone = false;
       this.wake();
     }
     if (phase === 'aiming') {
       // Nouvelle visée (ou niveau relancé) : on lâche une pose de fin gardée.
-      if (this.playing?.def.hold) this.playing = null;
+      if (this.playing?.def.hold) {
+        this.playing = null;
+        this.pending = [];
+      }
       // Les états tendus valent jusqu'au tir suivant ; ils seront ré-émis s'ils tiennent toujours.
       this.tense = null;
       this.quietTime = 0;
@@ -272,16 +289,17 @@ export class CompanionBrain {
       if (cur.trigger === 'idle' || cur.trigger === 'inactivite') {
         // Un idle interrompu se termine en accéléré, puis la réaction démarre.
         cur.speed = BRAIN_TUNING.interruptSpeed;
-        this.pending.unshift(next);
+        this.pending.unshift({ ...next, queuedAt: this.time });
       } else {
         this.begin(next);
       }
     } else if (
+      !cur.def.hold &&
       next.trigger !== 'tir_lance' &&
       next.trigger !== 'inactivite' &&
       next.trigger !== 'idle'
     ) {
-      this.pending.push(next);
+      this.pending.push({ ...next, queuedAt: this.time });
       this.pending.sort((a, b) => PRIORITY[b.trigger] - PRIORITY[a.trigger]);
       this.pending.length = Math.min(this.pending.length, BRAIN_TUNING.maxPending);
     }
@@ -298,7 +316,7 @@ export class CompanionBrain {
   private advanceReaction(dt: number): void {
     const p = this.playing;
     if (!p) {
-      const next = this.pending.shift();
+      const next = this.takeNext();
       if (next) this.begin(next);
       return;
     }
@@ -310,9 +328,16 @@ export class CompanionBrain {
       if (p.def.aftermath)
         this.aftermath = { tuft: p.def.aftermath.tuft, until: this.time + p.def.aftermath.seconds };
       this.playing = null;
-      const next = this.pending.shift();
+      const next = this.takeNext();
       if (next) this.begin(next);
     }
+  }
+
+  /** Prochaine réaction en attente encore d'actualité (les trop vieilles sont oubliées). */
+  private takeNext(): Playing | undefined {
+    const maxAge = BRAIN_TUNING.pendingMaxAgeSeconds;
+    this.pending = this.pending.filter((p) => this.time - (p.queuedAt ?? this.time) <= maxAge);
+    return this.pending.shift();
   }
 
   private wake(): void {
@@ -374,7 +399,12 @@ export class CompanionBrain {
       this.wasNearHeart = false;
       return;
     }
-    if (input.orb.nearHeart && !this.wasNearHeart) this.trigger('proche_coeur');
+    if (input.orb.nearHeart && !this.wasNearHeart && !this.nearHeartDone) {
+      this.nearHeartDone = true;
+      const hearts = input.orb.heartsLeft ?? 0;
+      if (hearts <= BRAIN_TUNING.nearHeartFullMaxHearts) this.trigger('proche_coeur');
+      else this.microUntil = this.time + BRAIN_TUNING.nearHeartMicroSeconds;
+    }
     this.wasNearHeart = input.orb.nearHeart;
   }
 
@@ -446,6 +476,9 @@ export class CompanionBrain {
       if (t < this.aftermath.until) pose.tuft = this.aftermath.tuft;
       else this.aftermath = null;
     }
+
+    // Micro-réaction muette : yeux écarquillés un instant (cœur frôlé, beaucoup de cœurs restants).
+    if (t < this.microUntil) pose.eyes = 'wide';
 
     // Clignement des yeux (3 à 5 s, parfois double).
     if (t >= this.blink.next) {
