@@ -8,6 +8,7 @@
   "title": "Première lueur",
   "rhythm": "tutoriel",
   "orbs": 10,
+  "guideBounces": 2,
   "stars": [
     7000,
     12000
