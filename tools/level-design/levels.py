@@ -752,9 +752,10 @@ for k, cx in enumerate((150, 730)):
     gg, dd = moons(f'lune{k+1}', cx, 360, 60, 2, 6, 1 if k == 0 else -1); g.append(gg); dec.append(dd)
 L.append(level('ch8-12', 8, 12, 'La Grande Veilleuse', 'grande-constellation', 14, 28, 77, 1, 2, build(pts, GUARD_IMP_LIGHT, walls=walls, groups=g), decor=dec, **NUA))
 
-out = sys.argv[1] if len(sys.argv) > 1 else 'out'
-os.makedirs(out, exist_ok=True)
-for lv in L:
-    json.dump(lv, open(f"{out}/{lv['id']}.json", 'w'), ensure_ascii=False, indent=2)
-    n = len(lv['pegs']); print(lv['id'], 'pegs', n, 'walls', sum(1 for p in lv['pegs'] if p.get('kind') == 'wall'))
-json.dump({'format': 1, 'levels': [lv['id'] for lv in L]}, open(f'{out}/index.json', 'w'), indent=2)
+if __name__ == '__main__':
+    out = sys.argv[1] if len(sys.argv) > 1 else 'out'
+    os.makedirs(out, exist_ok=True)
+    for lv in L:
+        json.dump(lv, open(f"{out}/{lv['id']}.json", 'w'), ensure_ascii=False, indent=2)
+        n = len(lv['pegs']); print(lv['id'], 'pegs', n, 'walls', sum(1 for p in lv['pegs'] if p.get('kind') == 'wall'))
+    json.dump({'format': 1, 'levels': [lv['id'] for lv in L]}, open(f'{out}/index.json', 'w'), indent=2)
