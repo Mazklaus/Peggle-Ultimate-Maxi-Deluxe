@@ -26,6 +26,8 @@ const CHEEK = 0xff8fb1;
 const FLUSH = 0xff6a3d;
 /** Débordement autorisé dans la marge (UI/UX : x de 0 à 196). */
 const MARGIN = { minX: 4, maxX: 192 };
+/** Débord horizontal maximal des bras au-delà du corps (rapport QA : ~6 px). */
+const ARM_OVERHANG = 10;
 
 const REACTION_EVENTS: ReactionTrigger[] = [
   'tir_lance',
@@ -65,6 +67,8 @@ export interface CompanionWorldInput {
   /** Profondeur de l'orbe dans la zone de jeu (0 haut, 1 bas). */
   orbDepth?: number;
   orbNearHeart?: boolean;
+  /** Cœurs restant à toucher. */
+  heartsLeft?: number;
 }
 
 export class CompanionView {
@@ -141,6 +145,7 @@ export class CompanionView {
         vy: input.orb.vy,
         depth: input.orbDepth ?? 0,
         nearHeart: input.orbNearHeart ?? false,
+        heartsLeft: input.heartsLeft,
       };
     }
     const pose = this.brain.update(dtSeconds, brainInput);
@@ -166,14 +171,16 @@ export class CompanionView {
 
   // ---------- Dessin ----------
 
+  /** Garde toute la silhouette (corps étiré + bras) dans la marge, jamais sur la zone de jeu. */
+  private clampX(x: number, sx: number): number {
+    const half = BODY_R * Math.max(1, sx) + ARM_OVERHANG;
+    return Phaser.Math.Clamp(x, MARGIN.minX + half, MARGIN.maxX - half);
+  }
+
   private bodyCenter(pose: Pose): { x: number; y: number } {
     const shakeX = pose.shake ? (Math.random() * 2 - 1) * pose.shake : 0;
     const shakeY = pose.shake ? (Math.random() * 2 - 1) * pose.shake : 0;
-    const x = Phaser.Math.Clamp(
-      this.anchor.x + pose.body.x,
-      MARGIN.minX + BODY_R,
-      MARGIN.maxX - BODY_R,
-    );
+    const x = this.clampX(this.anchor.x + pose.body.x, pose.body.sx);
     // Squash ancré aux pieds : le centre descend quand le corps s'écrase.
     const y = this.anchor.y - BODY_R * pose.body.sy + pose.body.y;
     return { x: x + shakeX, y: y + shakeY };
@@ -200,7 +207,7 @@ export class CompanionView {
     const shadowW = BODY_R * 1.6 * Math.max(0.35, 1 - lift / 120);
     g.fillStyle(0x0b1026, 0.45);
     g.fillEllipse(
-      Phaser.Math.Clamp(this.anchor.x + pose.body.x, MARGIN.minX + BODY_R, MARGIN.maxX - BODY_R),
+      this.clampX(this.anchor.x + pose.body.x, pose.body.sx),
       this.anchor.y + 4,
       shadowW,
       shadowW * 0.22,

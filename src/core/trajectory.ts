@@ -42,7 +42,11 @@ export function aimGuide(input: TrajectoryInput): { x: number; y: number }[] {
 export interface PredictInput extends TrajectoryInput {
   /** Restitution des rebonds (Matter prend le max des deux corps). */
   restitution: number;
+  /** Restitution sur les murs (défaut : restitution). */
+  wallRestitution?: number;
   maxBounces: number;
+  /** Cible : la simulation s'arrête au premier contact avec elle (voir contactStep). */
+  target?: Circle;
 }
 
 /**
@@ -52,12 +56,16 @@ export interface PredictInput extends TrajectoryInput {
 export function predictPath(input: PredictInput): {
   points: { x: number; y: number }[];
   bounces: { x: number; y: number }[];
+  /** Pas de simulation au contact avec input.target, ou null s'il n'a pas lieu. */
+  contactStep: number | null;
 } {
   let { x, y, vx, vy } = input;
   const points = [{ x, y }];
   const bounces: { x: number; y: number }[] = [];
   const maxSteps = input.maxSteps ?? 90;
   const e = input.restitution;
+  const ew = input.wallRestitution ?? e;
+  const target = input.target;
   let lastHit: Circle | null = null;
   for (let i = 0; i < maxSteps && bounces.length < input.maxBounces; i++) {
     vy += input.gravity;
@@ -65,16 +73,20 @@ export function predictPath(input: PredictInput): {
     y += vy;
     if (x - input.radius <= input.minX && vx < 0) {
       x = input.minX + input.radius;
-      vx = -vx * e;
+      vx = -vx * ew;
       bounces.push({ x, y });
     } else if (x + input.radius >= input.maxX && vx > 0) {
       x = input.maxX - input.radius;
-      vx = -vx * e;
+      vx = -vx * ew;
       bounces.push({ x, y });
     }
     if (y >= input.maxY) {
       points.push({ x, y });
       break;
+    }
+    if (target && Math.hypot(target.x - x, target.y - y) <= target.r + input.radius) {
+      points.push({ x, y });
+      return { points, bounces, contactStep: i + 1 };
     }
     for (const o of input.obstacles) {
       const dx = x - o.x;
@@ -98,5 +110,5 @@ export function predictPath(input: PredictInput): {
     }
     points.push({ x, y });
   }
-  return { points, bounces };
+  return { points, bounces, contactStep: null };
 }

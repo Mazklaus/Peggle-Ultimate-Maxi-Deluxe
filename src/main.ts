@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { audio } from './audio';
 import { GAME_HEIGHT, GAME_WIDTH } from './config';
 import { gameEvents } from './core/events';
+import { ORB_PHYSICS } from './core/physics';
 import { loadSave } from './core/save';
 import { BootScene } from './scenes/BootScene';
 import { CutsceneScene } from './scenes/CutsceneScene';
@@ -28,7 +29,14 @@ new Phaser.Game({
   height: GAME_HEIGHT,
   backgroundColor: '#0B1026',
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
-  physics: { default: 'matter', matter: { gravity: { x: 0, y: 1 } } },
+  physics: {
+    default: 'matter',
+    matter: {
+      // Échelle de gravité réglée par GameScene (ORB_PHYSICS.gravityScale).
+      gravity: { x: 0, y: 1 },
+      runner: { fps: ORB_PHYSICS.stepsPerSecond },
+    },
+  },
   // Boot en premier : il charge sauvegarde et niveaux puis aiguille.
   scene: [
     BootScene,

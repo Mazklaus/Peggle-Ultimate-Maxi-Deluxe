@@ -19,9 +19,11 @@ import {
 import type { LevelData } from '../core/levelFormat';
 import { levelFromData } from '../core/levelSetup';
 import { FINAL_ZONES, finalZoneAt } from '../core/finalZones';
+import { GRAVITY_PER_STEP, ORB_PHYSICS } from '../core/physics';
 import { PIP_POWER, RevealCharges } from '../core/powers';
 import { failsBeforeFirstWin, markSeen, writeSave, type SaveData } from '../core/save';
 import {
+  EVENT_THRESHOLDS,
   ShotTracker,
   edgeDistance,
   type DetectedEvent,
@@ -42,10 +44,8 @@ export interface GameSceneData {
 }
 
 const ORB_RADIUS = 8;
-/** Vitesse de lancement en px par pas Matter (~16,7 ms). */
-const LAUNCH_SPEED = 11;
-/** Gravité effective de Matter (gravity.y = 1, scale 0.001) en px par pas². */
-const GRAVITY_PER_STEP = 0.001 * (1000 / 60) ** 2;
+/** Vitesse de lancement en px par pas de référence Matter (~16,7 ms), voir core/physics.ts. */
+const LAUNCH_SPEED = ORB_PHYSICS.launchSpeed;
 const CANNON = { x: PLAYFIELD.x + PLAYFIELD.w / 2, y: PLAYFIELD.y + 24 };
 const BUCKET = { width: 100, height: 18, y: GAME_HEIGHT - 14 };
 const MIN_AIM = Phaser.Math.DegToRad(8);
@@ -55,13 +55,15 @@ const WALL_THICKNESS = 40;
 const RESULTS_DELAY_MS = 1400;
 /** Final au ralenti (GD) : tout le jeu à 0,25 pendant 1,5 s réelles au maximum. */
 const SLOWMO = { scale: 0.25, maxRealMs: 1500 };
+/** Marge de prudence de la prédiction du final (px retirés au rayon du dernier cœur). */
+const FINAL_PREDICT_MARGIN_PX = 3;
 /** Loge de l'Astre : colonne gauche sous le compteur d'orbes (pieds de l'Astre). */
 const COMPANION_ANCHOR = { x: 100, y: 400 };
 /** L'orbe « frôle » un cœur (réaction « oh ! » de l'Astre). */
 const NEAR_HEART_PX = 20;
 const HEART_RADIUS = 10;
 /** Restitution effective des rebonds (Matter : max orbe / obstacle). */
-const ORB_RESTITUTION = 0.75;
+const ORB_RESTITUTION = ORB_PHYSICS.orbRestitution;
 const PIP_COLOR = 0xffe45c;
 
 type CrystalView = Phaser.GameObjects.Arc | Phaser.GameObjects.Rectangle;
@@ -137,6 +139,7 @@ export class GameScene extends Phaser.Scene {
     this.finalShot = false;
     this.finalZonesGfx = undefined;
     this.setTimeScale(1);
+    this.setupPhysics();
     this.tracker = new ShotTracker();
     this.reveal = new RevealCharges();
     const save = this.registry.get(REGISTRY.save) as SaveData | undefined;
@@ -271,14 +274,28 @@ export class GameScene extends Phaser.Scene {
     );
   }
 
+  /** Orbe ralentie (même trajectoire, parcourue plus lentement) et petits rebonds conservés. */
+  private setupPhysics(): void {
+    this.matter.world.setGravity(0, 1, ORB_PHYSICS.gravityScale);
+    const matterLib = (
+      Phaser.Physics.Matter as unknown as { Matter: { Resolver: { _restingThresh: number } } }
+    ).Matter;
+    matterLib.Resolver._restingThresh = ORB_PHYSICS.restingThreshold;
+  }
+
   /** Murs gauche, droit et haut de la zone de jeu ; le bas reste ouvert. */
   private makeWalls(): void {
     const t = WALL_THICKNESS;
     const { x, y, w, h } = PLAYFIELD;
-    const opts = { isStatic: true, label: 'wall', restitution: 0.6 };
-    this.matter.add.rectangle(x - t / 2, y + h / 2, t, h + t * 2, opts);
-    this.matter.add.rectangle(x + w + t / 2, y + h / 2, t, h + t * 2, opts);
-    this.matter.add.rectangle(x + w / 2, y - t / 2, w + t * 2, t, opts);
+    const opts = { isStatic: true, label: 'wall' };
+    const walls = [
+      this.matter.add.rectangle(x - t / 2, y + h / 2, t, h + t * 2, opts),
+      this.matter.add.rectangle(x + w + t / 2, y + h / 2, t, h + t * 2, opts),
+      this.matter.add.rectangle(x + w / 2, y - t / 2, w + t * 2, t, opts),
+    ];
+    // Matter remet la restitution d'un corps statique à 0 : on la fixe après coup
+    // (une paire prend la restitution la plus haute des deux corps).
+    for (const wall of walls) wall.restitution = ORB_PHYSICS.wallRestitution;
   }
 
   private makeCrystal(c: Crystal): CrystalView {
@@ -339,13 +356,26 @@ export class GameScene extends Phaser.Scene {
     this.chargeDots = this.add.graphics();
   }
 
+  /**
+   * Vitesse de l'orbe en px par pas de référence (16,7 ms) de temps de jeu, quels que soient
+   * la fréquence physique et le ralenti (Matter stocke un déplacement par pas réel).
+   */
+  private orbVelocity(orb: Phaser.GameObjects.Arc): { x: number; y: number } {
+    const b = orb.body as
+      (MatterJS.BodyType & { positionPrev: MatterJS.Vector; deltaTime?: number }) | null;
+    if (!b) return { x: 0, y: 0 };
+    const k = 1000 / 60 / (b.deltaTime || 1000 / 60);
+    return { x: (b.position.x - b.positionPrev.x) * k, y: (b.position.y - b.positionPrev.y) * k };
+  }
+
   private updateCompanion(dt: number, orb?: Phaser.GameObjects.Arc): void {
     const c = this.companion;
     if (!c) return;
     if (orb) {
-      const v = (orb.body as MatterJS.BodyType | null)?.velocity ?? { x: 0, y: 0 };
+      const v = this.orbVelocity(orb);
       c.update(dt, {
         orb: { x: orb.x, y: orb.y, vy: v.y * 60 },
+        heartsLeft: heartsRemaining(this.level),
         orbDepth: (orb.y - PLAYFIELD.y) / PLAYFIELD.h,
         orbNearHeart: this.unlitHearts().some(
           (h) =>
@@ -373,15 +403,70 @@ export class GameScene extends Phaser.Scene {
 
   /** Suivi de l'orbe : presque, final au ralenti. */
   private trackOrb(orb: Phaser.GameObjects.Arc): void {
-    const v = (orb.body as MatterJS.BodyType | null)?.velocity ?? { x: 0, y: 0 };
-    // Vitesse Matter en px par pas (à l'échelle de temps courante) -> px/s réels de jeu.
-    const perSecond = 60 * (this.gameScale === 1 ? 1 : 1 / this.gameScale);
+    const v = this.orbVelocity(orb);
+    // px par pas de référence -> px/s de temps de jeu.
     this.emitAll(
       this.tracker.orbMoved(
-        { x: orb.x, y: orb.y, vx: v.x * perSecond, vy: v.y * perSecond, r: ORB_RADIUS },
+        { x: orb.x, y: orb.y, vx: v.x * 60, vy: v.y * 60, r: ORB_RADIUS },
         this.unlitHearts(),
+        (o, heart) => this.predictHeartContact(o, heart),
       ),
     );
+  }
+
+  /** Obstacles des prédictions de trajectoire (rayons approchés des cristaux). */
+  private obstacles(exceptId?: number): { x: number; y: number; r: number }[] {
+    const out: { x: number; y: number; r: number }[] = [];
+    for (const c of this.level.crystals) {
+      if (c.id === exceptId) continue;
+      const w = toWorld(c);
+      const shape = c.shape;
+      if (shape?.type !== 'brick') {
+        out.push({ x: w.x, y: w.y, r: shape?.r ?? 10 });
+        continue;
+      }
+      // Brique : une rangée de cercles le long de sa longueur.
+      const long = Math.max(shape.w, shape.h);
+      const r = Math.min(shape.w, shape.h) / 2;
+      const a = Phaser.Math.DegToRad(shape.angle) + (shape.h > shape.w ? Math.PI / 2 : 0);
+      const n = Math.max(1, Math.ceil(long / (r * 1.5)));
+      for (let i = 0; i < n; i++) {
+        const d = n === 1 ? 0 : -long / 2 + r + ((long - 2 * r) * i) / (n - 1);
+        out.push({ x: w.x + Math.cos(a) * d, y: w.y + Math.sin(a) * d, r });
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Temps (s) avant que l'orbe touche ce cœur, en simulant gravité, murs et cristaux sur la
+   * fenêtre du final ; null s'il ne sera pas touché. Évite les faux finals (rapport QA P1).
+   */
+  private predictHeartContact(
+    o: { x: number; y: number; vx: number; vy: number },
+    heart: HeartTarget,
+  ): number | null {
+    const steps = Math.ceil(EVENT_THRESHOLDS.finalSlowmoLeadSeconds * 60);
+    const { contactStep } = predictPath({
+      x: o.x,
+      y: o.y,
+      vx: o.vx / 60,
+      vy: o.vy / 60,
+      gravity: GRAVITY_PER_STEP,
+      radius: ORB_RADIUS,
+      minX: PLAYFIELD.x,
+      maxX: PLAYFIELD.x + PLAYFIELD.w,
+      maxY: GAME_HEIGHT,
+      obstacles: this.obstacles(heart.id),
+      restitution: ORB_RESTITUTION,
+      wallRestitution: ORB_PHYSICS.wallRestitution,
+      maxBounces: 99,
+      maxSteps: steps,
+      // Cible un peu réduite : on préfère rater un ralenti (le vrai contact le relance)
+      // qu'en déclencher un faux.
+      target: { x: heart.x, y: heart.y, r: Math.max(2, heart.r - FINAL_PREDICT_MARGIN_PX) },
+    });
+    return contactStep === null ? null : contactStep / 60;
   }
 
   /** Relaie sur le bus les événements détectés par le ShotTracker. */
@@ -532,7 +617,7 @@ export class GameScene extends Phaser.Scene {
     this.matter.add.gameObject(orb, {
       label: 'orb',
       shape: { type: 'circle', radius: ORB_RADIUS },
-      restitution: 0.75,
+      restitution: ORB_RESTITUTION,
       friction: 0,
       frictionAir: 0,
     });
@@ -576,6 +661,11 @@ export class GameScene extends Phaser.Scene {
     if (isFinalHeartLit(this.level)) {
       // Filet de sécurité : le dernier cœur touché sans prédiction préalable.
       if (this.slowmoUntil === 0) this.emitAll(['final_ralenti']);
+      else if (this.slowmoUntil < 0) {
+        // Un ralenti a déjà eu lieu pendant ce tir : on le relance pour le vrai contact.
+        this.slowmoUntil = 0;
+        this.startSlowmo();
+      }
       this.showFinalZones();
     }
     this.refreshHud();
@@ -681,11 +771,8 @@ export class GameScene extends Phaser.Scene {
       minX: PLAYFIELD.x,
       maxX: PLAYFIELD.x + PLAYFIELD.w,
       maxY: GAME_HEIGHT,
-      obstacles: this.level.crystals.map((c) => {
-        const w = toWorld(c);
-        const r = c.shape?.type === 'brick' ? Math.min(c.shape.w, c.shape.h) / 2 : 10;
-        return { x: w.x, y: w.y, r };
-      }),
+      obstacles: this.obstacles(),
+      wallRestitution: ORB_PHYSICS.wallRestitution,
     };
     if (this.reveal.previewing) {
       // Pouvoir de Pip : trajectoire révélée jusqu'au 3e rebond ou 1,5 s.

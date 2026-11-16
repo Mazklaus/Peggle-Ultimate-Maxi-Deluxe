@@ -91,6 +91,17 @@ describe('ShotTracker', () => {
   });
 });
 
+describe('final_ralenti avec prédicteur', () => {
+  it('suit le prédicteur fourni par la scène (gravité, obstacles)', () => {
+    const t = new ShotTracker();
+    t.shotFired();
+    const last = [heart(1, 100, 300)];
+    // En ligne droite le contact serait imminent, mais la vraie trajectoire l'évite.
+    expect(t.orbMoved(orb(100, 200, 0, 300), last, () => null)).toEqual([]);
+    expect(t.orbMoved(orb(100, 200, 0, 300), last, () => 0.2)).toEqual(['final_ralenti']);
+  });
+});
+
 describe('timeToContact', () => {
   it('null si l’orbe s’éloigne, 0 si déjà au contact', () => {
     expect(timeToContact(orb(0, 0, 0, -100), heart(1, 0, 100))).toBeNull();

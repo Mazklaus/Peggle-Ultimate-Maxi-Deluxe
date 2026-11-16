@@ -2,11 +2,14 @@
  * Pouvoirs des Astres (chiffrage Game Designer, reglages-jalon1.md).
  * Jalon 1 : Pip, trajectoire révélée sur les tirs suivants.
  */
+import { ORB_PHYSICS } from './physics';
+
 export const PIP_POWER = {
   chargesPerActivation: 2,
   maxCharges: 4,
   previewBounces: 3,
-  previewSeconds: 1.5,
+  /** 1,5 s à la vitesse du prototype, allongé avec le ralenti de l'orbe (GD). */
+  previewSeconds: 1.5 / ORB_PHYSICS.slowdown,
 };
 
 /** Charges de « trajectoire révélée » : gagnées au cristal pouvoir, consommées au tir. */
