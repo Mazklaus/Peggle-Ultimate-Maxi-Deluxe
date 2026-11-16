@@ -908,8 +908,12 @@ export class GameScene extends Phaser.Scene {
     const forced = new URLSearchParams(window.location.search).get('astre');
     const imposed = this.hasConstraint('astre_impose') ? this.activeChallenge()?.astre : undefined;
     const duelAstre = this.duel ? this.duel.players[this.duel.active].astre : undefined;
+    // Astre verrouillé par le niveau (constellation du jour, découvertes) : le choix du
+    // sélecteur ne le remplace pas.
+    const level = this.sceneData.level;
+    const locked = level.companionLocked && level.companion ? level.companion : undefined;
     const id =
-      forced ?? imposed ?? duelAstre ?? this.sceneData.companion ?? this.sceneData.level.companion;
+      forced ?? imposed ?? duelAstre ?? locked ?? this.sceneData.companion ?? level.companion;
     const def =
       companionById(id)?.def ??
       (forced ? (DA_DEFS as Record<string, CompanionDef | undefined>)[forced] : undefined);
