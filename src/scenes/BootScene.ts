@@ -10,6 +10,7 @@ import {
 import { parseLevel } from '../core/levelFormat';
 import { browserStorage, loadSave } from '../core/save';
 import { REGISTRY, SCENES } from './keys';
+import { MAP_BACKGROUNDS } from './mapData';
 import { textStyle } from './theme';
 
 /**
@@ -24,6 +25,9 @@ export class BootScene extends Phaser.Scene {
   }
 
   preload(): void {
+    // Fonds de la carte : rasterisés ici, sous l'écran de chargement, pas au fondu titre -> carte.
+    for (const { key, file } of MAP_BACKGROUNDS)
+      this.load.svg(key, file, { width: 1280, height: 720 });
     this.load.json('level-index', `${LEVELS_DIR}/index.json`);
     this.load.once('filecomplete-json-level-index', () => {
       const { index } = parseIndex(this.cache.json.get('level-index'));

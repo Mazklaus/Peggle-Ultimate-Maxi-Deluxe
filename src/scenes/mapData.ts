@@ -90,6 +90,13 @@ export const SKY = {
   ] as Point[],
 };
 
+/** Fonds SVG de la carte (chapitres, ciel, observatoire), chargés dès le Boot. */
+export const MAP_BACKGROUNDS: Array<{ key: string; file: string }> = [
+  ...CHAPTERS.map((c) => c.bg),
+  SKY.bg,
+  SKY.observatory,
+];
+
 /** Positions d'une constellation réduite et centrée sur sa miniature de la vue ciel. */
 export function miniPoints(c: ChapterDef): { points: Point[]; box: { w: number; h: number } } {
   const xs = c.nodes.map((p) => p.x);
