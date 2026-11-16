@@ -64,23 +64,31 @@ def build(pts, imposed=(), walls=()):
         pegs.append({'x': round(x), 'y': round(y), 'shape': 'brick', 'w': w, 'h': 12, 'angle': ang, 'kind': 'wall'})
     return pegs
 
+GUARDS = [(30, y) for y in (230, 330, 430, 530)] + [(850, y) for y in (230, 330, 430, 530)]
+
+GUARD_IMP = [(x, y, 'common') for x, y in GUARDS]
+GUARD_IMP_LIGHT = [(30, 300, 'common'), (30, 460, 'common'), (850, 300, 'common'), (850, 460, 'common')]
+
 def level(id_, chapter, index, title, rhythm, orbs, hearts, commons, bonus, power, pegs, companion=None, locked=False):
     free = [p for p in pegs if 'kind' not in p]
     imposed_power = sum(1 for p in pegs if p.get('kind') == 'power')
-    need = hearts + commons + bonus + (power - imposed_power)
+    imposed_common = sum(1 for p in pegs if p.get('kind') == 'common')
+    need = hearts + (commons - imposed_common) + bonus + (power - imposed_power)
     if len(free) < need:
         print(f'MANQUE {id_}: {len(free)} < {need}'); need = len(free)
     # retire l'excédent de façon régulière (garde la silhouette)
     extra = len(free) - need
     print(id_, 'surplus', extra)
     if extra:
-        drop = set(id(free[int(i*len(free)/extra)]) for i in range(extra))
+        cand = [p for p in free if (p['x'], p['y']) not in GUARDS]
+        drop = set(id(cand[int(i*len(cand)/extra)]) for i in range(extra))
         pegs = [p for p in pegs if id(p) not in drop]
     stars = [700*hearts, 1200*hearts]
     return {
         'format': 1, 'id': id_, 'chapter': chapter, 'index': index,
         'companion': companion, 'companionLocked': locked,
-        'title': title, 'rhythm': rhythm, 'orbs': orbs, 'stars': stars,
+        'title': title, 'rhythm': rhythm, 'orbs': orbs,
+        **({'guideBounces': 2} if id_ in ('pro-01', 'pro-02') else {}), 'stars': stars,
         'assign': {'hearts': hearts, 'power': power - imposed_power, 'bonus': bonus},
         'pegs': pegs, 'decor': [],
     }
@@ -97,22 +105,22 @@ def disc(cx, cy, r, step=44):
 # ---------- PROLOGUE (sans Astre) ----------
 # P1 viser + tirer : une arche douce, facile à toucher partout.
 pts = arc(440, 140, 300, 25, 155, 24) + arc(440, 150, 240, 30, 150, 16)
-L.append(level('pro-01', 0, 1, 'Première lueur', 'tutoriel', 10, 10, 30, 0, 0, build(pts)))
+L.append(level('pro-01', 0, 1, 'Première lueur', 'tutoriel', 10, 10, 34, 0, 0, build(pts, GUARD_IMP_LIGHT)))
 
 # P2 réceptacle : deux bols sur les côtés, l'orbe roule vers le couloir central et le réceptacle.
 pts = arc(230, 180, 180, 15, 165, 17) + arc(230, 200, 120, 20, 160, 11) + arc(650, 180, 180, 15, 165, 17) + arc(650, 200, 120, 20, 160, 11) \
     + line(410, 180, 470, 180, 3)
-L.append(level('pro-02', 0, 2, 'Le panier des étoiles', 'tutoriel', 13, 12, 40, 0, 0, build(pts)))
+L.append(level('pro-02', 0, 2, 'Le panier des étoiles', 'tutoriel', 13, 12, 40, 0, 0, build(pts, GUARD_IMP)))
 
 # P3 bonus : trois lanternes en bol, le bonus saute de l'une à l'autre.
 pts = []
 for cx, cy in ((230, 200), (650, 200), (440, 360)):
     pts += arc(cx, cy, 150, 15, 165, 15) + arc(cx, cy + 10, 95, 25, 155, 9)
-L.append(level('pro-03', 0, 3, 'Trois lanternes', 'tutoriel', 13, 14, 50, 1, 0, build(pts)))
+L.append(level('pro-03', 0, 3, 'Trois lanternes', 'tutoriel', 13, 14, 50, 1, 0, build(pts, GUARD_IMP)))
 
 # P4 multiplicateur : vagues d'arches emboîtées, première vraie constellation.
 pts = arc(440, 110, 380, 20, 160, 34) + arc(440, 120, 300, 25, 155, 25) + arc(440, 130, 220, 30, 150, 18) + arc(440, 140, 140, 35, 145, 10)
-L.append(level('pro-04', 0, 4, 'Le ciel s’éveille', 'tutoriel', 13, 15, 60, 1, 0, build(pts)))
+L.append(level('pro-04', 0, 4, 'Le ciel s’éveille', 'tutoriel', 13, 15, 60, 1, 0, build(pts, GUARD_IMP)))
 
 # ---------- CHAPITRE 1 : Pip ----------
 PIP = dict(companion='pip')
@@ -125,11 +133,11 @@ L.append(level('ch1-01', 1, 1, 'Pip montre le chemin', 'decouverte', 10, 20, 55,
 # 1-2 découverte : un rideau d'étoiles cache la nuée, la trajectoire aide à viser les trous.
 imp = [(440, 150, 'power'), (180, 240, 'power'), (700, 240, 'power')]
 pts = line(120, 300, 760, 300, 24) + rows(100, 780, 360, 4, 46, 13) + arc(440, 120, 260, 30, 150, 15) + [(60, 560), (820, 560)]
-L.append(level('ch1-02', 1, 2, 'Les rideaux d’étoiles', 'decouverte', 10, 20, 60, 1, 3, build(pts, imp), locked=True, **PIP))
+L.append(level('ch1-02', 1, 2, 'Les rideaux d’étoiles', 'decouverte', 10, 20, 60, 1, 3, build(pts, imp + GUARD_IMP), locked=True, **PIP))
 
 # 1-3 application : deux balances pleines reliées par un fléau.
 pts = disc(240, 360, 140) + disc(640, 360, 140) + line(250, 190, 630, 190, 13) + line(440, 220, 440, 520, 9)
-L.append(level('ch1-03', 1, 3, 'Les deux balances', 'application', 10, 22, 60, 1, 2, build(pts), **PIP))
+L.append(level('ch1-03', 1, 3, 'Les deux balances', 'application', 10, 22, 60, 1, 2, build(pts, GUARD_IMP), **PIP))
 
 # 1-4 application : spirale serrée (lecture de trajectoire).
 pts = spiral(440, 330, 30, 220, 2.4, 90) + arc(110, 380, 90, 20, 160, 9) + arc(770, 380, 90, 20, 160, 9) + arc(110, 380, 50, 30, 150, 5) + arc(770, 380, 50, 30, 150, 5) + [(440, 120), (300, 130), (580, 130)]
