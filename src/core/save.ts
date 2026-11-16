@@ -51,6 +51,8 @@ export interface SaveData {
   seen: Record<string, boolean>;
   /** Dernier Astre choisi dans le sélecteur (préselection des niveaux suivants). */
   companion?: string;
+  /** Défis réussis (médailles), par id de niveau de défi. */
+  challenges?: Record<string, boolean>;
   /** Constellation du jour : meilleur score du jour et série de jours joués d'affilée. */
   daily?: DailyRecord;
 }
@@ -129,6 +131,9 @@ export function loadSave(storage: KeyValueStorage | null = browserStorage()): Sa
       // Champ ajouté après la v1 : absent des anciennes sauvegardes.
       seen: typeof data.seen === 'object' && data.seen ? data.seen : {},
       ...(typeof data.companion === 'string' ? { companion: data.companion } : {}),
+      ...(typeof data.challenges === 'object' && data.challenges
+        ? { challenges: data.challenges }
+        : {}),
       ...(isDailyRecord(data.daily) ? { daily: data.daily } : {}),
     };
   } catch {
@@ -257,4 +262,16 @@ export function currentStreak(save: SaveData, todayKey: string): number {
   const d = save.daily;
   if (!d) return 0;
   return d.date === todayKey || d.date === previousDayKey(todayKey) ? d.streak : 0;
+}
+
+/** Médaille d'un défi réussi ; true si elle est nouvelle. */
+export function recordChallenge(save: SaveData, id: string, success: boolean): boolean {
+  if (!success || save.challenges?.[id]) return false;
+  save.challenges = { ...(save.challenges ?? {}), [id]: true };
+  return true;
+}
+
+/** Nombre de médailles parmi ces défis. */
+export function challengeMedals(save: SaveData, ids: readonly string[]): number {
+  return ids.filter((id) => save.challenges?.[id]).length;
 }

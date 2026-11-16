@@ -5,7 +5,7 @@ import { localDateKey } from '../core/daily';
 import { currentChapter, MAX_STARS, totalStars } from '../core/mapProgress';
 import { MENU_ORDER, modeUnlocked } from '../core/modeMenu';
 import type { ModeKind } from '../core/modes';
-import { currentStreak, markSeen, writeSave, type SaveData } from '../core/save';
+import { challengeMedals, currentStreak, markSeen, writeSave, type SaveData } from '../core/save';
 import { CompanionView } from './CompanionView';
 import { astreDef, chapter as chapterDef } from './mapData';
 import { OPTIONS_CHANGED, REGISTRY, SCENES } from './keys';
@@ -36,7 +36,7 @@ const CARDS: Record<ModeKind, { x: number; w: number; h: number }> = {
 };
 const CARD_Y = 420;
 /** Modes dont l'écran est livré (les autres restent sous cadenas en attendant). */
-const READY: ReadonlySet<ModeKind> = new Set(['aventure', 'quotidien']);
+const READY: ReadonlySet<ModeKind> = new Set(['aventure', 'quotidien', 'defi']);
 const iconKey = (n: string) => `icone-${n}`;
 
 interface ModeCard {
@@ -231,6 +231,13 @@ export class TitleScene extends Phaser.Scene {
         this.astre.setDisplay(c.x + c.w / 2 - 44, CARD_Y - c.h / 2 + 64, 0.42);
         this.astre.setDepth(5);
       }
+    } else if (mode === 'defi') {
+      const ids = (catalog?.challenges ?? []).map((l) => l.id);
+      root.add(
+        this.add
+          .text(0, infoY, `${challengeMedals(save, ids)}/${ids.length}`, textStyle(20))
+          .setOrigin(0.5),
+      );
     } else if (mode === 'quotidien') {
       const today = localDateKey();
       const streak = currentStreak(save, today);
@@ -305,5 +312,6 @@ export class TitleScene extends Phaser.Scene {
     if (!card || !card.open || this.scene.isPaused()) return;
     if (card.mode === 'aventure') start();
     else if (card.mode === 'quotidien') fadeTo(this, SCENES.daily);
+    else if (card.mode === 'defi') fadeTo(this, SCENES.challenges);
   }
 }
