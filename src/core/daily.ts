@@ -282,7 +282,9 @@ function attempt(seed: number, key: string): LevelData | null {
   const layout = (TEMPLATES[template] as (r: Rng) => Layout)(rng);
   const decorKind = pick(rng, ['none', 'none', 'rotate', 'orbit', 'magnet'] as const);
   const companion = pick(rng, COMPANIONS);
-  const deco = addDecor(rng, decorKind);
+  // Pas d'aimant de décor avec Mousse : les deux attractions se contrarient (revue LD).
+  // addDecor tire le centre avant de regarder le type : le flux aléatoire ne change pas.
+  const deco = addDecor(rng, companion === 'mousse' && decorKind === 'magnet' ? 'none' : decorKind);
 
   const pegs: LevelPeg[] = [];
   const far = (p: Pt): boolean =>
