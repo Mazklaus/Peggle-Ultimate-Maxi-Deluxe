@@ -150,6 +150,8 @@ export interface CompanionDef {
   colorDark: number;
   /** Ce que l'Astre tend vers une orbe coincée (DA specs-astres.md §6). */
   reach?: ReachKind;
+  /** Astre dessiné et animé par le rig de la DA (clé dans ASTRES), voir companions/da. */
+  da?: { key: string };
   reactions: Partial<Record<ReactionTrigger, ReactionDef[]>>;
   idleShort: ReactionDef[];
   idleLong: ReactionDef[];

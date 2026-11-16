@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { DaRenderer } from './DaRenderer';
 import { CompanionBrain, type BrainInput, type CompanionPhase } from '../core/companion/brain';
 import type {
   Arms,
@@ -94,6 +95,8 @@ export class CompanionView {
   private travel?: Phaser.Tweens.Tween;
   /** Affichage libre et mis à l'échelle (carte) : dessin local autour de (0, 0). */
   private display: { x: number; y: number; scale: number } | null = null;
+  /** Astres du jalon 2 : dessinés par le rig de la DA. */
+  private da: DaRenderer | null = null;
 
   /** anchor = position des « pieds » de l'Astre dans sa loge (UI/UX : 100, 270). */
   constructor(
@@ -110,6 +113,8 @@ export class CompanionView {
     this.fx = scene.add.graphics().setDepth(20);
     this.gfx = scene.add.graphics().setDepth(21);
     this.symbolText = CompanionView.makeSymbolText(scene, anchor).setDepth(22);
+    if (def.da) this.da = new DaRenderer(scene, def.da.key);
+    this.da?.setDepth(21);
   }
 
   private static makeSymbolText(
@@ -144,6 +149,7 @@ export class CompanionView {
     this.fx = scene.add.graphics();
     this.gfx = scene.add.graphics();
     this.symbolText = CompanionView.makeSymbolText(scene, this.anchor);
+    this.da?.reparent(scene);
     this.setDepth(depth);
     this.setVisible(visible);
     if (this.display) this.setDisplay(this.display.x, this.display.y, this.display.scale);
@@ -214,6 +220,7 @@ export class CompanionView {
     this.fx.setDepth(depth);
     this.gfx.setDepth(depth + 1);
     this.symbolText.setDepth(depth + 2);
+    this.da?.setDepth(depth + 1);
   }
 
   /** Pause : l'Astre s'endort ; il se réveille (sursaut) à la reprise. */
@@ -225,6 +232,7 @@ export class CompanionView {
     this.fx.setVisible(on);
     this.gfx.setVisible(on);
     this.symbolText.setVisible(on);
+    this.da?.setVisible(on);
   }
 
   /** Déplacement en bonds (le corps garde ses réactions pendant le trajet). */
@@ -281,13 +289,33 @@ export class CompanionView {
         variant: pose.cry.variant,
       });
     }
+    if (this.da) {
+      this.renderDa(dtSeconds, center, brainInput);
+      return;
+    }
     this.draw(pose);
     for (const b of pose.bursts) this.spawn(b.kind, b.count, pose);
     this.updateParticles(dtSeconds);
   }
 
+  /** Rig de la DA : notre cerveau choisit, l'acteur de la DA joue et dessine. */
+  private renderDa(dt: number, center: { x: number; y: number }, input: BrainInput): void {
+    const da = this.da;
+    if (!da) return;
+    const s = this.brain.state;
+    da.sync(this.brain.current, s.phase, s.sleeping);
+    const v = input.orb ?? input.aim;
+    const look = v
+      ? { x: Phaser.Math.Clamp(v.dx / 300, -1, 1), y: Phaser.Math.Clamp(v.dy / 300, -1, 1) }
+      : null;
+    const scale = this.display?.scale ?? 1;
+    const x = this.display ? center.x : this.clampX(center.x, 1);
+    da.render(dt, x, center.y, scale, look, s.excitement);
+  }
+
   destroy(): void {
     this.detach();
+    this.da?.destroy();
     this.gfx.destroy();
     this.fx.destroy();
     this.symbolText.destroy();

@@ -143,6 +143,12 @@ export class CompanionBrain {
     this.nextLongIdle = this.between(BRAIN_TUNING.idleLongEvery);
   }
 
+  /** Réaction en cours (pour un rendu externe, ex. le rig de la DA). */
+  get current(): { def: ReactionDef; trigger: string; elapsed: number } | null {
+    const p = this.playing;
+    return p ? { def: p.def, trigger: p.trigger, elapsed: p.elapsed } : null;
+  }
+
   // ---------- Entrées ----------
 
   setPhase(phase: CompanionPhase): void {
