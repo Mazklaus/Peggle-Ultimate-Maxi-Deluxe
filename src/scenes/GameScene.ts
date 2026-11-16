@@ -293,6 +293,8 @@ export class GameScene extends Phaser.Scene {
   /** Fin (horloge réelle) du gel d'image du final ; 0 = pas de gel. */
   private hitStopUntil = 0;
   private gameScale = 1;
+  /** Vitesse des Options (0,8 / 1 / 1,2) : multiplie toute l'échelle de temps du jeu. */
+  private speed = 1;
   /** Charges du pouvoir « tir suivant » de l'Astre (Pip, Mousse...). */
   private reveal: ShotCharges = new RevealCharges();
   /** Tirs restants avec le guide allongé de la lanterne (aide sans Astre). */
@@ -346,7 +348,11 @@ export class GameScene extends Phaser.Scene {
     this.hitStopUntil = 0;
     this.finalShot = false;
     this.finalZonesGfx = undefined;
-    this.setTimeScale(1);
+    const opts = (this.registry.get(REGISTRY.save) as SaveData | undefined)?.options;
+    this.speed = opts?.speed ?? 1;
+    this.gameScale = 1;
+    this.setTimeScale(this.speed);
+    this.tweens.timeScale = this.speed;
     this.setupPhysics();
     this.lastPhys = this.physClock();
     this.tracker = new ShotTracker();
@@ -451,6 +457,11 @@ export class GameScene extends Phaser.Scene {
         if (!c.lit) this.views.get(c.id)?.setFillStyle(this.colors[c.kind]);
       }
       this.hud.recolorPower();
+      // Vitesse changée depuis la pause : appliquée à l'échelle en cours (ralenti compris).
+      if (o.speed !== this.speed) {
+        this.speed = o.speed;
+        this.applyGameScale(this.gameScale);
+      }
     };
     this.game.events.on(OPTIONS_CHANGED, onOptions);
     // Perte de focus de la fenêtre : pause automatique (specs UI/UX 4).
@@ -496,7 +507,7 @@ export class GameScene extends Phaser.Scene {
     if (this.warpUntil > 0 && time >= this.warpUntil) this.endTimeWarp();
     this.decor.draw();
     this.updateChallenge(realDelta / 1000);
-    const delta = realDelta * this.gameScale;
+    const delta = realDelta * this.gameScale * this.speed;
     // Horloge physique : temps réellement simulé par Matter (ralentis compris, pause et gel
     // exclus). Sous ~30 i/s, Matter plafonne ses pas et l'orbe avance moins vite que l'horloge
     // de la scène (QA ch.2) : blocage, portails et durées des pouvoirs comptent sur celle-ci.
@@ -1357,8 +1368,8 @@ export class GameScene extends Phaser.Scene {
       this.hudDimmed = scale <= SLOWMO.scale;
       this.hud?.setDimmed(this.hudDimmed);
     }
-    this.setTimeScale(scale);
-    this.tweens.timeScale = scale;
+    this.setTimeScale(scale * this.speed);
+    this.tweens.timeScale = scale * this.speed;
   }
 
   // --- Tir ------------------------------------------------------------------
