@@ -3,8 +3,10 @@ import { PLAYFIELD } from '../config';
 import { levelLabel, type LevelCatalog } from '../core/levelCatalog';
 import type { LevelData } from '../core/levelFormat';
 import { isUnlocked, type SaveData } from '../core/save';
+import { PIP } from '../companions/pip';
 import NODES from './carte-noeuds.json';
 import { OPTIONS_CHANGED, REGISTRY, SCENES } from './keys';
+import { MapCompanion } from './MapCompanion';
 import { currentOptions, updateOptions } from './OptionsScene';
 import { CRYSTAL_COLORS, CRYSTAL_COLORS_CB, PALETTE, textStyle, TEXT } from './theme';
 import { fadeIn, fadeTo, panel, setEditorLinkVisible } from './ui';
@@ -41,6 +43,7 @@ function nodePosition(level: LevelData): { x: number; y: number } | undefined {
 export class MapScene extends Phaser.Scene {
   private card?: Phaser.GameObjects.Container;
   private nodes: MapNode[] = [];
+  private companion?: MapCompanion;
 
   constructor() {
     super(SCENES.map);
@@ -128,7 +131,13 @@ export class MapScene extends Phaser.Scene {
     const current =
       this.nodes.find((n) => n.state === 'open') ??
       [...this.nodes].reverse().find((n) => n.state === 'done');
-    if (current) this.openCard(current.level);
+    // La Gardienne sur l'étoile courante, Pip avec elle dès qu'il est réveillé (chapitre 1).
+    this.companion = undefined;
+    if (current) {
+      const pipAwake = this.nodes.some((n) => n.level.chapter >= 1 && n.state !== 'locked');
+      this.companion = new MapCompanion(this, pipAwake ? PIP : null, current);
+      this.openCard(current.level);
+    }
   }
 
   // --- Étoiles et traits ------------------------------------------------------
@@ -183,7 +192,10 @@ export class MapScene extends Phaser.Scene {
     }
     // Cible tactile de 48 px.
     const hit = this.add.zone(x, y, 48, 48).setInteractive({ useHandCursor: true });
-    hit.on('pointerover', () => g.setAlpha(0.8));
+    hit.on('pointerover', () => {
+      g.setAlpha(0.8);
+      this.companion?.onHover(state);
+    });
     hit.on('pointerout', () => g.setAlpha(1));
     hit.on('pointerup', () => this.openCard(node.level));
   }
@@ -192,6 +204,8 @@ export class MapScene extends Phaser.Scene {
 
   private openCard(level: LevelData): void {
     this.card?.destroy();
+    const node = this.nodes.find((n) => n.level.id === level.id);
+    if (node) this.companion?.followTo(node.x, node.y);
     const save = this.registry.get(REGISTRY.save) as SaveData;
     const rec = save.levels[level.id];
     const c = this.add.container(CARD.x, CARD.y).setData('level', level);

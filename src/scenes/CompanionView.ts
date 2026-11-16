@@ -90,6 +90,8 @@ export class CompanionView {
   /** Hors de la loge (overlays de fin) : plus bridé à la marge. */
   private outside = false;
   private travel?: Phaser.Tweens.Tween;
+  /** Affichage libre et mis à l'échelle (carte) : dessin local autour de (0, 0). */
+  private display: { x: number; y: number; scale: number } | null = null;
 
   /** anchor = position des « pieds » de l'Astre dans sa loge (UI/UX : 100, 270). */
   constructor(
@@ -142,6 +144,7 @@ export class CompanionView {
     this.symbolText = CompanionView.makeSymbolText(scene, this.anchor);
     this.setDepth(depth);
     this.setVisible(visible);
+    if (this.display) this.setDisplay(this.display.x, this.display.y, this.display.scale);
   }
 
   /** Écoute le bus de jeu (à appeler une fois ; detach() au shutdown de la scène). */
@@ -193,6 +196,17 @@ export class CompanionView {
     });
   }
 
+  /**
+   * Mode libre hors du jeu (carte) : l'Astre est dessiné à (x, y) = pieds, à l'échelle
+   * donnée, sans loge ni marge. Rappeler à chaque déplacement.
+   */
+  setDisplay(x: number, y: number, scale: number): void {
+    this.outside = true;
+    this.anchor = { x: 0, y: 0 };
+    this.display = { x, y, scale };
+    for (const g of [this.fx, this.gfx]) g.setPosition(x, y).setScale(scale);
+  }
+
   /** Profondeur d'affichage (au-dessus d'un panneau d'overlay dessiné dans la même scène). */
   setDepth(depth: number): void {
     this.fx.setDepth(depth);
@@ -240,7 +254,10 @@ export class CompanionView {
 
   update(dtSeconds: number, input: CompanionWorldInput = {}): void {
     this.time += dtSeconds;
-    const center = { x: this.anchor.x, y: this.anchor.y - BODY_R };
+    const d = this.display;
+    const center = d
+      ? { x: d.x, y: d.y - BODY_R * d.scale }
+      : { x: this.anchor.x, y: this.anchor.y - BODY_R };
     const brainInput: BrainInput = {};
     if (input.aim) brainInput.aim = { dx: input.aim.x - center.x, dy: input.aim.y - center.y };
     if (input.orb) {
@@ -599,12 +616,16 @@ export class CompanionView {
     this.symbolPop = Math.min(1, this.symbolPop + 0.12);
     const s = pose.symbol ? 0.4 + 0.6 * easeOutBack(this.symbolPop) : 0;
     const bob = pose.symbol === 'zzz' ? Math.sin(this.time * 2) * 4 : 0;
+    let sx = this.outside ? c.x + 26 : Phaser.Math.Clamp(c.x + 26, 20, MARGIN.maxX - 14);
+    let sy = c.y - BODY_R - 34 + bob;
+    const d = this.display;
+    if (d) {
+      sx = d.x + sx * d.scale;
+      sy = d.y + sy * d.scale;
+    }
     this.symbolText
-      .setPosition(
-        this.outside ? c.x + 26 : Phaser.Math.Clamp(c.x + 26, 20, MARGIN.maxX - 14),
-        c.y - BODY_R - 34 + bob,
-      )
-      .setScale(s)
+      .setPosition(sx, sy)
+      .setScale(s * (d ? Math.max(0.7, d.scale) : 1))
       .setVisible(Boolean(pose.symbol));
   }
 
