@@ -29,6 +29,13 @@ export interface ResultsData {
   mode?: GameMode;
   /** Défi : objectif et médaille (succès = objectif atteint et niveau gagné). */
   challenge?: { goal: string; success: boolean };
+  /** Duel : scores J1/J2, gagnant (0 = J1, 1 = J2, null = égalité -> manche décisive). */
+  duel?: {
+    scores: [number, number];
+    winner: 0 | 1 | null;
+    astres: [string, string];
+    tiebreak: boolean;
+  };
 }
 
 /** Où l'Astre vient se poser hors de sa loge (pieds, coordonnées écran). */
@@ -82,7 +89,8 @@ export class ResultsScene extends Phaser.Scene {
     const save = this.registry.get(REGISTRY.save) as SaveData;
     const stars = starsFor(data.score, data.level.stars, data.won);
     let newRecord = false;
-    if (!data.test) {
+    // Un duel ne touche pas à la progression de l'aventure.
+    if (!data.test && data.mode?.kind !== 'duel') {
       const before = save.levels[data.level.id];
       recordResult(save, {
         id: data.level.id,

@@ -57,6 +57,8 @@ export interface HudOptions {
   cannon?: { x: number; y: number };
   /** Défi : la ligne d'objectif remplace les étoiles du bandeau (specs UI/UX jalon 3, 2.4). */
   hideStars?: boolean;
+  /** Duel : score, étoiles et niveau du bandeau cèdent la place aux cartouches des joueurs. */
+  duel?: boolean;
 }
 
 /** Loge : hexagone du pouvoir Ø 26 et indicateurs (specs UI/UX jalon 2, section 3). */
@@ -93,6 +95,7 @@ export class GameHud {
   private pulse: { hearts: boolean; orbs: boolean } = { hearts: false, orbs: false };
   private unsubscribe: () => void;
   private shotHits = 0;
+  private logeGfx!: Phaser.GameObjects.Graphics;
 
   constructor(scene: Phaser.Scene, opts: HudOptions) {
     this.scene = scene;
@@ -114,10 +117,16 @@ export class GameHud {
       return o;
     };
     // Bandeau haut
-    add(scene.add.text(24, 14, 'SCORE', LABEL(13)));
-    this.scoreText = add(scene.add.text(24, 28, '0', textStyle(30)));
-    this.starsGfx = add(scene.add.graphics());
-    add(scene.add.text(640, 32, opts.levelLabel, textStyle(16, TEXT.dim)).setOrigin(0.5));
+    const top = !opts.duel;
+    add(scene.add.text(24, 14, 'SCORE', LABEL(13)).setVisible(top));
+    this.scoreText = add(scene.add.text(24, 28, '0', textStyle(30)).setVisible(top));
+    this.starsGfx = add(scene.add.graphics().setVisible(top));
+    add(
+      scene.add
+        .text(640, 32, opts.levelLabel, textStyle(16, TEXT.dim))
+        .setOrigin(0.5)
+        .setVisible(top),
+    );
     // Colonne gauche : tube d'orbes
     this.tubeGfx = add(scene.add.graphics());
     this.orbsText = add(scene.add.text(100, L.orbsNumberY, '', textStyle(44)).setOrigin(0.5));
@@ -144,6 +153,14 @@ export class GameHud {
 
     this.unsubscribe = gameEvents.onAny((name) => this.onEvent(name));
     scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.unsubscribe());
+  }
+
+  /** Duel : le HUD est reconstruit à chaque changement d'Astre dans la loge. */
+  destroy(): void {
+    this.unsubscribe();
+    this.scoreTween?.stop();
+    for (const o of [this.main, this.powerGfx, this.powerIcon, this.shotBadge, this.logeGfx])
+      o?.destroy();
   }
 
   /** Mode daltonien changé en cours de niveau : hexagone et pastilles à la nouvelle couleur. */
@@ -379,6 +396,7 @@ export class GameHud {
   private drawLoge(): void {
     const { loge, anchor } = HUD_LAYOUT;
     const g = this.scene.add.graphics();
+    this.logeGfx = g;
     g.fillStyle(LOGE_BG, 0.9).fillRoundedRect(loge.x, loge.y, loge.w, loge.h, 16);
     const glow = this.opts.astreColor ?? LANTERN.glow;
     // Sol en arc lumineux à la couleur signature (15 %).
