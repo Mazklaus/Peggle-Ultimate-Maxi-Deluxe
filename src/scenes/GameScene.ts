@@ -39,7 +39,8 @@ import { TUNING } from '../core/tuning';
 import { OPTIONS_CHANGED, REGISTRY, SCENES, STORY_LEVELS } from './keys';
 import { CompanionView } from './CompanionView';
 import type { ResultsData } from './ResultsScene';
-import { CRYSTAL_COLORS, CRYSTAL_COLORS_CB, PALETTE, textStyle, TEXT } from './theme';
+import { CRYSTAL_COLORS, CRYSTAL_COLORS_CB, PALETTE, textStyle } from './theme';
+import { GameHud, HUD_LAYOUT } from './Hud';
 import { button } from './widgets';
 
 export interface GameSceneData {
@@ -63,7 +64,8 @@ const SLOWMO = { scale: 0.25, maxRealMs: 1500 };
 /** Marge de prudence de la prédiction du final (px retirés au rayon du dernier cœur). */
 const FINAL_PREDICT_MARGIN_PX = 3;
 /** Loge de l'Astre : colonne gauche sous le compteur d'orbes (pieds de l'Astre). */
-const COMPANION_ANCHOR = { x: 100, y: 400 };
+/** Loge de l'Astre (specs UI/UX) : pieds de l'Astre en haut de la colonne gauche. */
+const COMPANION_ANCHOR = HUD_LAYOUT.anchor;
 /** L'orbe « frôle » un cœur (réaction « oh ! » de l'Astre). */
 const NEAR_HEART_PX = 20;
 const HEART_RADIUS = 10;
@@ -102,18 +104,16 @@ export class GameScene extends Phaser.Scene {
   private level!: LevelState;
   private colors = CRYSTAL_COLORS;
   private views = new Map<number, CrystalView>();
+  /** Type de cristal dessiné par chaque vue (la forme dépend du type). */
+  private viewKinds = new Map<number, Crystal['kind']>();
   private orb?: Phaser.GameObjects.Arc;
   private aimAngle = Math.PI / 2;
   private guide!: Phaser.GameObjects.Graphics;
   private cannon!: Phaser.GameObjects.Rectangle;
   private bucket!: Phaser.GameObjects.Rectangle;
   private bucketDir = 1;
-  private hud!: {
-    orbs: Phaser.GameObjects.Text;
-    hearts: Phaser.GameObjects.Text;
-    mult: Phaser.GameObjects.Text;
-    score: Phaser.GameObjects.Text;
-  };
+  private hud!: GameHud;
+  private hudDimmed = false;
   private stuckRef = { x: 0, y: 0, t: 0 };
   private chain = 0;
   private ending = false;
@@ -130,7 +130,6 @@ export class GameScene extends Phaser.Scene {
   private debugForceFinal = false;
   /** create() a lancé une cinématique à la place du niveau. */
   private redirecting = false;
-  private chargeDots?: Phaser.GameObjects.Graphics;
 
   constructor() {
     super(SCENES.game);
@@ -263,6 +262,7 @@ export class GameScene extends Phaser.Scene {
 
     const orb = this.orb;
     this.updateCompanion(delta / 1000, orb);
+    this.hud.tick(time, orb);
     if (!orb) {
       if (!this.ending && canShoot(this.level))
         this.emitAll(this.tracker.updateAiming(realDelta / 1000));
@@ -322,6 +322,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private makeCrystal(c: Crystal): CrystalView {
+    this.viewKinds.set(c.id, c.kind);
     const { x, y } = toWorld(c);
     const color = this.colors[c.kind];
     const shape = c.shape ?? { type: 'circle', r: 10 };
@@ -348,18 +349,16 @@ export class GameScene extends Phaser.Scene {
   }
 
   private makeHud(): void {
-    const s = textStyle(26);
-    const small = textStyle(16, TEXT.dim);
-    this.add.text(100, 120, 'Orbes', small).setOrigin(0.5);
-    this.add.text(GAME_WIDTH - 100, 120, 'Cœurs', small).setOrigin(0.5);
-    this.add.text(GAME_WIDTH - 100, 260, 'Multiplicateur', small).setOrigin(0.5);
-    this.hud = {
-      orbs: this.add.text(100, 160, '', s).setOrigin(0.5),
-      hearts: this.add.text(GAME_WIDTH - 100, 160, '', textStyle(26, '#FFB23F')).setOrigin(0.5),
-      mult: this.add.text(GAME_WIDTH - 100, 300, '', s).setOrigin(0.5),
-      score: this.add.text(PLAYFIELD.x, 32, '', s).setOrigin(0, 0.5),
-    };
-    button(this, GAME_WIDTH - 60, 32, 'II', () => this.openPause(), { width: 64, size: 20 });
+    const level = this.sceneData.level;
+    const forced = new URLSearchParams(window.location.search).get('astre');
+    const hasAstre = (forced ?? level.companion) === 'pip';
+    this.hud = new GameHud(this, {
+      levelLabel: levelLabel(level.id),
+      stars: level.stars,
+      astreColor: hasAstre ? PIP.color : null,
+      heartColor: this.colors.heart,
+    });
+    button(this, 1236, 32, 'II', () => this.openPause(), { width: 48, size: 18 });
   }
 
   private makeCompanion(): void {
@@ -381,7 +380,6 @@ export class GameScene extends Phaser.Scene {
     this.companion.attach();
     // Avec Pip : le 1er tir montre sa trajectoire révélée.
     if (needsHelp) this.reveal.grant(1);
-    this.chargeDots = this.add.graphics();
   }
 
   /**
@@ -618,6 +616,11 @@ export class GameScene extends Phaser.Scene {
   /** Échelle de temps de tout le jeu : physique, réceptacle, tweens, Astre. */
   private applyGameScale(scale: number): void {
     this.gameScale = scale;
+    // Ralenti final : le HUD s'estompe (le spectacle prime), la loge reste visible.
+    if (scale < 1 !== this.hudDimmed) {
+      this.hudDimmed = scale < 1;
+      this.hud?.setDimmed(this.hudDimmed);
+    }
     this.setTimeScale(scale);
     this.tweens.timeScale = scale;
   }
@@ -704,6 +707,7 @@ export class GameScene extends Phaser.Scene {
     if (this.finalShot && this.orb) this.scoreFinalZone(this.orb.x);
     this.orb?.destroy();
     this.orb = undefined;
+    this.hud.endShot();
     this.applyGameScale(1);
     const result = endShot(this.level, caught);
     this.removeViews(result.removedIds);
@@ -711,9 +715,13 @@ export class GameScene extends Phaser.Scene {
       gameEvents.emit('cristaux_brises', { count: result.removedIds.length });
     }
     if (caught) this.cameras.main.flash(120, 185, 166, 255);
-    // Le cristal bonus a pu changer de place.
+    // Le cristal bonus a pu changer de place : la forme suit le type (un bonus rond est un bug).
     for (const c of this.level.crystals) {
-      if (!c.lit) this.views.get(c.id)?.setFillStyle(this.colors[c.kind]);
+      if (c.lit) continue;
+      if (this.viewKinds.get(c.id) !== c.kind) {
+        this.views.get(c.id)?.destroy();
+        this.views.set(c.id, this.makeCrystal(c));
+      } else this.views.get(c.id)?.setFillStyle(this.colors[c.kind]);
     }
     this.refreshHud();
     this.reveal.endShot();
@@ -851,16 +859,8 @@ export class GameScene extends Phaser.Scene {
   /** Charges du pouvoir sous l'Astre (pastilles) et mèche en antenne. */
   private refreshPower(): void {
     this.companion?.brain.setPowered(this.reveal.previewing || this.reveal.shotIsPowered);
-    const g = this.chargeDots;
-    if (!g) return;
-    g.clear();
-    const n = PIP_POWER.maxCharges;
-    for (let i = 0; i < n; i++) {
-      const x = COMPANION_ANCHOR.x - ((n - 1) * 18) / 2 + i * 18;
-      const y = COMPANION_ANCHOR.y + 34;
-      if (i < this.reveal.charges) g.fillStyle(PIP_COLOR, 1).fillCircle(x, y, 6);
-      else g.lineStyle(2, PIP_COLOR, 0.35).strokeCircle(x, y, 6);
-    }
+    if (!this.companion) return;
+    this.hud.setPower(this.reveal.charges, PIP_POWER.maxCharges, this.reveal.shotIsPowered);
   }
 
   private muzzle(): { x: number; y: number } {
@@ -876,9 +876,24 @@ export class GameScene extends Phaser.Scene {
 
   private refreshHud(): void {
     const s = this.level;
-    this.hud.orbs.setText(String(s.orbs)).setColor(s.orbs <= 1 ? '#FF7A6B' : TEXT.main);
-    this.hud.hearts.setText(`${heartsRemaining(s)}/${s.heartsTotal}`);
-    this.hud.mult.setText(`×${multiplier(s)}`);
-    this.hud.score.setText(`Score  ${s.score}`);
+    const hearts = heartsRemaining(s);
+    this.hud.update({
+      score: s.score,
+      shotScore: s.shotScore,
+      orbs: s.orbs,
+      heartsLeft: hearts,
+      heartsTotal: s.heartsTotal,
+      mult: multiplier(s),
+      broken: s.heartsTotal === 0 ? 1 : 1 - hearts / s.heartsTotal,
+      thresholds: s.tuning.multiplierThresholds,
+      steps: s.tuning.multiplierSteps,
+    });
   }
+}
+
+/** « ch1-04 » -> « 1-4 », « pro-02 » -> « P-2 » (numéro de niveau du bandeau). */
+function levelLabel(id: string): string {
+  const m = /^(ch(\d+)|pro)-0*(\d+)$/.exec(id);
+  if (!m) return '';
+  return `${m[2] ?? 'P'}-${m[3]}`;
 }
