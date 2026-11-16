@@ -51,6 +51,9 @@ export interface DaActor {
   rEv?: string;
   firedFx: Set<string>;
   target: { x: number; y: number } | null;
+  /** Duel : anneau au sol et nœud d'écharpe aux couleurs du joueur. */
+  player?: 'J1' | 'J2' | null;
+  flip?: boolean;
   awake?: number;
   exc?: number;
   update(now: number, dt: number): unknown;
@@ -85,6 +88,7 @@ const DA_TO_TRIGGER: Partial<Record<string, ReactionTrigger>> = {
   orbe_proche_coeur: 'proche_coeur',
   orbe_coincee: 'orbe_coincee',
   orbe_debloquee: 'orbe_debloquee',
+  duel_avantage: 'duel_avantage',
 };
 
 /** Réaction de notre format qui porte une variante de la DA (le cerveau n'en lit que la durée). */

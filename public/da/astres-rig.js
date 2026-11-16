@@ -220,6 +220,20 @@
     }
     ctx.restore();
   }
+  // petits accessoires tenus (gags) : dessinés au bout du bras droit, unités du rig
+  function drawProp(ctx, kind, st) {
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.scale(1.4, 1.4); // lisible dans la loge (~120 px)
+    switch (kind) {
+      case 'hammer': ctx.fillStyle = '#B9A574'; ctx.fillRect(-1.5, -2, 3, 16); ctx.fillStyle = '#8C93C9'; ctx.fillRect(-7, 12, 14, 7); break;
+      case 'pompom': ['#FFE45C', '#FFF6B8'].forEach((c, i) => { ctx.fillStyle = c; for (let j = 0; j < 6; j++) { const a = j / 6 * Math.PI * 2 + (st.t || 0) / 90; ctx.beginPath(); ctx.arc(Math.cos(a) * (7 - i * 3), 8 + Math.sin(a) * (7 - i * 3), 3.4, 0, Math.PI * 2); ctx.fill(); } }); break;
+      case 'pillow': ctx.fillStyle = '#D6DCFF'; ctx.beginPath(); ctx.roundRect(-11, 2, 22, 14, 6); ctx.fill(); ctx.strokeStyle = '#9EA8E0'; ctx.lineWidth = 1.2; ctx.stroke(); break;
+      case 'pen': ctx.strokeStyle = '#F4F1FF'; ctx.lineWidth = 2.4; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, 14); ctx.stroke(); ctx.fillStyle = '#B9A6FF'; ctx.beginPath(); ctx.moveTo(-1.5, 14); ctx.lineTo(1.5, 14); ctx.lineTo(0, 18); ctx.fill(); break;
+      case 'stamp': ctx.fillStyle = '#B9A574'; ctx.beginPath(); ctx.arc(0, 4, 3.5, 0, Math.PI * 2); ctx.fill(); ctx.fillRect(-1.5, 4, 3, 7); ctx.fillStyle = '#FF5FA2'; ctx.fillRect(-6, 11, 12, 4); break;
+      case 'umbrella': ctx.strokeStyle = '#1B2350'; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, -22); ctx.stroke(); { const o = st.propOpen ?? 1; ctx.fillStyle = '#B9A6FF'; ctx.beginPath(); ctx.moveTo(-14 * o - 1, -20 + 6 * (1 - o)); ctx.quadraticCurveTo(0, -36, 14 * o + 1, -20 + 6 * (1 - o)); ctx.closePath(); ctx.fill(); } break;
+      case 'notebook': ctx.fillStyle = '#F4F1FF'; ctx.fillRect(-8, 2, 16, 18); ctx.strokeStyle = '#A9B0D6'; ctx.lineWidth = 1; for (let i = 0; i < 4; i++) { ctx.beginPath(); ctx.moveTo(-5, 7 + i * 3.5); ctx.lineTo(5, 7 + i * 3.5); ctx.stroke(); } break;
+      case 'parcel': ctx.fillStyle = '#E8D9B0'; ctx.fillRect(-8, 2, 16, 13); ctx.strokeStyle = '#FF5FA2'; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(0, 2); ctx.lineTo(0, 15); ctx.moveTo(-8, 8); ctx.lineTo(8, 8); ctx.stroke(); break;
+    }
+  }
   function drawMouth(ctx, x, y, m, scale) {
     ctx.save(); ctx.translate(x, y); ctx.scale(scale, scale);
     ctx.strokeStyle = INK; ctx.fillStyle = INK; ctx.lineWidth = 2.4; ctx.lineCap = 'round';
@@ -352,6 +366,10 @@
       ctx.fillStyle = '#FFB23F'; ctx.beginPath(); ctx.moveTo(7, -1); ctx.lineTo(13, 1); ctx.lineTo(7, 3); ctx.fill();
       ctx.fillStyle = INK; ctx.beginPath(); ctx.arc(3, -2, 1.3, 0, Math.PI * 2); ctx.fill(); ctx.restore();
     }
+    if (d.arms && st._prop && (st.propA ?? 1) > 0) { // accessoire de gag, au bout du bras droit, DEVANT le corps
+      const a = d.arms, th = st.armR * Math.PI / 180, L = a.len * 1.25;
+      ctx.save(); ctx.translate(a.x + 8 + Math.sin(th) * L, a.y + Math.cos(th) * L); ctx.rotate(-th * .5 + (st.propRot || 0) * Math.PI / 180); ctx.globalAlpha *= (st.propA ?? 1); drawProp(ctx, st._prop, st); ctx.restore();
+    }
     if (d.reach && st.reach > 0) { // orbe_coincee : ce que l'Astre tend vers l'orbe (direction = regard)
       const r = st.reach, ax = Math.abs(st.lookX) + Math.abs(st.lookY) > .1 ? Math.atan2(st.lookY, st.lookX) : 0, tt = (st.t || 0);
       ctx.save(); ctx.rotate(ax); ctx.lineCap = 'round';
@@ -377,6 +395,8 @@
     ctx.fillStyle = 'rgba(11,16,38,.45)';
     const lift = Math.max(0, -st.dy) / 40;
     ctx.beginPath(); ctx.ellipse(0, 52, 26 * (1 - lift * .4), 5 * (1 - lift * .4), 0, 0, Math.PI * 2); ctx.fill();
+    const PC = st.player ? PLAYER[st.player] : null; // duel : anneau au sol aux couleurs du joueur
+    if (PC) { ctx.strokeStyle = PC.c; ctx.globalAlpha = .9; ctx.lineWidth = 3.2; ctx.beginPath(); if (PC.shape === 'carre') ctx.roundRect(-34, 45, 68, 14, 6); else ctx.ellipse(0, 52, 34, 8, 0, 0, Math.PI * 2); ctx.stroke(); ctx.globalAlpha = 1; }
     ctx.translate(st.dx + st.shakeX, st.dy);
     // squash & stretch depuis la base (pivot en bas du corps)
     ctx.translate(0, 40); ctx.rotate(st.rot * Math.PI / 180); ctx.scale(st.sx, st.sy); ctx.translate(0, -40);
@@ -399,6 +419,12 @@
     if (d.nightcap && st._zzz) { // bulle de nez
       const b = (Math.sin((st.t || 0) / d.idle.bobMs * Math.PI * 2) + 1) / 2; ctx.strokeStyle = 'rgba(214,220,255,.8)'; ctx.fillStyle = 'rgba(214,220,255,.25)'; ctx.lineWidth = 1.2;
       ctx.beginPath(); ctx.arc(10 + b * 6, 8, 3 + b * 9, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    }
+    if (PC) { // duel : nœud d'écharpe aux couleurs du joueur, au bas du corps (même Astre des deux côtés)
+      ctx.save(); ctx.translate(PC.knot ? 0 : 0, 34); ctx.fillStyle = PC.c; ctx.strokeStyle = PC.dark; ctx.lineWidth = 1.4;
+      [-1, 1].forEach(sd => { ctx.beginPath(); ctx.moveTo(0, 0); ctx.quadraticCurveTo(sd * 10, -9, sd * 14, -2); ctx.quadraticCurveTo(sd * 10, 7, 0, 0); ctx.fill(); ctx.stroke(); });
+      ctx.beginPath(); ctx.moveTo(-2, 1); ctx.lineTo(-6 + Math.sin((st.t || 0) / 300) * 2, 14); ctx.lineTo(-1, 13); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.arc(0, 0, 3, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); ctx.restore();
     }
     if (st.orbY !== undefined && st.orbY > -900) { // mini-orbe des idles (jongleur)
       ctx.fillStyle = WHITE; ctx.beginPath(); ctx.arc(st.orbX || 0, st.orbY, 5, 0, Math.PI * 2); ctx.fill();
@@ -545,7 +571,9 @@
   ];
 
   /* ---- Priorités (00-regles-communes.md) : une réaction plus basse n'interrompt pas une plus haute ---- */
-  const PRIO = { victoire: 13, echec: 13, final_ralenti: 12, presque: 11, gros_coup: 10, chaine_longue: 10, pouvoir_active: 9, orbe_coincee: 8.5, orbe_debloquee: 8.5, dernier_coeur: 8, dernier_orbe: 7, orbe_recupere: 6, rate: 5, orbe_proche_coeur: 4, orbe_descend: 4, tir_lance: 3, suivi: 2, inactivite: 1, idle_long: 0, sommeil: 0 };
+  const PLAYER = { J1: { c: '#B9A6FF', dark: '#6F5FC2', shape: 'rond' }, J2: { c: '#FF9E8F', dark: '#C4574A', shape: 'carre' } }; // duel : J1 lavande + rond, J2 corail clair + carré arrondi (UI/UX 4.1, validé GD)
+  const PAIR = { orbe_debloquee: 'orbe_coincee' }; // ev -> ev dont il reprend la variante
+  const PRIO = { duel_avantage: 6.5, duel_taquine: 6.4, victoire: 13, echec: 13, final_ralenti: 12, presque: 11, gros_coup: 10, chaine_longue: 10, pouvoir_active: 9, orbe_coincee: 8.5, orbe_debloquee: 8.5, dernier_coeur: 8, dernier_orbe: 7, orbe_recupere: 6, rate: 5, orbe_proche_coeur: 4, orbe_descend: 4, tir_lance: 3, suivi: 2, inactivite: 1, idle_long: 0, sommeil: 0 };
 
   /* ---- Surcharges de personnalité (gags propres à chaque Astre) ---- */
   const OVERRIDES = {
@@ -605,6 +633,7 @@
       if (!list) return null;
       let i = Math.floor(Math.random() * list.length);
       if (list.length > 1 && i === this.last[ev]) i = (i + 1) % list.length; // jamais deux fois la même variante
+      const pair = PAIR[ev]; if (pair && this.last[pair] != null && this.last[pair] < list.length) i = this.last[pair]; // le geste répond à sa pose
       this.last[ev] = i; return list[i];
     }
     trigger(ev, now) {
@@ -657,9 +686,10 @@
             if (el >= t && !this.firedFx.has(key)) { this.firedFx.add(key); this.emit(type, n || 1); }
           });
           inReaction = true;
+          if (r.prop) st._prop = r.prop;
           const joy = ['gros_coup', 'chaine_longue', 'victoire', 'coeur_touche'].includes(this.rEv), sad = ['rate', 'echec'].includes(this.rEv);
           if (d.shades && joy) st.shades = true;                  // Volte sort ses lunettes
-          if (d.seatCloud) st.mood = joy ? 'joy' : sad ? 'rain' : null; // nuage-humeur de Nuage-Lune
+          if (d.seatCloud && !(f && 'mood' in f)) st.mood = joy ? 'joy' : sad ? 'rain' : null; // nuage-humeur de Nuage-Lune
           if (r.track && this.target) {
             st.lookX = this.target.x; st.lookY = this.target.y;
             st.rot += this.target.x * 12;                 // se penche vers l'orbe (corps entier)
@@ -716,8 +746,10 @@
     }
     draw(ctx, x, y, px) {
       const st = this.st; if (!st) return;
-      st.x = x; st.y = y;
+      st.x = x; st.y = y; st.player = this.player || null;
+      if (this.flip) { ctx.save(); ctx.translate(x, 0); ctx.scale(-1, 1); ctx.translate(-x, 0); }
       drawAstre(ctx, this.d, st, px);
+      if (this.flip) ctx.restore();
       const sc = px * this.d.size;
       ctx.save(); ctx.translate(x, y); ctx.scale(sc, sc);
       this.fx.forEach(p => drawFx(ctx, p));
@@ -732,6 +764,7 @@
       case 'sparkle': case 'burst':
         ctx.translate(p.x * 2, 0); ctx.fillStyle = WHITE; ctx.beginPath(); roundedPoly(ctx, starPts(4, 6 * a + 2, 1.5), .5); ctx.fill(); break;
       case 'confetti': ctx.rotate(p.rot); ctx.fillStyle = p.c; ctx.fillRect(-2.5, -1.5, 5, 3); break;
+      case 'heart': ctx.translate(p.x * 2, 0); ctx.scale(.5 + a * .5, .5 + a * .5); ctx.fillStyle = '#FF9BD0'; ctx.beginPath(); ctx.moveTo(0, 5); ctx.bezierCurveTo(-8, -1, -5, -8, 0, -3); ctx.bezierCurveTo(5, -8, 8, -1, 0, 5); ctx.fill(); break;
       case 'zzz': ctx.fillStyle = '#D6DCFF'; ctx.font = '600 12px Fredoka, sans-serif'; ctx.fillText('z', 0, 0); break;
       case 'note': ctx.fillStyle = '#D6DCFF'; ctx.font = '14px sans-serif'; ctx.fillText('♪', 0, 0); break;
       case 'sweat': ctx.fillStyle = '#8FE3FF'; ctx.beginPath(); ctx.moveTo(0, -5); ctx.quadraticCurveTo(4, 1, 0, 3); ctx.quadraticCurveTo(-4, 1, 0, -5); ctx.fill(); break;

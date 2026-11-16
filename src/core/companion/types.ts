@@ -137,6 +137,8 @@ export type ReactionTrigger =
   | 'proche_coeur'
   | 'orbe_coincee'
   | 'orbe_debloquee'
+  /** Duel : l'Astre du joueur qui passe en tête taquine l'adversaire. */
+  | 'duel_avantage'
   | 'reveil';
 
 /** Accessoire tendu vers l'orbe coincée : souffle, brume, ressort, plume. */

@@ -43,6 +43,11 @@ export class DaRenderer {
     return scene.add.image(0, 0, this.key).setOrigin(CENTER.x / CANVAS, CENTER.y / CANVAS);
   }
 
+  /** Duel : couleurs du joueur sur l'Astre (anneau au sol, nœud d'écharpe du rig). */
+  setPlayer(player: 'J1' | 'J2' | null): void {
+    this.actor.player = player;
+  }
+
   /** Change de scène (calque au-dessus des overlays) : seule l'image est recréée. */
   reparent(scene: Phaser.Scene): void {
     const { depth, visible } = this.image;
