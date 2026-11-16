@@ -34,3 +34,15 @@ tests/       tests Vitest
 ```
 
 Voir [CONTRIBUTING.md](CONTRIBUTING.md) pour les conventions.
+
+## Pipeline de build
+
+```
+PR          -> CI (.github/workflows/ci.yml) : lint, format, typecheck, tests, build
+merge main  -> Deploy web (.github/workflows/deploy-web.yml) : build puis publication GitHub Pages
+```
+
+- Build web jouable : https://mazklaus.github.io/Peggle-Ultimate-Maxi-Deluxe/
+- Redéployer à la main : onglet Actions > Deploy web > Run workflow.
+- Tester la build de prod en local : `npm run build && npm run preview`.
+- Archive pour itch.io : zipper le contenu de `dist/` (le `base: './'` de Vite rend les chemins relatifs).
