@@ -84,3 +84,16 @@ describe('predictPath', () => {
     expect(r.points.length).toBeLessThanOrEqual(91);
   });
 });
+
+describe('aide après 3 échecs', () => {
+  it('grant offre des charges sans dépasser le plafond', () => {
+    const c = new RevealCharges();
+    c.grant(1);
+    expect(c.charges).toBe(1);
+    expect(c.fire()).toBe(true);
+    c.endShot();
+    expect(c.previewing).toBe(false);
+    c.grant(9);
+    expect(c.charges).toBe(PIP_POWER.maxCharges);
+  });
+});

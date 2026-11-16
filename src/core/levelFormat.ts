@@ -71,6 +71,8 @@ export interface LevelData {
   title?: string;
   rhythm?: Rhythm;
   orbs: number;
+  /** Guide de visée : 0 (défaut) = court, jusqu'au premier contact ; n = jusqu'au n-ième rebond. */
+  guideBounces?: number;
   stars: [number, number];
   assign: LevelAssign;
   pegs: LevelPeg[];
@@ -160,6 +162,11 @@ export function parseLevel(input: string | unknown): ParseResult {
   if (raw.title !== undefined && typeof raw.title !== 'string') errors.push('title : texte.');
   if (raw.rhythm !== undefined && !isOneOf(RHYTHMS, raw.rhythm))
     errors.push(`rhythm inconnu « ${String(raw.rhythm)} ».`);
+  if (
+    raw.guideBounces !== undefined &&
+    (!isInt(raw.guideBounces) || raw.guideBounces < 0 || raw.guideBounces > 5)
+  )
+    errors.push('guideBounces : entier 0..5.');
   const orbs = raw.orbs ?? DEFAULT_ORBS;
   if (!isInt(orbs) || orbs < 1) errors.push('orbs : entier >= 1.');
 
@@ -200,6 +207,7 @@ export function parseLevel(input: string | unknown): ParseResult {
   };
   if (raw.title !== undefined) level.title = raw.title as string;
   if (raw.rhythm !== undefined) level.rhythm = raw.rhythm as Rhythm;
+  if (raw.guideBounces !== undefined) level.guideBounces = raw.guideBounces as number;
   return { level };
 }
 
@@ -237,6 +245,7 @@ const LEVEL_KEYS = [
   'title',
   'rhythm',
   'orbs',
+  'guideBounces',
   'stars',
   'assign',
 ] as const;
