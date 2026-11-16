@@ -18,7 +18,14 @@ export type Instrument =
   | 'choir'
   | 'cymbal'
   | 'musicbox'
-  | 'piccolo';
+  | 'piccolo'
+  | 'clarinet'
+  | 'tuba'
+  | 'pluck'
+  | 'vibes'
+  | 'marimba'
+  | 'organ'
+  | 'tick';
 
 export interface ScoreEvent {
   layer: MusicLayer;

@@ -16,9 +16,19 @@ import {
   type MusicCue,
   type MusicState,
 } from '../core/audio/musicState';
-import { JINGLES, TRACKS, type JingleName } from '../core/audio/score';
-import { chainNote, midiToFreq, pentatonicDegree } from '../core/audio/theory';
+import { CHAPTER_ASTRE, VOICES } from '../core/audio/astres';
+import { CHAPTER_TRACKS, phareTrack, veilleuseFinale } from '../core/audio/chapters';
 import {
+  normalizeAstreId,
+  reactionIndex,
+  type CompanionLike,
+  type ReactionCue,
+} from '../core/audio/reactionMap';
+import { CH1_TRACK, JINGLES, type Jingle, type JingleName, type Track } from '../core/audio/score';
+import { chainNote, midiToFreq, pentatonicDegree } from '../core/audio/theory';
+import { PIP } from '../companions/pip';
+import {
+  CUE_PRIORITY,
   PIP_VOICE,
   phraseDuration,
   pickVariant,
@@ -42,7 +52,7 @@ export interface GameEventData {
   astre?: string;
 }
 
-const VOICE_CUES = new Set<string>(Object.keys(PIP_VOICE.phrases));
+const VOICE_CUES = new Set<string>(Object.keys(CUE_PRIORITY));
 const isVoiceCue = (s: string): s is VoiceCue => VOICE_CUES.has(s);
 
 /** Événements du plan qui déclenchent directement une réplique de l'Astre. */
@@ -63,7 +73,12 @@ const EVENT_VOICE: Record<string, VoiceCue> = {
   orbe_descend: 'orbe_descend',
   orbe_proche_coeur: 'orbe_proche_coeur',
   tir_moyen: 'tir_moyen',
+  orbe_coincee: 'orbe_coincee',
+  orbe_debloquee: 'orbe_debloquee',
 };
+
+/** Morceaux disponibles : 'ch1' à 'ch8' ; le phare se construit selon le nombre d'Astres réveillés. */
+const TRACKS: Record<string, Track> = { ch1: CH1_TRACK, ...CHAPTER_TRACKS };
 
 class MusicControl {
   constructor(
@@ -71,14 +86,18 @@ class MusicControl {
     private readonly player: MusicPlayer,
   ) {}
 
-  /** Lance un morceau : 'ch1' (chapitre 1) ou 'phare' (hub). `astres` = voix d'Astres ajoutées au phare. */
+  /**
+   * Lance un morceau : 'ch1' à 'ch8', ou 'phare' (hub) avec `astres` = nombre d'Astres réveillés
+   * (0 = boîte à musique seule, 8 = thème complet). Le prologue reprend le chapitre 1.
+   */
   start(id: string, options: { astres?: number } = {}): void {
-    const track = TRACKS[id];
-    if (!track) return;
     this.dir.engine.unlock();
-    const layers =
-      id === 'phare' ? (options.astres ? [1, 2] : [1]) : layersFor(this.dir.musicState);
-    this.player.start(track, layers as (1 | 2 | 3)[]);
+    if (id === 'phare') {
+      this.player.start(phareTrack(options.astres ?? 0), [1]);
+      return;
+    }
+    const track = TRACKS[id] ?? CH1_TRACK;
+    this.player.start(track, layersFor(this.dir.musicState));
   }
 
   stop(fade = 0.8): void {
@@ -98,6 +117,8 @@ export class AudioDirector {
   private readonly gate = new VoiceGate();
   private readonly excitation = new Excitation();
   private profile: VoiceProfile = PIP_VOICE;
+  /** Réactions animées connues (id -> réplique), alimentées par registerCompanion. */
+  private reactions = new Map<string, ReactionCue>();
   private lastVariant = new Map<VoiceCue, number>();
   musicState: MusicState = { ...INITIAL_MUSIC_STATE };
   private chain = 0;
@@ -106,8 +127,33 @@ export class AudioDirector {
   private followAnimation = false;
   private riser: GainNode | null = null;
 
+  constructor() {
+    this.registerCompanion(PIP);
+  }
+
   unlock(): void {
     this.engine.unlock();
+  }
+
+  /**
+   * Fait connaître les réactions animées d'un Astre (src/companions/*.ts) : ses cris 'astre_cri'
+   * jouent alors la bonne réplique, avec la variante qui correspond à l'animation.
+   */
+  registerCompanion(def: CompanionLike): void {
+    for (const [id, cue] of reactionIndex(def, VOICE_CUES)) this.reactions.set(id, cue);
+  }
+
+  /** Choisit la voix de l'Astre actif ('pip', 'bourdon', 'twi_nkl', 'volte', 'mousse', 'horloge', 'grelot', 'nuage_lune'). */
+  setAstre(id: string): void {
+    const voice = VOICES[normalizeAstreId(id)];
+    if (voice && voice !== this.profile) {
+      this.profile = voice;
+      this.lastVariant.clear();
+    }
+  }
+
+  get astre(): string {
+    return this.profile.astre;
   }
 
   setVolume(bus: BusName, value: number): void {
@@ -127,8 +173,12 @@ export class AudioDirector {
     if (!this.engine.ctx) return;
     const data = (payload ?? {}) as GameEventData;
     switch (name) {
-      case 'niveau_debut':
-        return this.levelStart();
+      case 'niveau_debut': {
+        const chapter = (payload as { chapter?: number }).chapter ?? 1;
+        const astre = CHAPTER_ASTRE[chapter];
+        if (astre) this.setAstre(astre);
+        return this.levelStart(`ch${Math.max(1, chapter)}`);
+      }
       case 'tir_lance':
         this.chain = 0;
         this.descendPlayed = false;
@@ -167,11 +217,18 @@ export class AudioDirector {
         this.jingle('echec');
         this.player.stop(1.2);
         return this.say('echec', 0.3);
-      case 'astre_cri':
+      case 'astre_cri': {
         this.followAnimation = true;
-        if (data.reaction && isVoiceCue(data.reaction))
-          this.say(data.reaction, 0, data.variant, true);
+        if (data.astre) this.setAstre(data.astre);
+        const reaction = data.reaction ?? '';
+        const known = this.reactions.get(reaction);
+        if (known) this.say(known.cue, 0, known.variant, true);
+        else if (isVoiceCue(reaction)) this.say(reaction, 0, data.variant, true);
         return;
+      }
+      case 'pouvoir_active':
+        if (data.astre) this.setAstre(data.astre);
+        return this.say('pouvoir_active');
       case 'chaine_longue':
         this.engine.duckMusic(0.35, 1.5);
         return this.say('chaine_longue');
@@ -182,7 +239,7 @@ export class AudioDirector {
     }
   }
 
-  /** Début de niveau : remet la musique en couche 1 et la chaîne à zéro. */
+  /** Début de niveau : remet la musique en couche 1 et la chaîne à zéro ('ch1' à 'ch8'). */
   levelStart(trackId = 'ch1'): void {
     this.musicState = nextMusicState(this.musicState, 'niveau_debut');
     this.chain = 0;
@@ -227,7 +284,7 @@ export class AudioDirector {
     // L'Astre s'excite : ses « pip » montent et s'accélèrent avec la jauge.
     const level = excitationLevel(this.excitation.hit(eng.now()));
     const everyHit = level > 0 || this.chain % 2 === 1;
-    if (everyHit && !this.followAnimation) this.pip(level);
+    if (everyHit) this.pip(level);
   }
 
   /** Rebond sur un mur : tic de bois sans hauteur. */
@@ -261,16 +318,32 @@ export class AudioDirector {
 
   /** Suivi du vol : `yRatio` = hauteur de l'orbe (0 en haut, 1 en bas). Déclenche la crispation une fois par tir. */
   flight(yRatio: number): void {
-    if (this.descendPlayed || yRatio < 0.7 || this.followAnimation) return;
+    if (this.descendPlayed || yRatio < 0.7) return;
     this.descendPlayed = true;
-    this.say('orbe_descend');
+    // La crispation est une pose continue de l'Astre (pas un cri animé) : la voix la joue toujours.
+    this.say('orbe_descend', 0, undefined, true);
   }
 
   /** Joue un jingle par son nom. */
   jingle(name: JingleName): void {
+    this.playJingle(JINGLES[name], 'sfx');
+  }
+
+  /**
+   * Final de l'aventure (réveil de la Grande Veilleuse) : silence, explosion orchestrale,
+   * berceuse à plusieurs voix, puis boîte à musique et piccolo. Renvoie sa durée en secondes.
+   */
+  finale(): number {
+    this.player.stop(0.5);
+    this.stopRiser(false);
+    const j = veilleuseFinale();
+    this.playJingle(j, 'music');
+    return Math.max(...j.events.map((e) => e.beat + e.beats)) * (60 / j.bpm);
+  }
+
+  private playJingle(j: Jingle, bus: 'sfx' | 'music'): void {
     const eng = this.engine;
     if (!eng.ctx) return;
-    const j = JINGLES[name];
     const beat = 60 / j.bpm;
     const t0 = eng.now() + 0.02;
     for (const ev of j.events) {
@@ -282,7 +355,7 @@ export class AudioDirector {
         ev.velocity,
         ev.beats * beat,
         {
-          out: eng.buses.sfx,
+          out: eng.buses[bus],
           wet: 0.45,
         },
       );
@@ -295,9 +368,10 @@ export class AudioDirector {
     const eng = this.engine;
     if (!eng.ctx) return;
     const variants = this.profile.phrases[cue];
+    if (variants.length === 0) return;
     const idx =
-      variant !== undefined && variant >= 0 && variant < variants.length
-        ? variant
+      variant !== undefined && variant >= 0
+        ? variant % variants.length
         : pickVariant(variants.length, this.lastVariant.get(cue) ?? -1);
     const phrase = variants[idx];
     if (!phrase) return;
@@ -305,7 +379,8 @@ export class AudioDirector {
     if (decision === 'drop') return;
     if (decision === 'interrupt') this.voice.cut();
     this.lastVariant.set(cue, idx);
-    const run = (): void => this.voice.play(phrase, this.profile.root);
+    const profile = this.profile;
+    const run = (): void => this.voice.play(phrase, profile);
     if (delay > 0) setTimeout(run, delay * 1000);
     else run();
     if (cue !== 'cristal' && cue !== 'final_ralenti') eng.duckMusic(0.2, phraseDuration(phrase));
@@ -317,8 +392,8 @@ export class AudioDirector {
     if (!phrase || !this.engine.ctx) return;
     this.voice.cut();
     this.gate.reset();
-    if (cue === 'cristal') this.voice.play(phrase, this.profile.root, 0, 1, 0.8);
-    else this.voice.play(phrase, this.profile.root);
+    if (cue === 'cristal') this.voice.play(phrase, this.profile, 0, 1, 0.8, false);
+    else this.voice.play(phrase, this.profile);
   }
 
   /** Change d'Astre actif (les profils des autres Astres arrivent au jalon 2). */
@@ -336,19 +411,24 @@ export class AudioDirector {
       return;
     // basse : ré ; moyenne : une note plus haut et plus vite ; haute : trilles très aiguës
     const transpose = [0, 4, 7][level] ?? 0;
+    const p = this.profile;
+    // Twi et Nkl : « tu ! » / « ti ! », chacune son tour, sans écho.
+    const solo = p.duet ? { ...p, duet: undefined } : p;
+    const turn = p.duet && this.chain % 2 === 0 ? p.duet.interval : 0;
     this.voice.play(
       phrase,
-      this.profile.root,
-      transpose + (this.chain % 3) * 2,
+      solo,
+      transpose + turn + (this.chain % 3) * 2,
       1 + level * 0.4,
       0.55,
+      false,
     );
   }
 
   private updateMusic(cue: MusicCue): void {
     this.musicState = nextMusicState(this.musicState, cue);
-    if (this.player.playing && this.player.playing !== 'phare')
-      this.player.setLayers(layersFor(this.musicState));
+    const playing = this.player.playing;
+    if (playing && !playing.startsWith('phare')) this.player.setLayers(layersFor(this.musicState));
   }
 
   /** Départ de l'orbe : « fwoosh » doux. */

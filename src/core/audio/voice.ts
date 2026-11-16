@@ -9,9 +9,7 @@ import type { Rng } from '../level';
 export type VoiceCue =
   // AVANT le tir : idles
   | 'idle_court'
-  | 'idle_fredonne'
-  | 'idle_mouche'
-  | 'idle_jongle'
+  | 'idle_long'
   | 'inactivite'
   | 'sommeil'
   | 'reveil'
@@ -24,6 +22,8 @@ export type VoiceCue =
   | 'dernier_coeur'
   | 'dernier_orbe'
   | 'pouvoir_active'
+  | 'orbe_coincee'
+  | 'orbe_debloquee'
   | 'final_ralenti'
   // APRÈS le tir : bilan
   | 'tir_moyen'
@@ -49,6 +49,8 @@ export interface VoiceNote {
   gap?: number;
   trill?: number;
   breath?: boolean;
+  /** Tic-tac de pendule (Horloge) au lieu d'une note. */
+  tick?: boolean;
 }
 
 export type Phrase = readonly VoiceNote[];
@@ -58,9 +60,7 @@ export type VoicePriority = 1 | 2 | 3 | 4;
 
 export const CUE_PRIORITY: Record<VoiceCue, VoicePriority> = {
   idle_court: 1,
-  idle_fredonne: 1,
-  idle_mouche: 1,
-  idle_jongle: 1,
+  idle_long: 1,
   inactivite: 1,
   sommeil: 1,
   reveil: 2,
@@ -75,6 +75,8 @@ export const CUE_PRIORITY: Record<VoiceCue, VoicePriority> = {
   dernier_coeur: 3,
   dernier_orbe: 3,
   pouvoir_active: 3,
+  orbe_coincee: 2,
+  orbe_debloquee: 2,
   gros_coup: 3,
   chaine_longue: 3,
   final_ralenti: 4,
@@ -82,12 +84,22 @@ export const CUE_PRIORITY: Record<VoiceCue, VoicePriority> = {
   echec: 4,
 };
 
+/** Instruments-voix des Astres (note d'intentions sonores, validée par le Game Director). */
+export type VoiceInstrument =
+  'piccolo' | 'tuba' | 'clarinet' | 'banjo' | 'vibraphone' | 'marimba' | 'bells' | 'harp';
+
 /** Profil vocal d'un Astre (le moteur choisit le timbre selon `instrument`). */
 export interface VoiceProfile {
   astre: string;
-  instrument: 'piccolo';
+  instrument: VoiceInstrument;
   /** Tonique MIDI de la voix. */
   root: number;
+  /** Volume relatif de la voix (Mousse parle tout bas). */
+  gain?: number;
+  /** Deux voix (Twi et Nkl) : la seconde répond décalée, transposée de `interval` demi-tons. */
+  duet?: { interval: number; delay: number };
+  /** Couleur ajoutée sous chaque réplique (tic-tac d'Horloge, chœur lointain de Nuage-Lune…). */
+  halo?: 'ticktock' | 'choir' | 'jingle';
   /** Plusieurs variantes par réplique, pour ne pas lasser. */
   phrases: Record<VoiceCue, readonly Phrase[]>;
 }
@@ -103,7 +115,7 @@ export const PIP_VOICE: VoiceProfile = {
   instrument: 'piccolo',
   root: 86,
   phrases: {
-    // « hiii » : étirement-bâillement minuscule
+    // « hiii » (étirement), petit hop, et il sifflote la mélodie de la Veilleuse sans le savoir
     idle_court: [
       [
         n(0, 0.35, { to: 4, v: 0.5 }),
@@ -115,24 +127,15 @@ export const PIP_VOICE: VoiceProfile = {
         n(9, 0.08, { v: 0.5, gap: 0.04 }),
         n(7, 0.12, { v: 0.5, gap: 0.04 }),
       ],
-    ],
-    // il sifflote la mélodie de la Veilleuse sans le savoir
-    idle_fredonne: [
       [
         n(-3, 0.22, { v: 0.4 }),
         n(-5, 0.22, { v: 0.4 }),
         n(0, 0.22, { v: 0.4 }),
         n(-3, 0.45, { v: 0.4 }),
       ],
-      [
-        n(0, 0.15, { v: 0.4 }),
-        n(2, 0.15, { v: 0.4 }),
-        n(4, 0.15, { v: 0.4 }),
-        n(2, 0.3, { v: 0.4, to: 0 }),
-      ],
     ],
-    // gobe la poussière d'étoile et tousse une étincelle
-    idle_mouche: [
+    // la mouche (gobe une poussière, tousse), le jongleur raté (« bonk »), les pompes, la course
+    idle_long: [
       [
         n(7, 0.1, { v: 0.5 }),
         n(9, 0.1, { v: 0.5, gap: 0.2 }),
@@ -140,15 +143,25 @@ export const PIP_VOICE: VoiceProfile = {
         n(0, 0.08, { breath: true, v: 0.6, gap: 0.1 }),
         n(0, 0.08, { breath: true, v: 0.5, gap: 0.08 }),
       ],
-    ],
-    // l'orbe lui tombe sur la tête : « bonk » puis étoiles qui tournent
-    idle_jongle: [
       [
         n(0, 0.07, { v: 0.5 }),
         n(4, 0.07, { v: 0.5, gap: 0.05 }),
         n(7, 0.07, { v: 0.5, gap: 0.05 }),
         n(-12, 0.12, { to: -17, v: 0.7, gap: 0.15 }),
         n(4, 0.5, { trill: 3, v: 0.35, gap: 0.05 }),
+      ],
+      [
+        n(0, 0.08, { v: 0.4 }),
+        n(2, 0.07, { v: 0.4 }),
+        n(4, 0.06, { v: 0.45 }),
+        n(7, 0.05, { v: 0.5 }),
+        n(-5, 0.5, { breath: true, v: 0.5, gap: 0.1 }),
+      ],
+      [
+        n(4, 0.15, { v: 0.4 }),
+        n(2, 0.15, { v: 0.4 }),
+        n(4, 0.15, { v: 0.4 }),
+        n(7, 0.3, { v: 0.4, to: 9 }),
       ],
     ],
     // « tut tut ? » : il tapote la vitre
@@ -187,6 +200,13 @@ export const PIP_VOICE: VoiceProfile = {
     dernier_coeur: [[n(4, 0.9, { trill: 1, v: 0.35 })]],
     // prière : petite plainte suppliante
     dernier_orbe: [[n(4, 0.3, { to: 7, v: 0.5 }), n(7, 0.5, { to: 4, v: 0.45, gap: 0.05 })]],
+    // joues gonflées : il souffle de toutes ses forces sur l'orbe coincée
+    orbe_coincee: [
+      [n(0, 0.6, { breath: true, v: 0.7 }), n(-2, 0.3, { to: 5, v: 0.5, gap: 0.05 })],
+      [n(4, 0.25, { trill: 1, v: 0.5 }), n(0, 0.5, { breath: true, v: 0.6, gap: 0.05 })],
+    ],
+    // ça repart : petit « youpi »
+    orbe_debloquee: [[n(7, 0.06), n(12, 0.12, { gap: 0.02, to: 14 })]],
     // « ta-da » en 3 notes
     pouvoir_active: [[n(0, 0.1), n(4, 0.1, { gap: 0.03 }), n(12, 0.35, { gap: 0.03, trill: 2 })]],
     // immense « O » au ralenti
