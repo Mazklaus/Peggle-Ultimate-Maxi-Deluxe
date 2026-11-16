@@ -119,6 +119,7 @@ export class CompanionBrain {
   private cry: Pose['cry'] = null;
   private nodT = 1;
   private shotHits = 0;
+  private powered = false;
 
   constructor(def: CompanionDef, rng: Rng = Math.random) {
     this.def = def;
@@ -163,6 +164,16 @@ export class CompanionBrain {
     this.hopPower = this.excitement;
     if (this.excitement > 0.35)
       this.bursts.push({ kind: 'sparkle', count: 1 + Math.round(this.excitement * 3) });
+  }
+
+  /** Pouvoir actif (charges restantes) : mèche en antenne, il « dicte » la trajectoire. */
+  setPowered(on: boolean): void {
+    this.powered = on;
+  }
+
+  /** Rebond (mur ou cristal) : pendant un tir aidé, il hoche la tête au rythme des rebonds. */
+  onBounce(): void {
+    if (this.powered && this.phase === 'flight') this.nodT = 0;
   }
 
   /** Fin de tir sans événement marquant : petit hochement satisfait. */
@@ -421,6 +432,7 @@ export class CompanionBrain {
       if (e > 0.7) pose.tuft = 'flame';
       if (e > 0.55 && this.rng() < e * 0.15) pose.bursts.push({ kind: 'sparkle', count: 1 });
     }
+    if (this.powered) pose.tuft = 'antenna';
     if (this.sleeping) this.applyState(pose, this.def.states.sommeil);
     if (this.tense) this.applyState(pose, this.def.states[this.tense]);
     if (this.tense === 'dernier_coeur' && this.phase === 'flight') {
