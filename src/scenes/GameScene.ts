@@ -400,6 +400,8 @@ export class GameScene extends Phaser.Scene {
       this.finishShot(finalX);
       return;
     }
+    // Tir final (GD) : chaque orbe marque sa propre zone de bonus, les deux s'additionnent.
+    if (this.finalShot && finalX !== undefined) this.scoreFinalZone(finalX);
     this.orb?.destroy();
     this.orb = twin;
     this.twin = undefined;
@@ -423,6 +425,7 @@ export class GameScene extends Phaser.Scene {
     const caught = this.inBucket(t);
     if (caught || t.y > GAME_HEIGHT + ORB_RADIUS * 2) {
       if (caught) this.catchFlash();
+      if (this.finalShot) this.scoreFinalZone(t.x);
       t.destroy();
       this.twin = undefined;
       return;
@@ -431,6 +434,10 @@ export class GameScene extends Phaser.Scene {
       this.twinRef = { x: t.x, y: t.y, t: time };
     } else if (time - this.twinRef.t >= TUNING.antiStuckSeconds * 1000) {
       this.dissolveOrb(t.x, t.y);
+      if (this.finalShot)
+        this.scoreFinalZone(
+          t.x < PLAYFIELD.x + PLAYFIELD.w / 2 ? PLAYFIELD.x : PLAYFIELD.x + PLAYFIELD.w - 1,
+        );
       t.destroy();
       this.twin = undefined;
     }
