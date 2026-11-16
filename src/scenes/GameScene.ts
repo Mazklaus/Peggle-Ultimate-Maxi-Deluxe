@@ -219,6 +219,8 @@ export class GameScene extends Phaser.Scene {
   >();
   /** Temps de jeu cumulé (s), ralentis compris. */
   private gameTime = 0;
+  /** Dernière lecture de l'horloge physique (ms simulées). */
+  private lastPhys = 0;
   private aimAngle = Math.PI / 2;
   private guide!: Phaser.GameObjects.Graphics;
   /** Effets des pouvoirs en zone de jeu (menthe), redessinés chaque frame. */
@@ -302,6 +304,7 @@ export class GameScene extends Phaser.Scene {
     this.finalZonesGfx = undefined;
     this.setTimeScale(1);
     this.setupPhysics();
+    this.lastPhys = this.physClock();
     this.tracker = new ShotTracker();
     this.breakdown.reset();
     this.reveal = new RevealCharges();
@@ -427,7 +430,13 @@ export class GameScene extends Phaser.Scene {
     if (this.warpUntil > 0 && time >= this.warpUntil) this.endTimeWarp();
     this.decor.draw();
     const delta = realDelta * this.gameScale;
-    this.gameTime += delta / 1000;
+    // Horloge physique : temps réellement simulé par Matter (ralentis compris, pause et gel
+    // exclus). Sous ~30 i/s, Matter plafonne ses pas et l'orbe avance moins vite que l'horloge
+    // de la scène (QA ch.2) : blocage, portails et durées des pouvoirs comptent sur celle-ci.
+    const now = this.physClock();
+    const physDt = Math.max(0, now - this.lastPhys) / 1000;
+    this.lastPhys = now;
+    this.gameTime = now / 1000;
     this.moveBucket(delta);
     this.cannon.setRotation(this.aimAngle);
     this.backdrop?.update(realDelta / 1000, this.aimAngle);
@@ -443,13 +452,13 @@ export class GameScene extends Phaser.Scene {
       return;
     }
     audio.flight(Phaser.Math.Clamp((orb.y - PLAYFIELD.y) / PLAYFIELD.h, 0, 1));
-    this.updateBolt(delta / 1000);
+    this.updateBolt(physDt);
     this.trackOrb(orb);
-    this.updateCrazyBounce(delta / 1000);
-    this.updateMagnet(delta / 1000);
-    this.applyMagnets(delta / 1000);
-    this.applyPortals(time);
-    this.updateTwin(time);
+    this.updateCrazyBounce(physDt);
+    this.updateMagnet(physDt);
+    this.applyMagnets(physDt);
+    this.applyPortals(now);
+    this.updateTwin(now);
     this.hud.setPowerActivity(this.crazyLeft > 0 ? this.crazyLeft / VOLTE.seconds : 0, !!this.twin);
     const caught = this.inBucket(orb);
     if (caught || orb.y > GAME_HEIGHT + ORB_RADIUS * 2) {
@@ -457,7 +466,7 @@ export class GameScene extends Phaser.Scene {
       this.orbGone(caught);
       return;
     }
-    this.checkStuck(time);
+    this.checkStuck(now);
   }
 
   private inBucket(orb: Phaser.GameObjects.Arc): boolean {
@@ -500,6 +509,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   /** Le 2e orbe : attrapé, tombé, ou dissous s'il reste coincé (pas d'impulsion pour lui). */
+  /** time : horloge physique (ms simulées), comme stuckRef / twinRef. */
   private updateTwin(time: number): void {
     const t = this.twin;
     if (!t) return;
@@ -623,6 +633,7 @@ export class GameScene extends Phaser.Scene {
    * Portails : l'orbe qui entre dans une bouche ressort de l'autre, même vitesse. Une orbe
    * doit sortir de la bouche d'arrivée avant de repasser, et attend 0,3 s de jeu (GD).
    */
+  /** time : horloge physique (ms simulées). */
   private applyPortals(time: number): void {
     if (!this.decor.hasPortals) return;
     for (const o of this.shotOrbs()) {
@@ -676,7 +687,7 @@ export class GameScene extends Phaser.Scene {
     twin.setStrokeStyle(2, powerColor(), 0.9);
     this.twin = twin;
     if (this.crazyLeft > 0) this.setCrazy(twin, true);
-    this.twinRef = { x: src.x, y: src.y, t: this.time.now };
+    this.twinRef = { x: src.x, y: src.y, t: this.physClock() };
     // Petit éclat menthe au point de scission.
     powerFlash(this, src.x, src.y, ORB_RADIUS, 6);
   }
@@ -745,6 +756,11 @@ export class GameScene extends Phaser.Scene {
   }
 
   /** Orbe ralentie (même trajectoire, parcourue plus lentement) et petits rebonds conservés. */
+  /** Temps simulé par Matter depuis le début du niveau (ms de jeu). */
+  private physClock(): number {
+    return this.matter.world.engine.timing.timestamp;
+  }
+
   private setupPhysics(): void {
     this.matter.world.setGravity(0, 1, ORB_PHYSICS.gravityScale);
     applyMatterInternals((Phaser.Physics.Matter as unknown as { Matter: MatterInternals }).Matter);
@@ -1161,7 +1177,7 @@ export class GameScene extends Phaser.Scene {
       up.vx / 60,
       up.vy / 60,
     );
-    this.stuckRef = { x, y, t: this.time.now };
+    this.stuckRef = { x, y, t: this.physClock() };
     // La pastille-bouclier se brise en paillettes menthe, l'orbe repart vers le haut.
     for (let i = 0; i < 14; i++) {
       const a = Math.PI + (i / 13) * Math.PI;
@@ -1286,7 +1302,7 @@ export class GameScene extends Phaser.Scene {
     this.crazyLeft = 0;
     this.chain = 0;
     this.slowmoUntil = 0;
-    this.stuckRef = { x: start.x, y: start.y, t: this.time.now };
+    this.stuckRef = { x: start.x, y: start.y, t: this.physClock() };
     this.stuckNudges = 0;
     this.stuckAnnounced = false;
     this.companion?.setPhase('flight');
@@ -1469,7 +1485,10 @@ export class GameScene extends Phaser.Scene {
     this.time.delayedCall(delay, () => this.scene.launch(SCENES.results, payload));
   }
 
-  /** Anti-blocage : orbe presque immobile depuis 3 s -> les cristaux allumés autour se brisent. */
+  /**
+   * Anti-blocage : orbe presque immobile depuis 3 s de jeu simulé (horloge physique `time`) ->
+   * les cristaux allumés autour se brisent.
+   */
   private checkStuck(time: number): void {
     const orb = this.orb;
     if (!orb) return;
