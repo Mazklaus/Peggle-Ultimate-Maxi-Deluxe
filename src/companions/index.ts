@@ -8,7 +8,7 @@
  */
 import type { CompanionDef } from '../core/companion/types';
 import type { Companion } from '../core/levelFormat';
-import { BOURDON, JUMELLES } from './astres';
+import { BOURDON, JUMELLES, MOUSSE, VOLTE } from './astres';
 import { PIP } from './pip';
 
 /** next = s'applique au tir suivant (charges), immediate = agit pendant le tir, reserve = charge gardée. */
@@ -60,7 +60,7 @@ export const COMPANION_ROSTER: readonly CompanionInfo[] = [
     id: 'volte',
     name: 'Volte',
     color: 0xff6b4a,
-    def: null,
+    def: VOLTE,
     power: { name: 'Rebond fou', kind: 'immediate', maxCharges: 0 },
     wakesAtChapter: 4,
   },
@@ -68,7 +68,7 @@ export const COMPANION_ROSTER: readonly CompanionInfo[] = [
     id: 'mousse',
     name: 'Mousse',
     color: 0x7ee0c6,
-    def: null,
+    def: MOUSSE,
     power: { name: 'Aimant à cœurs', kind: 'next', maxCharges: 2 },
     wakesAtChapter: 5,
   },

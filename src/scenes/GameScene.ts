@@ -28,7 +28,14 @@ import {
   applyMatterInternals,
   type MatterInternals,
 } from '../core/physics';
-import { PIP_POWER, RevealCharges } from '../core/powers';
+import {
+  MOUSSE_POWER,
+  PIP_POWER,
+  RevealCharges,
+  ShotCharges,
+  magnetPull,
+  type ChargeRule,
+} from '../core/powers';
 import { failsBeforeFirstWin, markSeen, writeSave, type SaveData } from '../core/save';
 import {
   EVENT_THRESHOLDS,
@@ -83,6 +90,12 @@ const SHOCKWAVE = { radius: 110, seconds: 0.3 };
  * minSideShare : part horizontale minimale du 2e orbe (une chute verticale se scinde en Y).
  */
 const TWIN = { speed: 0.9, maxCatches: 2, minSideShare: 0.35 };
+/**
+ * Rebond fou de Volte (GD reglages-jalon1 et jalon2 §5) : au contact d'un cristal pouvoir,
+ * restitution 1,05 pour le reste du tir, 8 s de jeu au plus ; vitesse plafonnée (900 px/s du
+ * prototype, mise à l'échelle du ralenti global) pour rester lisible.
+ */
+const VOLTE = { restitution: 1.05, maxSpeed: 900 * ORB_PHYSICS.slowdown, seconds: 8 };
 /** Les orbes d'un même tir se traversent (groupe de collision négatif commun). */
 const ORB_COLLISION_GROUP = -1;
 /**
@@ -150,8 +163,12 @@ export class GameScene extends Phaser.Scene {
   private twinRef = { x: 0, y: 0, t: 0 };
   /** Orbes attrapés pendant ce tir (2 au plus comptent, orbe scindé). */
   private shotCatches = 0;
+  /** Temps de jeu restant (s) du rebond fou de Volte ; 0 = inactif. */
+  private crazyLeft = 0;
   private aimAngle = Math.PI / 2;
   private guide!: Phaser.GameObjects.Graphics;
+  /** Effets des pouvoirs en zone de jeu (menthe), redessinés chaque frame. */
+  private powerGfx!: Phaser.GameObjects.Graphics;
   private cannon!: Phaser.GameObjects.Rectangle;
   private bucket!: Phaser.GameObjects.Rectangle;
   private bucketDir = 1;
@@ -177,7 +194,8 @@ export class GameScene extends Phaser.Scene {
   /** Fin (horloge réelle) du gel d'image du final ; 0 = pas de gel. */
   private hitStopUntil = 0;
   private gameScale = 1;
-  private reveal = new RevealCharges();
+  /** Charges du pouvoir « tir suivant » de l'Astre (Pip, Mousse...). */
+  private reveal: ShotCharges = new RevealCharges();
   /** Tirs restants avec le guide allongé de la lanterne (aide sans Astre). */
   private lanternShots = 0;
   /** Le dernier cœur est touché : l'orbe finit sa course dans les zones de bonus. */
@@ -256,6 +274,7 @@ export class GameScene extends Phaser.Scene {
       PALETTE.bucket,
     );
     this.guide = this.add.graphics();
+    this.powerGfx = this.add.graphics().setDepth(5);
     this.makeHud();
     this.makeCompanion();
 
@@ -362,6 +381,8 @@ export class GameScene extends Phaser.Scene {
     }
     audio.flight(Phaser.Math.Clamp((orb.y - PLAYFIELD.y) / PLAYFIELD.h, 0, 1));
     this.trackOrb(orb);
+    this.updateCrazyBounce(delta / 1000);
+    this.updateMagnet(delta / 1000);
     this.updateTwin(time);
     const caught = this.inBucket(orb);
     if (caught || orb.y > GAME_HEIGHT + ORB_RADIUS * 2) {
@@ -391,6 +412,8 @@ export class GameScene extends Phaser.Scene {
       this.finishShot(finalX);
       return;
     }
+    // Tir final (GD) : chaque orbe marque sa propre zone de bonus, les deux s'additionnent.
+    if (this.finalShot && finalX !== undefined) this.scoreFinalZone(finalX);
     this.orb?.destroy();
     this.orb = twin;
     this.twin = undefined;
@@ -414,6 +437,7 @@ export class GameScene extends Phaser.Scene {
     const caught = this.inBucket(t);
     if (caught || t.y > GAME_HEIGHT + ORB_RADIUS * 2) {
       if (caught) this.catchFlash();
+      if (this.finalShot) this.scoreFinalZone(t.x);
       t.destroy();
       this.twin = undefined;
       return;
@@ -422,8 +446,90 @@ export class GameScene extends Phaser.Scene {
       this.twinRef = { x: t.x, y: t.y, t: time };
     } else if (time - this.twinRef.t >= TUNING.antiStuckSeconds * 1000) {
       this.dissolveOrb(t.x, t.y);
+      if (this.finalShot)
+        this.scoreFinalZone(
+          t.x < PLAYFIELD.x + PLAYFIELD.w / 2 ? PLAYFIELD.x : PLAYFIELD.x + PLAYFIELD.w - 1,
+        );
       t.destroy();
       this.twin = undefined;
+    }
+  }
+
+  private shotOrbs(): Phaser.GameObjects.Arc[] {
+    return [this.orb, this.twin].filter((o): o is Phaser.GameObjects.Arc => !!o);
+  }
+
+  /** Pouvoir de Volte : les orbes du tir rebondissent plus fort qu'ils n'arrivent. */
+  private startCrazyBounce(): void {
+    if (this.crazyLeft <= 0) {
+      for (const o of this.shotOrbs()) this.setCrazy(o, true);
+    }
+    this.crazyLeft = VOLTE.seconds;
+  }
+
+  private setCrazy(o: Phaser.GameObjects.Arc, on: boolean): void {
+    const body = o.body as MatterJS.BodyType | null;
+    if (body) body.restitution = on ? VOLTE.restitution : ORB_RESTITUTION;
+    if (on) o.setStrokeStyle(3, PALETTE.success, 0.95);
+    else if (o !== this.twin) o.setStrokeStyle();
+    else o.setStrokeStyle(2, PALETTE.success, 0.9);
+  }
+
+  /** Durée et plafond de vitesse du rebond fou, plus une traînée menthe en zigzag. */
+  private updateCrazyBounce(dt: number): void {
+    if (this.crazyLeft <= 0) return;
+    this.crazyLeft -= dt;
+    const done = this.crazyLeft <= 0;
+    for (const o of this.shotOrbs()) {
+      if (done) {
+        this.setCrazy(o, false);
+        continue;
+      }
+      const v = this.orbVelocity(o);
+      const speed = Math.hypot(v.x, v.y) * 60;
+      if (speed > VOLTE.maxSpeed) {
+        const k = VOLTE.maxSpeed / speed;
+        (o as unknown as Phaser.Physics.Matter.Components.Velocity).setVelocity(v.x * k, v.y * k);
+      }
+      if (Math.random() < 0.5) {
+        const spark = this.add.circle(o.x, o.y, 2.5, PALETTE.success, 0.8).setDepth(o.depth - 1);
+        this.tweens.add({
+          targets: spark,
+          alpha: 0,
+          scale: 0.2,
+          duration: 300,
+          onComplete: () => spark.destroy(),
+        });
+      }
+    }
+    if (done) this.crazyLeft = 0;
+  }
+
+  /**
+   * Pouvoir de Mousse (tir chargé) : l'orbe est attirée par le cœur non allumé le plus
+   * proche ; un fil menthe la relie à sa cible, plus net quand elle approche.
+   */
+  private updateMagnet(dt: number): void {
+    const g = this.powerGfx.clear();
+    if (this.companionId !== 'mousse' || !this.reveal.shotIsPowered || dt <= 0) return;
+    const hearts = this.level.crystals
+      .filter((c) => c.kind === 'heart' && !c.lit)
+      .map((c) => ({ id: c.id, ...toWorld(c) }));
+    for (const o of this.shotOrbs()) {
+      const pull = magnetPull(o, hearts);
+      g.lineStyle(1.5, PALETTE.success, 0.18).strokeCircle(o.x, o.y, MOUSSE_POWER.range);
+      if (!pull) continue;
+      const v = this.orbVelocity(o);
+      // px/s² -> px par pas de référence, sur dt secondes de jeu.
+      const k = dt * 60 * (1 / 3600);
+      (o as unknown as Phaser.Physics.Matter.Components.Velocity).setVelocity(
+        v.x + pull.ax * k,
+        v.y + pull.ay * k,
+      );
+      const t = hearts.find((h) => h.id === pull.targetId);
+      if (!t) continue;
+      g.lineStyle(2, PALETTE.success, 0.25 + 0.6 * pull.strength).lineBetween(o.x, o.y, t.x, t.y);
+      g.strokeCircle(t.x, t.y, 14 + 4 * Math.sin(this.time.now / 90));
     }
   }
 
@@ -449,8 +555,7 @@ export class GameScene extends Phaser.Scene {
   private splitOrb(by?: MatterJS.BodyType): void {
     const src = this.orb;
     if (!src || this.twin || (by && by !== src.body)) return;
-    const body = src.body as MatterJS.BodyType;
-    const { x: vx, y: vy } = body.velocity;
+    const { x: vx, y: vy } = this.orbVelocity(src);
     const speed = Math.hypot(vx, vy) * TWIN.speed;
     if (speed <= 0) return;
     // Une orbe qui tombe tout droit se scinde quand même en Y : part horizontale minimale.
@@ -460,6 +565,7 @@ export class GameScene extends Phaser.Scene {
     const twin = this.spawnOrb(src.x, src.y, side * sx, sy);
     twin.setStrokeStyle(2, PALETTE.success, 0.9);
     this.twin = twin;
+    if (this.crazyLeft > 0) this.setCrazy(twin, true);
     this.twinRef = { x: src.x, y: src.y, t: this.time.now };
     // Petit éclat menthe au point de scission.
     const flash = this.add.circle(src.x, src.y, ORB_RADIUS, PALETTE.success, 0.5).setDepth(6);
@@ -616,6 +722,7 @@ export class GameScene extends Phaser.Scene {
       !!save &&
       failsBeforeFirstWin(save, this.sceneData.level.id) >= HELP_AFTER_FAILS;
     this.companionId = def && id ? id : null;
+    this.reveal = chargesFor(this.companionId);
     if (!def) {
       // Sans Astre (prologue) : la lanterne de la Gardienne allonge le guide du 1er tir.
       if (needsHelp) this.lanternShots = 1;
@@ -749,7 +856,7 @@ export class GameScene extends Phaser.Scene {
   private emitAll(events: DetectedEvent[]): void {
     for (const e of events) {
       if (e === 'final_ralenti') this.startSlowmo();
-      if (e === 'pouvoir_active' && this.companionId === 'pip') {
+      if (e === 'pouvoir_active' && companionById(this.companionId)?.power.kind === 'next') {
         this.reveal.gain();
         this.refreshPower();
       }
@@ -916,6 +1023,7 @@ export class GameScene extends Phaser.Scene {
       Math.sin(this.aimAngle) * LAUNCH_SPEED,
     );
     this.shotCatches = 0;
+    this.crazyLeft = 0;
     this.chain = 0;
     this.slowmoUntil = 0;
     this.stuckRef = { x: start.x, y: start.y, t: this.time.now };
@@ -966,6 +1074,7 @@ export class GameScene extends Phaser.Scene {
     this.emitAll(this.tracker.crystalLit(crystal.kind, this.level.shotScore, crystal.id));
     if (crystal.kind === 'power' && this.companionId === 'bourdon') this.shockwave(crystal);
     if (crystal.kind === 'power' && this.companionId === 'jumelles' && by) this.splitOrb(by);
+    if (crystal.kind === 'power' && this.companionId === 'volte') this.startCrazyBounce();
     if (isFinalHeartLit(this.level)) {
       // Filet de sécurité : le dernier cœur touché sans prédiction préalable.
       // Pas encore de ralenti, ou un ralenti déjà terminé pendant ce tir : petit gel
@@ -1022,6 +1131,8 @@ export class GameScene extends Phaser.Scene {
     this.orb = undefined;
     this.twin?.destroy();
     this.twin = undefined;
+    this.crazyLeft = 0;
+    this.powerGfx.clear();
     this.hud.endShot();
     this.applyGameScale(1);
     const result = endShot(this.level, catches);
@@ -1220,7 +1331,7 @@ export class GameScene extends Phaser.Scene {
       obstacles: this.obstacles(),
       wallRestitution: ORB_PHYSICS.wallRestitution,
     };
-    if (this.reveal.previewing) {
+    if (this.companionId === 'pip' && this.reveal.armed) {
       // Pouvoir de Pip : trajectoire révélée jusqu'au 3e rebond ou 1,5 s.
       const path = predictPath({
         ...input,
@@ -1267,9 +1378,9 @@ export class GameScene extends Phaser.Scene {
 
   /** Charges du pouvoir sous l'Astre (pastilles) et mèche en antenne. */
   private refreshPower(): void {
-    this.companion?.brain.setPowered(this.reveal.previewing || this.reveal.shotIsPowered);
+    this.companion?.brain.setPowered(this.reveal.armed || this.reveal.shotIsPowered);
     if (!this.companion) return;
-    this.hud.setPower(this.reveal.charges, PIP_POWER.maxCharges, this.reveal.shotIsPowered);
+    this.hud.setPower(this.reveal.charges, this.reveal.rule.maxCharges, this.reveal.shotIsPowered);
   }
 
   private muzzle(): { x: number; y: number } {
@@ -1314,4 +1425,16 @@ function obstacleOf(c: Crystal): Circle {
   const ux = Math.cos(a) * (half - r);
   const uy = Math.sin(a) * (half - r);
   return { x: w.x, y: w.y, r, seg: { ax: w.x - ux, ay: w.y - uy, bx: w.x + ux, by: w.y + uy } };
+}
+
+/** Charges « tir suivant » selon l'Astre (réglages GD) ; Pip garde son aperçu de visée. */
+function chargesFor(id: string | null): ShotCharges {
+  if (id === 'pip') return new RevealCharges();
+  const rules: Record<string, ChargeRule> = { mousse: MOUSSE_POWER };
+  const info = companionById(id);
+  const rule = (id ? rules[id] : undefined) ?? {
+    chargesPerActivation: 1,
+    maxCharges: info?.power.kind === 'next' ? info.power.maxCharges : 0,
+  };
+  return new ShotCharges(rule);
 }
