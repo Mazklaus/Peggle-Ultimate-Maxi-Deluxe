@@ -83,8 +83,9 @@ export class PauseScene extends Phaser.Scene {
       quickY,
       'sound',
       () => {
+        // Le bouton « son » coupe à la fois les effets et la voix des Astres.
         const v = currentOptions(this).sfxVolume > 0 ? 0 : DEFAULT_VOLUME;
-        updateOptions(this, { sfxVolume: v });
+        updateOptions(this, { sfxVolume: v, voiceVolume: v });
       },
       { diameter: 48, active: o.sfxVolume > 0 },
     );

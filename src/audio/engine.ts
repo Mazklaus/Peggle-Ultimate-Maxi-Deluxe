@@ -2,9 +2,22 @@
  * Moteur Web Audio : contexte, bus (musique / effets / voix), réverbération générée,
  * compresseur de sécurité et « mode doux ». Créé paresseusement au premier geste du joueur.
  */
+import { MIX, sliderToGain } from '../core/audio/mix';
+
 export type BusName = 'music' | 'sfx' | 'voice';
 
-const DEFAULT_VOLUMES: Record<BusName, number> = { music: 0.55, sfx: 0.8, voice: 0.7 };
+/** Position par défaut des curseurs (celle de la sauvegarde neuve). */
+const DEFAULT_SLIDER = 0.8;
+const DEFAULT_VOLUMES: Record<BusName, number> = {
+  music: DEFAULT_SLIDER,
+  sfx: DEFAULT_SLIDER,
+  voice: DEFAULT_SLIDER,
+};
+
+/** Gain d'un bus pour une position de curseur : au défaut, on retrouve exactement le niveau du mixage. */
+export function busGain(bus: BusName, slider: number): number {
+  return (MIX.bus[bus] * sliderToGain(slider)) / sliderToGain(DEFAULT_SLIDER);
+}
 
 export class AudioEngine {
   ctx: AudioContext | null = null;
@@ -14,6 +27,10 @@ export class AudioEngine {
   /** Envoi vers la réverbération (nappe céleste). */
   reverb!: GainNode;
   private noise?: AudioBuffer;
+  /** Effacement automatique de la voix quand les rebonds s'enchaînent (voir MIX.density). */
+  private voiceAuto!: GainNode;
+  private mono = false;
+  private softOn = false;
   private volumes = { ...DEFAULT_VOLUMES };
   private muted = false;
 
@@ -51,9 +68,33 @@ export class AudioEngine {
     return this.muted;
   }
 
+  /** Son mono (accessibilité) : tout est replié sur un seul canal. */
+  setMono(on: boolean): void {
+    this.mono = on;
+    if (!this.ctx) return;
+    this.masterGain.channelCount = on ? 1 : 2;
+    this.masterGain.channelCountMode = on ? 'explicit' : 'max';
+  }
+
+  /** Efface la voix (facteur 0-1) puis la laisse revenir en `recover` secondes. */
+  setVoiceAuto(factor: number, recover: number): void {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    const g = this.voiceAuto.gain;
+    const t = ctx.currentTime;
+    g.cancelScheduledValues(t);
+    g.setTargetAtTime(factor, t, 0.03);
+    g.setTargetAtTime(1, t + recover, 0.25);
+  }
+
   /** Mode doux (accessibilité) : coupe les aigus agressifs. */
   setSoftMode(on: boolean): void {
+    this.softOn = on;
     if (this.ctx) this.soft.frequency.setTargetAtTime(on ? 3200 : 20000, this.ctx.currentTime, 0.1);
+  }
+
+  get isSoft(): boolean {
+    return this.softOn;
   }
 
   /** Baisse temporaire de la musique (ducking) pendant les longues chaînes ou une réplique. */
@@ -63,8 +104,9 @@ export class AudioEngine {
     const g = this.buses.music.gain;
     const t = ctx.currentTime;
     g.cancelScheduledValues(t);
-    g.setTargetAtTime(this.volumes.music * (1 - amount), t, 0.04);
-    g.setTargetAtTime(this.volumes.music, t + seconds, 0.3);
+    const level = busGain('music', this.volumes.music);
+    g.setTargetAtTime(level * (1 - amount), t, 0.04);
+    g.setTargetAtTime(level, t + seconds, 0.3);
   }
 
   /** Tampon de bruit blanc partagé (souffles, percussions, scintillements). */
@@ -101,12 +143,24 @@ export class AudioEngine {
     this.masterGain.gain.value = this.muted ? 0 : 0.9;
     this.masterGain.connect(this.soft).connect(comp).connect(ctx.destination);
 
+    // Voix : effacement automatique + compresseur doux, pour ne jamais saturer le mix.
+    this.voiceAuto = ctx.createGain();
+    const voiceComp = ctx.createDynamicsCompressor();
+    voiceComp.threshold.value = -22;
+    voiceComp.knee.value = 10;
+    voiceComp.ratio.value = 5;
+    voiceComp.attack.value = 0.004;
+    voiceComp.release.value = 0.15;
+    this.voiceAuto.connect(voiceComp).connect(this.masterGain);
+
     for (const bus of ['music', 'sfx', 'voice'] as BusName[]) {
       const g = ctx.createGain();
-      g.gain.value = this.volumes[bus];
-      g.connect(this.masterGain);
+      g.gain.value = busGain(bus, this.volumes[bus]);
+      g.connect(bus === 'voice' ? this.voiceAuto : this.masterGain);
       this.buses[bus] = g;
     }
+    if (this.mono) this.setMono(true);
+    if (this.softOn) this.soft.frequency.value = 3200;
 
     const convolver = ctx.createConvolver();
     convolver.buffer = this.impulse(2.8);

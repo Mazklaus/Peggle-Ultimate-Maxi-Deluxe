@@ -26,7 +26,9 @@ import {
 } from '../core/audio/reactionMap';
 import { CH1_TRACK, JINGLES, type Jingle, type JingleName, type Track } from '../core/audio/score';
 import { chainNote, midiToFreq, pentatonicDegree } from '../core/audio/theory';
-import { PIP } from '../companions/pip';
+import { COMPANION_ROSTER } from '../companions';
+import { HitDensity, MIX, type AudioSettings } from '../core/audio/mix';
+import { MODE_JINGLES, MODE_TRACKS, dailyTrack } from '../core/audio/modes';
 import {
   CUE_PRIORITY,
   PIP_VOICE,
@@ -89,14 +91,16 @@ class MusicControl {
   /**
    * Lance un morceau : 'ch1' à 'ch8', ou 'phare' (hub) avec `astres` = nombre d'Astres réveillés
    * (0 = boîte à musique seule, 8 = thème complet). Le prologue reprend le chapitre 1.
+   * Modes : 'defi', 'duel', 'quotidien' (variante du jour, `date` facultative).
    */
-  start(id: string, options: { astres?: number } = {}): void {
+  start(id: string, options: { astres?: number; date?: Date } = {}): void {
     this.dir.engine.unlock();
     if (id === 'phare') {
       this.player.start(phareTrack(options.astres ?? 0), [1]);
       return;
     }
-    const track = TRACKS[id] ?? CH1_TRACK;
+    const track =
+      id === 'quotidien' ? dailyTrack(options.date) : (TRACKS[id] ?? MODE_TRACKS[id] ?? CH1_TRACK);
     this.player.start(track, layersFor(this.dir.musicState));
   }
 
@@ -127,8 +131,20 @@ export class AudioDirector {
   private followAnimation = false;
   private riser: GainNode | null = null;
 
+  private readonly density = new HitDensity();
+
   constructor() {
-    this.registerCompanion(PIP);
+    // Les cris animés de tous les Astres jouables sont reconnus d'office.
+    for (const c of COMPANION_ROSTER) if (c.def) this.registerCompanion(c.def);
+  }
+
+  /** Applique les réglages de l'écran Options (volumes 0-1, mode doux, mono). */
+  applySettings(s: Partial<AudioSettings>): void {
+    if (s.music !== undefined) this.engine.setVolume('music', s.music);
+    if (s.sfx !== undefined) this.engine.setVolume('sfx', s.sfx);
+    if (s.voice !== undefined) this.engine.setVolume('voice', s.voice);
+    if (s.soft !== undefined) this.engine.setSoftMode(s.soft);
+    if (s.mono !== undefined) this.engine.setMono(s.mono);
   }
 
   unlock(): void {
@@ -174,11 +190,26 @@ export class AudioDirector {
     const data = (payload ?? {}) as GameEventData;
     switch (name) {
       case 'niveau_debut': {
-        const chapter = (payload as { chapter?: number }).chapter ?? 1;
+        const p = payload as { chapter?: number; mode?: string };
+        const chapter = p.chapter ?? 1;
         const astre = CHAPTER_ASTRE[chapter];
         if (astre) this.setAstre(astre);
+        if (p.mode === 'defi' || p.mode === 'duel' || p.mode === 'quotidien') {
+          if (p.mode === 'quotidien') this.modeJingle('quotidien_ouverture');
+          return this.levelStart(p.mode);
+        }
         return this.levelStart(`ch${Math.max(1, chapter)}`);
       }
+      case 'duel_tour':
+        return this.modeJingle(
+          (payload as { joueur?: number }).joueur === 2 ? 'duel_tour_j2' : 'duel_tour_j1',
+        );
+      case 'duel_fin':
+        this.player.stop(0.4);
+        return this.modeJingle('duel_victoire');
+      case 'defi_reussi':
+      case 'defi_rate':
+        return this.modeJingle(name);
       case 'tir_lance':
         this.chain = 0;
         this.descendPlayed = false;
@@ -230,7 +261,7 @@ export class AudioDirector {
         if (data.astre) this.setAstre(data.astre);
         return this.say('pouvoir_active');
       case 'chaine_longue':
-        this.engine.duckMusic(0.35, 1.5);
+        this.engine.duckMusic(MIX.chainDuck.amount, 1.5);
         return this.say('chaine_longue');
       default: {
         const cue = EVENT_VOICE[name] ?? (isVoiceCue(name) ? name : undefined);
@@ -279,7 +310,11 @@ export class AudioDirector {
         celesta(eng, t, note.midi, 0.75, out);
     }
     for (const h of note.harmony) celesta(eng, t, h, 0.4, out);
-    if (this.chain >= 10) eng.duckMusic(0.25, 0.8);
+    if (this.chain >= MIX.chainDuck.chainFrom)
+      eng.duckMusic(MIX.chainDuck.amount, MIX.chainDuck.seconds);
+    // Les rebonds passent avant la voix : plus ils s'enchaînent, plus l'Astre s'efface.
+    this.density.hit(eng.now());
+    eng.setVoiceAuto(this.density.voiceFactor(eng.now()), MIX.density.recover);
 
     // L'Astre s'excite : ses « pip » montent et s'accélèrent avec la jauge.
     const level = excitationLevel(this.excitation.hit(eng.now()));
@@ -341,22 +376,31 @@ export class AudioDirector {
     return Math.max(...j.events.map((e) => e.beat + e.beats)) * (60 / j.bpm);
   }
 
-  private playJingle(j: Jingle, bus: 'sfx' | 'music'): void {
+  /** Jingle des modes : 'duel_tour_j1', 'duel_tour_j2', 'duel_victoire', 'defi_reussi', 'defi_rate', 'quotidien_ouverture'. */
+  modeJingle(name: string): void {
+    const j = MODE_JINGLES[name];
+    if (j) this.playJingle(j, 'sfx', j.pan);
+  }
+
+  private playJingle(j: Jingle, bus: 'sfx' | 'music', pan = 0): void {
     const eng = this.engine;
     if (!eng.ctx) return;
     const beat = 60 / j.bpm;
     const t0 = eng.now() + 0.02;
+    // Mode doux : les explosions orchestrales sont jouées moins fort.
+    const soft = eng.isSoft ? 0.6 : 1;
     for (const ev of j.events) {
       playInstrument(
         eng,
         ev.instrument,
         t0 + ev.beat * beat,
         ev.midi,
-        ev.velocity,
+        ev.velocity * soft,
         ev.beats * beat,
         {
           out: eng.buses[bus],
           wet: 0.45,
+          pan,
         },
       );
     }
@@ -383,7 +427,8 @@ export class AudioDirector {
     const run = (): void => this.voice.play(phrase, profile);
     if (delay > 0) setTimeout(run, delay * 1000);
     else run();
-    if (cue !== 'cristal' && cue !== 'final_ralenti') eng.duckMusic(0.2, phraseDuration(phrase));
+    if (cue !== 'cristal' && cue !== 'final_ralenti')
+      eng.duckMusic(MIX.voiceDuck, phraseDuration(phrase));
   }
 
   /** Écoute directe d'une réplique (banc d'écoute) : sans arbitre ni changement de mode. */
@@ -466,7 +511,7 @@ export class AudioDirector {
     const dur = 6;
     const out = ctx.createGain();
     out.gain.setValueAtTime(0.0001, t);
-    out.gain.exponentialRampToValueAtTime(1, t + 3.5);
+    out.gain.exponentialRampToValueAtTime(eng.isSoft ? 0.55 : 1, t + 3.5);
     out.connect(eng.buses.sfx);
     this.riser = out;
     const lp = ctx.createBiquadFilter();

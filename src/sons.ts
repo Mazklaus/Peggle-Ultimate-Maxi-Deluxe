@@ -63,6 +63,21 @@ function refreshLayers(): void {
   layerButtons[2]?.classList.toggle('on', s.tension);
 }
 
+// Modes (jalon 3)
+const modes = section('Modes : Défis, Constellation du jour, Duel');
+button(modes, '▶ Défi', () => audio.levelStart('defi'));
+button(modes, '▶ Constellation du jour', () => {
+  audio.modeJingle('quotidien_ouverture');
+  audio.levelStart('quotidien');
+});
+button(modes, '▶ Duel', () => audio.levelStart('duel'));
+button(modes, 'Tour joueur 1', () => audio.modeJingle('duel_tour_j1'));
+button(modes, 'Tour joueur 2', () => audio.modeJingle('duel_tour_j2'));
+button(modes, 'Fin de duel', () => audio.onGameEvent('duel_fin'));
+button(modes, 'Défi réussi', () => audio.modeJingle('defi_reussi'));
+button(modes, 'Défi raté', () => audio.modeJingle('defi_rate'));
+button(modes, '■ Stop', () => audio.music.stop());
+
 // Phare
 const phare = section('Thème du phare : un instrument par Astre réveillé');
 [
@@ -201,8 +216,14 @@ for (const bus of ['music', 'sfx', 'voice'] as BusName[]) {
   opts.append(l);
 }
 let soft = false;
-button(opts, 'Mode doux', (b) => {
+button(opts, 'Son doux', (b) => {
   soft = !soft;
-  audio.setSoftMode(soft);
+  audio.applySettings({ soft });
   b.classList.toggle('on', soft);
+});
+let mono = false;
+button(opts, 'Son mono', (b) => {
+  mono = !mono;
+  audio.applySettings({ mono });
+  b.classList.toggle('on', mono);
 });
