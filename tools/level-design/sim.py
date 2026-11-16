@@ -44,6 +44,8 @@ CLOCK_FRAMES, CLOCK_W = int(10*60*0.5), 2.0                      # Horloge : tou
 GRELOT_K, GRELOT_N = 1.15, 3                                     # Grelot : éclair
 NUAGE_VY, NUAGE_W = 450/60, 2.0                                              # Nuage-Lune : vy min
 MAGNET_A, MAGNET_DEAD = 300*0.75**2/3600, 20                     # aimants (decor.ts) : px/frame² pour strength 1
+PORTALS = []  # portails du niveau en cours (ax, ay, bx, by), rayon 18, réentrée 0,3 s
+PORTAL_R, PORTAL_RE = 18, 18
 MAGNETS = []  # aimants du niveau en cours (x, y, radius, strength)
 SHOT = {}  # infos du dernier tir : relance Nuage-Lune consommée
 
@@ -54,7 +56,7 @@ def simulate_shot(pegs, alive, angle, bucket_x0, bucket_dir, max_steps=4000, mot
     vx, vy = math.cos(angle)*SPEED, math.sin(angle)*SPEED
     if start: x, y, vx, vy = start
     LAST_POWER.clear(); SHOT.clear()
-    volte_until = -1; wide = 1.0; bolt = GRELOT_N if mode.get('grelot') else 0; relaunch = bool(mode.get('relaunch'))
+    volte_until = -1; wide = 1.0; p_inside = None; p_ready = 0; bolt = GRELOT_N if mode.get('grelot') else 0; relaunch = bool(mode.get('relaunch'))
     if bolt: vx, vy = vx*GRELOT_K, vy*GRELOT_K
     hits = []; hitset = set(); bx, bd = bucket_x0, bucket_dir
     bspeed = W / BUCKET_CROSS_S / 60
@@ -96,6 +98,16 @@ def simulate_shot(pegs, alive, angle, bucket_x0, bucket_dir, max_steps=4000, mot
             if x < ORB_R: x = ORB_R; vx = abs(vx)*WALL_REST
             if x > W-ORB_R: x = W-ORB_R; vx = -abs(vx)*WALL_REST
             if y < ORB_R: y = ORB_R; vy = abs(vy)*WALL_REST
+            if PORTALS:
+                mouth = None
+                for k, (ax, ay, bx_, by_) in enumerate(PORTALS):
+                    if (x-ax)**2 + (y-ay)**2 <= PORTAL_R**2: mouth = (k, 0, ax, ay, bx_, by_); break
+                    if (x-bx_)**2 + (y-by_)**2 <= PORTAL_R**2: mouth = (k, 1, bx_, by_, ax, ay); break
+                if not mouth: p_inside = None
+                elif (mouth[0], mouth[1]) != p_inside and t >= p_ready:
+                    k, side, fx, fy, ex, ey = mouth
+                    x, y = ex + (x - fx), ey + (y - fy); p_inside = (k, 1 - side); p_ready = t + PORTAL_RE
+                else: p_inside = (mouth[0], mouth[1])
             for i in list(grid.get((int(x//40), int(y//40)), ())) + movers:
                 if i not in alive: continue
                 p = pegs[i]
@@ -152,6 +164,7 @@ def play(level, policy='greedy', rng=None, samples=48):
     pegs = [dict(p) for p in level['pegs']]
     for p in pegs: p['x0'], p['y0'] = p['x'], p['y']
     motion = group_motion(level.get('decor')); T = 0.0
+    PORTALS[:] = [(d['a']['x'], d['a']['y'], d['b']['x'], d['b']['y']) for d in level.get('decor') or [] if d.get('type') == 'portal']
     MAGNETS[:] = [(d['x'], d['y'], d['radius'], d['strength']) for d in level.get('decor') or [] if d.get('type') == 'magnet']
     comp = level.get('companion')
     free = [i for i, p in enumerate(pegs) if 'kind' not in p]
@@ -161,6 +174,10 @@ def play(level, policy='greedy', rng=None, samples=48):
         for _ in range(n): pegs[free[k]]['kind'] = kind; k += 1
     for i in free[k:]: pegs[i]['kind'] = 'common'
     alive = set(range(len(pegs)))
+    regen = {d['id']: d.get('shots', 2) for d in level.get('decor') or [] if d.get('type') == 'regen'}
+    for p in pegs:
+        if p.get('group') in regen: p['kind'] = 'common'  # régénération : toujours communs
+    back = {}  # peg -> numéro du tir où il réapparaît
     hearts_total = sum(1 for p in pegs if p['kind'] == 'heart')
     orbs = level.get('orbs', 10); score = 0; bx, bd = W/2, 1; shots = 0
     def place_bonus():
@@ -172,6 +189,7 @@ def play(level, policy='greedy', rng=None, samples=48):
     place_bonus(); pip = 0; charge = 0; reserve = 0
     while orbs > 0:
         orbs -= 1; shots += 1
+        for i in [i for i, k in back.items() if k <= shots]: alive.add(i); del back[i]
         if policy == 'random':
             ang = math.radians(rng.uniform(8, 172))
         else:
@@ -226,7 +244,9 @@ def play(level, policy='greedy', rng=None, samples=48):
         if comp == 'pip' and got: pip = min(4, pip + 2)
         if comp in ('mousse', 'horloge', 'grelot') and got: charge = min(2, charge + 1)
         if comp == 'nuage-lune' and got: reserve = min(2, reserve + 1)
-        for i in hits: alive.discard(i)
+        for i in hits:
+            if i in alive and pegs[i].get('group') in regen: back[i] = shots + 1 + regen[pegs[i]['group']]
+            alive.discard(i)
         if caught: orbs += 1
         if not any(pegs[i]['kind'] == 'heart' for i in alive):
             score += orbs * 1000 + 2500

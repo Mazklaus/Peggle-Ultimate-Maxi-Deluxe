@@ -238,8 +238,8 @@ L.append(level('ch2-02', 2, 2, 'La ruche s’agite', 'decouverte', 15, 16, 64, 1
 pts = []
 for cx, cy in ((240, 170), (640, 170), (240, 360), (640, 360)):
     pts += arc(cx, cy, 120, 15, 165, 12) + arc(cx, cy + 10, 75, 25, 155, 7)
-pts += line(440, 160, 440, 520, 7)
-L.append(level('ch2-03', 2, 3, 'Les quatre alvéoles', 'application', 13, 18, 64, 1, 2, build(pts, GUARD_IMP), **BOU))
+pts += line(440, 160, 440, 520, 7) + [(385, 270), (495, 270), (385, 450), (495, 450)]  # angles morts (QA)
+L.append(level('ch2-03', 2, 3, 'Les quatre alvéoles', 'application', 14, 18, 64, 1, 2, build(pts, GUARD_IMP), **BOU))
 
 # 2-4 application : lignes en zigzag et rampes.
 walls = [(150, 470, 150, 20), (730, 470, 150, -20)]
@@ -437,6 +437,141 @@ walls = [(280, 320, 140, 18), (600, 320, 140, -18)]
 pts = hole(hole(rows(70, 810, 140, 2, 40, 18) + arc(440, 240, 90, 20, 160, 10) + arc(250, 400, 140, 15, 165, 14) + arc(250, 400, 95, 25, 155, 10)
                + arc(630, 400, 140, 15, 165, 14) + arc(630, 400, 95, 25, 155, 10) + line(440, 400, 440, 560, 4) + rows(80, 800, 570, 1, 0, 18), 130, 220, 50), 750, 220, 50)
 L.append(level('ch4-12', 4, 12, 'La Forge', 'grande-constellation', 15, 22, 82, 1, 2, build(pts, GUARD_IMP_LIGHT, walls=walls), decor=[mag('forge1', 130, 220, 100), mag('forge2', 750, 220, 100)], **VOL))
+
+# ---------- CHAPITRE 5 : Mousse (aimant à cœurs), élément : portails (niveaux 7+) ----------
+MOU = dict(companion='mousse')
+def portal(gid, a, b): return {'id': gid, 'type': 'portal', 'a': {'x': a[0], 'y': a[1]}, 'b': {'x': b[0], 'y': b[1]}}
+def holes(pts, centres, r=45):
+    for x, y in centres: pts = hole(pts, x, y, r)
+    return pts
+
+# 5-1 découverte : trois bols étagés, un pouvoir au fond de chacun.
+imp = [(220, 300, 'power'), (660, 300, 'power'), (440, 460, 'power')]
+pts = arc(220, 200, 120, 15, 165, 13) + arc(660, 200, 120, 15, 165, 13) + arc(440, 360, 130, 15, 165, 14) + arc(220, 200, 75, 30, 150, 7) + arc(660, 200, 75, 30, 150, 7) + arc(440, 360, 85, 30, 150, 8) + rows(100, 780, 160, 1, 0, 10)
+L.append(level('ch5-01', 5, 1, 'Mousse renifle', 'decouverte', 15, 16, 59, 1, 3, build(pts, imp + GUARD_IMP), locked=True, **MOU))
+
+# 5-2 découverte : une fleur, les pouvoirs au cœur et aux pétales du bas.
+imp = [(440, 340, 'power'), (330, 440, 'power'), (550, 440, 'power')]
+pts = star(440, 340, 210, 100, 5, 7) + ring(440, 340, 60, 8) + rows(100, 780, 560, 1, 0, 14) + arc(130, 260, 90, 15, 165, 9) + arc(750, 260, 90, 15, 165, 9) + [(440, 500)]
+L.append(level('ch5-02', 5, 2, 'La fleur de Mousse', 'decouverte', 15, 16, 64, 1, 3, build(pts, imp + GUARD_IMP), locked=True, **MOU))
+
+# 5-3 application : un bouquet de trois fleurs.
+pts = star(200, 280, 130, 65, 5, 5) + star(680, 280, 130, 65, 5, 5) + star(440, 430, 130, 65, 5, 5) + [(200, 280), (680, 280), (440, 430)] + rows(330, 550, 170, 1, 0, 6)
+L.append(level('ch5-03', 5, 3, 'Le bouquet', 'application', 15, 20, 69, 1, 2, build(pts, GUARD_IMP), **MOU))
+
+# 5-4 application : terrasses inclinées entre deux rampes.
+walls = [(440, 250, 160, 15), (440, 430, 160, -15)]
+pts = line(60, 180, 340, 230, 10) + line(540, 230, 820, 180, 10) + line(60, 330, 340, 290, 10) + line(540, 290, 820, 330, 10) + line(60, 420, 340, 470, 10) + line(540, 470, 820, 420, 10) + rows(80, 800, 530, 2, 32, 17)
+L.append(level('ch5-04', 5, 4, 'Les terrasses', 'application', 14, 20, 69, 1, 2, build(pts, GUARD_IMP, walls=walls), **MOU))
+
+# 5-5 application : le sablier.
+pts = [(440 + (i - k/2)*44, 160 + (7-k)*36) for k in range(1, 8) for i in range(k+1)] + pyr(440, 380, 6, 44, 36) + arc(160, 230, 110, 15, 165, 12) + arc(720, 230, 110, 15, 165, 12) + arc(160, 440, 100, 15, 165, 11) + arc(720, 440, 100, 15, 165, 11)
+L.append(level('ch5-05', 5, 5, 'Le sablier', 'application', 15, 20, 74, 1, 2, build(pts, GUARD_IMP), **MOU))
+
+# 5-6 respiration : prairie.
+pts = rows(50, 830, 190, 7, 42, 19)
+L.append(level('ch5-06', 5, 6, 'La prairie', 'respiration', 14, 17, 94, 1, 2, build(pts), **MOU))
+
+# 5-7 combinaison : la première porte, qui mène à un nid fermé.
+A, B = (230, 240), (650, 470)
+pts = holes(rows(70, 810, 140, 2, 40, 18) + arc(230, 240, 110, 200, 340, 9) + arc(650, 470, 70, 200, 520, 14) + arc(650, 470, 115, 190, 350, 10) + arc(230, 450, 110, 15, 165, 12) + line(440, 260, 440, 520, 5) + rows(80, 800, 568, 1, 0, 18), [A, B])
+L.append(level('ch5-07', 5, 7, 'La première porte', 'combinaison', 14, 21, 74, 1, 2, build(pts, GUARD_IMP), decor=[portal('porte', A, B)], **MOU))
+
+# 5-8 combinaison : deux portes croisées.
+A1, B1, A2, B2 = (130, 250), (720, 480), (750, 250), (160, 480)
+pts = holes(rows(70, 810, 140, 2, 40, 18) + arc(440, 260, 120, 15, 165, 13) + ring(720, 480, 70, 10) + ring(160, 480, 70, 10) + hexa(300, 580, 420, 560, 44), [A1, B1, A2, B2])
+L.append(level('ch5-08', 5, 8, 'Les portes croisées', 'combinaison', 13, 21, 74, 1, 2, build(pts, GUARD_IMP_LIGHT), decor=[portal('croix1', A1, B1), portal('croix2', A2, B2)], **MOU))
+
+# 5-9 combinaison : le puits du bas renvoie l'orbe tout en haut, de l'autre côté.
+A, B = (300, 545), (600, 130)
+pts = holes(rows(70, 810, 200, 4, 42, 19) + arc(300, 545, 80, 190, 350, 8) + arc(620, 430, 110, 15, 165, 12) + arc(160, 420, 80, 15, 165, 8), [A, B])
+L.append(level('ch5-09', 5, 9, 'Le puits et l’étoile', 'combinaison', 14, 21, 79, 1, 2, build(pts, GUARD_IMP), decor=[portal('puits', A, B)], **MOU))
+
+# 5-10 maîtrise : une ruche que deux portes traversent.
+A1, B1, A2, B2 = (90, 200), (560, 470), (790, 200), (320, 470)
+pts = holes(hexa(70, 810, 290, 545, 44) + rows(200, 680, 160, 1, 0, 12), [A1, B1, A2, B2])
+L.append(level('ch5-10', 5, 10, 'La ruche aux portes', 'maitrise', 13, 26, 75, 1, 2, build(pts, GUARD_IMP_LIGHT), decor=[portal('r1', A1, B1), portal('r2', A2, B2)], **MOU))
+
+# 5-11 maîtrise : deux jardins clos et leurs portes.
+A1, B1, A2, B2 = (440, 220), (220, 400), (440, 470), (660, 400)
+pts = holes(ring(220, 400, 130, 26) + ring(660, 400, 130, 26) + ring(220, 400, 70, 10) + ring(660, 400, 70, 10) + rows(70, 810, 150, 2, 40, 18) + line(440, 280, 440, 400, 3), [A1, B1, A2, B2])
+L.append(level('ch5-11', 5, 11, 'Les jardins clos', 'maitrise', 13, 22, 84, 1, 2, build(pts, GUARD_IMP), decor=[portal('j1', A1, B1), portal('j2', A2, B2)], **MOU))
+
+# 5-12 Grande Constellation : la Serre, deux portes et deux vitres inclinées.
+walls = [(260, 330, 150, 20), (620, 330, 150, -20)]
+A1, B1, A2, B2 = (100, 330), (600, 500), (780, 330), (280, 500)
+pts = holes(rows(70, 810, 140, 3, 40, 18) + star(440, 300, 110, 55, 5, 5) + arc(280, 470, 110, 15, 165, 12) + arc(600, 470, 110, 15, 165, 12) + arc(280, 470, 65, 30, 150, 6) + arc(600, 470, 65, 30, 150, 6) + rows(80, 800, 570, 1, 0, 18), [A1, B1, A2, B2])
+L.append(level('ch5-12', 5, 12, 'La Serre', 'grande-constellation', 14, 22, 83, 1, 2, build(pts, GUARD_IMP_LIGHT, walls=walls), decor=[portal('serre1', A1, B1), portal('serre2', A2, B2)], **MOU))
+
+# ---------- CHAPITRE 6 : Horloge (ralenti du temps), élément : régénération (niveaux 7+) ----------
+# Règle GD : application et maîtrise denses (l'Horloge ne sert que dans la masse).
+HOR = dict(companion='horloge')
+def regen(gid, shots=2): return {'id': gid, 'type': 'regen', 'shots': shots}
+def tag_regen(pegs, gid, test, cap=15):
+    """Marque comme régénérants (communs) les cristaux ronds libres qui vérifient test(x, y), 15 au plus."""
+    n = 0
+    for p in pegs:
+        if n < cap and p.get('shape') != 'brick' and 'kind' not in p and 'group' not in p and test(p['x'], p['y']):
+            p['group'] = gid; p['kind'] = 'common'; n += 1
+    return pegs
+
+# 6-1 découverte : le cadran, pouvoirs à 12 h, 4 h et 8 h.
+imp = [(440, 200, 'power'), (550, 400, 'power'), (330, 400, 'power')]
+pts = ring(440, 340, 170, 30) + ring(440, 340, 110, 18) + [(440, 340)] + rows(120, 760, 150, 1, 0, 10) + rows(100, 780, 560, 1, 0, 12) + mirror(line(140, 260, 200, 380, 4))
+L.append(level('ch6-01', 6, 1, 'L’Horloge s’éveille', 'decouverte', 10, 20, 55, 1, 3, build(pts, imp + GUARD_IMP), locked=True, **HOR))
+
+# 6-2 découverte : le pendule.
+imp = [(440, 300, 'power'), (300, 470, 'power'), (580, 470, 'power')]
+pts = line(440, 140, 440, 300, 5) + arc(440, 160, 330, 50, 130, 22) + arc(440, 160, 260, 55, 125, 15) + rows(100, 780, 200, 1, 0, 14) + arc(440, 160, 395, 58, 122, 20) + arc(130, 330, 90, 15, 165, 9) + arc(750, 330, 90, 15, 165, 9) + rows(100, 780, 565, 1, 0, 12)
+L.append(level('ch6-02', 6, 2, 'Le pendule', 'decouverte', 10, 20, 60, 1, 3, build(pts, imp + GUARD_IMP), locked=True, **HOR))
+
+# 6-3 application (dense) : les engrenages, trois disques serrés qui se touchent.
+pts = disc(250, 300, 120, 38) + disc(630, 300, 120, 38) + disc(440, 460, 100, 38) + rows(380, 500, 170, 1, 0, 3)
+L.append(level('ch6-03', 6, 3, 'Les engrenages', 'application', 10, 25, 65, 1, 2, build(pts, GUARD_IMP), **HOR))
+
+# 6-4 application (dense) : la ruche du temps.
+pts = hexa(70, 810, 230, 460, 46)
+L.append(level('ch6-04', 6, 4, 'La ruche du temps', 'application', 10, 25, 65, 1, 2, build(pts, GUARD_IMP), **HOR))
+
+# 6-5 application (dense) : nuée sous deux rampes.
+walls = [(220, 230, 150, 20), (660, 230, 150, -20)]
+pts = rows(70, 810, 300, 6, 42, 18) + line(330, 170, 550, 170, 6)
+L.append(level('ch6-05', 6, 5, 'Sous les aiguilles', 'application', 10, 25, 70, 1, 2, build(pts, GUARD_IMP, walls=walls), **HOR))
+
+# 6-6 respiration : la pluie lente.
+pts = rows(50, 830, 190, 7, 42, 19)
+L.append(level('ch6-06', 6, 6, 'Pluie lente', 'respiration', 10, 22, 90, 1, 2, build(pts), **HOR))
+
+# 6-7 combinaison : la première rangée qui repousse (au-dessus d'un bol).
+pts = rows(70, 810, 160, 1, 0, 18) + arc(110, 330, 70, 15, 165, 7) + arc(770, 330, 70, 15, 165, 7) + arc(440, 250, 300, 30, 150, 22) + arc(440, 250, 230, 35, 145, 16) + rows(90, 790, 560, 1, 0, 16) + arc(440, 330, 90, 15, 165, 9)
+L.append(level('ch6-07', 6, 7, 'Ce qui repousse', 'combinaison', 10, 26, 68, 1, 2,
+               tag_regen(build(pts, GUARD_IMP), 'pousse', lambda x, y: y < 170), decor=[regen('pousse')], **HOR))
+
+# 6-8 combinaison : deux haies qui repoussent devant des nids.
+pts = line(110, 280, 330, 280, 6) + line(550, 280, 770, 280, 6) + arc(220, 380, 110, 15, 165, 12) + arc(660, 380, 110, 15, 165, 12) + arc(220, 380, 65, 30, 150, 6) + arc(660, 380, 65, 30, 150, 6) + rows(70, 810, 160, 2, 40, 18) + rows(120, 760, 565, 1, 0, 15) + line(440, 300, 440, 500, 4)
+L.append(level('ch6-08', 6, 8, 'Les haies', 'combinaison', 10, 26, 70, 1, 2,
+               tag_regen(build(pts, GUARD_IMP), 'haie', lambda x, y: abs(y - 280) < 3), decor=[regen('haie')], **HOR))
+
+# 6-9 combinaison : couronne qui repousse autour d'un cœur de nuée.
+pts = ring(440, 360, 180, 30) + disc(440, 360, 110, 34) + rows(70, 810, 140, 1, 0, 18) + arc(110, 470, 70, 15, 165, 7) + arc(770, 470, 70, 15, 165, 7)
+L.append(level('ch6-09', 6, 9, 'La couronne', 'combinaison', 10, 26, 75, 1, 2,
+               tag_regen(build(pts, GUARD_IMP), 'couronne', lambda x, y: abs(math.hypot(x - 440, y - 360) - 180) < 3), decor=[regen('couronne')], **HOR))
+
+# 6-10 maîtrise (dense) : ruche dont la bordure du haut repousse.
+pts = hexa(70, 810, 300, 545, 46)
+L.append(level('ch6-10', 6, 10, 'Le temps têtu', 'maitrise', 10, 27, 75, 1, 2,
+               tag_regen(build(pts, GUARD_IMP), 'bord', lambda x, y: y < 315), decor=[regen('bord')], **HOR))
+
+# 6-11 maîtrise (dense) : deux engrenages denses et leurs dents qui repoussent.
+pts = disc(260, 350, 130, 38) + disc(620, 350, 130, 38) + ring(260, 350, 175, 14) + ring(620, 350, 175, 14) + rows(330, 550, 150, 1, 0, 6)
+L.append(level('ch6-11', 6, 11, 'Les rouages', 'maitrise', 10, 27, 80, 1, 2,
+               tag_regen(build(pts, GUARD_IMP_LIGHT), 'dents', lambda x, y: min(abs(math.hypot(x - 260, y - 350) - 175), abs(math.hypot(x - 620, y - 350) - 175)) < 3), decor=[regen('dents')], **HOR))
+
+# 6-12 Grande Constellation : le Grand Cadran.
+walls = [(300, 240, 120, 25), (580, 240, 120, -25)]
+pts = ring(440, 380, 175, 32) + ring(440, 380, 115, 20) + ring(440, 380, 55, 8) + rows(70, 810, 140, 2, 40, 18) + arc(110, 420, 70, 15, 165, 7) + arc(770, 420, 70, 15, 165, 7)
+L.append(level('ch6-12', 6, 12, 'Le Grand Cadran', 'grande-constellation', 12, 27, 79, 1, 2,
+               tag_regen(build(pts, GUARD_IMP_LIGHT, walls=walls), 'cadran', lambda x, y: abs(math.hypot(x - 440, y - 380) - 115) < 3), decor=[regen('cadran')], **HOR))
 
 out = sys.argv[1] if len(sys.argv) > 1 else 'out'
 os.makedirs(out, exist_ok=True)
