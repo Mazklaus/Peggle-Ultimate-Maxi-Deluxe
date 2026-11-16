@@ -109,8 +109,9 @@ describe('briques, sous-pas et contact sûr', () => {
       vx: 0,
       vy: 4,
       obstacles: [{ x: 413, y: 200, r: 10 }],
-      target: { x: 330, y: 330, r: 4 },
+      target: { x: 300, y: 244, r: 4 },
     };
-    if (predictPath(fragile).contactStep !== null) expect(robustContactStep(fragile)).toBeNull();
+    expect(predictPath(fragile).contactStep).not.toBeNull();
+    expect(robustContactStep(fragile)).toBeNull();
   });
 });

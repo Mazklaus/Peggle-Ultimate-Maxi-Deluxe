@@ -66,6 +66,8 @@ const RESULTS_DELAY_MS = 1400;
 const FAIL_DELAY_MS = 400;
 /** Final au ralenti (GD) : tout le jeu à 0,25 pendant 1,5 s réelles au maximum. */
 const SLOWMO = { scale: 0.25, maxRealMs: 1500 };
+/** Gel d'image au contact du dernier cœur non anticipé (cas lent, demande GD), avant le ralenti. */
+const FINAL_HIT_STOP_MS = 80;
 /** Marge de prudence de la prédiction du final (px retirés au rayon du dernier cœur). */
 const FINAL_PREDICT_MARGIN_PX = 3;
 /** Vitesse minimale (px/s) pour anticiper le final ; en dessous, seul le contact compte. */
@@ -131,6 +133,8 @@ export class GameScene extends Phaser.Scene {
   private breakdown = new ScoreBreakdown();
   private companion?: CompanionView;
   private slowmoUntil = 0;
+  /** Fin (horloge réelle) du gel d'image du final ; 0 = pas de gel. */
+  private hitStopUntil = 0;
   private gameScale = 1;
   private reveal = new RevealCharges();
   /** Tirs restants avec le guide allongé de la lanterne (aide sans Astre). */
@@ -176,6 +180,7 @@ export class GameScene extends Phaser.Scene {
     this.orb = undefined;
     this.ending = false;
     this.slowmoUntil = 0;
+    this.hitStopUntil = 0;
     this.finalShot = false;
     this.finalZonesGfx = undefined;
     this.setTimeScale(1);
@@ -278,6 +283,14 @@ export class GameScene extends Phaser.Scene {
       // Jeu figé : seul l'Astre vit (il dort).
       this.companion?.update(realDelta / 1000, {});
       return;
+    }
+    if (this.hitStopUntil > 0) {
+      // Gel d'image du final : tout est figé, l'Astre retient son souffle.
+      this.companion?.update(realDelta / 1000, {});
+      if (time < this.hitStopUntil) return;
+      this.hitStopUntil = 0;
+      this.matter.world.resume();
+      this.tweens.resumeAll();
     }
     this.updateSlowmo(time);
     const delta = realDelta * this.gameScale;
@@ -673,8 +686,15 @@ export class GameScene extends Phaser.Scene {
 
   private startSlowmo(): void {
     if (this.slowmoUntil > 0) return;
-    this.slowmoUntil = this.time.now + SLOWMO.maxRealMs;
+    // Après un gel d'image, le ralenti dure tout son temps une fois le jeu reparti.
+    this.slowmoUntil = Math.max(this.time.now, this.hitStopUntil) + SLOWMO.maxRealMs;
     this.applyGameScale(SLOWMO.scale);
+  }
+
+  private startHitStop(): void {
+    this.hitStopUntil = this.time.now + FINAL_HIT_STOP_MS;
+    this.matter.world.pause();
+    this.tweens.pauseAll();
   }
 
   private updateSlowmo(now: number): void {
@@ -764,11 +784,12 @@ export class GameScene extends Phaser.Scene {
     this.emitAll(this.tracker.crystalLit(crystal.kind, this.level.shotScore, crystal.id));
     if (isFinalHeartLit(this.level)) {
       // Filet de sécurité : le dernier cœur touché sans prédiction préalable.
-      if (this.slowmoUntil === 0) this.emitAll(['final_ralenti']);
-      else if (this.slowmoUntil < 0) {
-        // Un ralenti a déjà eu lieu pendant ce tir : on le relance pour le vrai contact.
+      // Pas encore de ralenti, ou un ralenti déjà terminé pendant ce tir : petit gel
+      // d'image, l'Astre réagit, puis le ralenti part pour le vrai contact.
+      if (this.slowmoUntil <= 0) {
         this.slowmoUntil = 0;
-        this.startSlowmo();
+        this.startHitStop();
+        this.emitAll(['final_ralenti']);
       }
       this.showFinalZones();
     }
@@ -994,8 +1015,6 @@ export class GameScene extends Phaser.Scene {
     });
   }
 }
-
-/** « ch1-04 » -> « 1-4 », « pro-02 » -> « P-2 » (numéro de niveau du bandeau). */
 
 /**
  * Forme d'un cristal pour les prédictions de trajectoire : cercle de son rayon, ou capsule
