@@ -93,7 +93,7 @@ export const COMPANION_ROSTER: readonly CompanionInfo[] = [
     name: 'Nuage-Lune',
     color: 0xd6dcff,
     def: NUAGE_LUNE,
-    power: { name: 'Seconde chance', kind: 'reserve', maxCharges: 1 },
+    power: { name: 'Seconde chance', kind: 'reserve', maxCharges: 2 },
     wakesAtChapter: 8,
   },
 ];

@@ -56,6 +56,8 @@ import { wakeSequenceFor } from '../core/story';
 import { CompanionView } from './CompanionView';
 import type { ResultsData } from './ResultsScene';
 import { CRYSTAL_COLORS, CRYSTAL_COLORS_CB, PALETTE, textStyle } from './theme';
+import { ChapterBackdrop, preloadBackdrop } from './ChapterBackdrop';
+import { earnedStars } from '../core/backdrop';
 import { DecorLayer } from './DecorLayer';
 import { PORTAL } from '../core/decor';
 import { LANTERN } from './gardienne';
@@ -188,6 +190,7 @@ export class GameScene extends Phaser.Scene {
   private shotCatches = 0;
   /** Temps de jeu restant (s) du rebond fou de Volte ; 0 = inactif. */
   private crazyLeft = 0;
+  private backdrop?: ChapterBackdrop;
   /** Seconde chance de Nuage-Lune déjà servie sur ce tir (une par tir, l'autre charge reste). */
   private secondChanceUsed = false;
   private bucketEdgeTween?: Phaser.Tweens.Tween;
@@ -258,6 +261,11 @@ export class GameScene extends Phaser.Scene {
     this.sceneData = data;
   }
 
+  preload(): void {
+    // Fond du chapitre (couches SVG du DA), chargé à la demande puis gardé en cache.
+    preloadBackdrop(this, this.sceneData.level.chapter || 1);
+  }
+
   create(): void {
     // Une scène relancée depuis la pause garde ses champs et l'état de ses entrées.
     this.paused = false;
@@ -293,6 +301,7 @@ export class GameScene extends Phaser.Scene {
     this.colors = save?.options.colorblind ? CRYSTAL_COLORS_CB : CRYSTAL_COLORS;
     this.level = levelFromData(this.sceneData.level);
 
+    this.backdrop = new ChapterBackdrop(this, this.sceneData.level.chapter);
     this.drawFrame();
     this.makeWalls();
     const decorGfx = this.add.graphics(); // supports du décor, sous les cristaux
@@ -412,6 +421,7 @@ export class GameScene extends Phaser.Scene {
     this.gameTime += delta / 1000;
     this.moveBucket(delta);
     this.cannon.setRotation(this.aimAngle);
+    this.backdrop?.update(realDelta / 1000, this.aimAngle);
     this.handleKeyboardAim(delta);
     this.drawGuide();
 
@@ -1439,6 +1449,12 @@ export class GameScene extends Phaser.Scene {
     };
     // Overlay par-dessus le jeu, qui n'est PAS mis en pause : l'Astre continue de vivre.
     const delay = won ? RESULTS_DELAY_MS : FAIL_DELAY_MS;
+    if (won) {
+      // La constellation du chapitre s'allume : étoiles gagnées une à une (specs-decors).
+      const save = this.registry.get(REGISTRY.save) as SaveData | undefined;
+      const earned = earnedStars(save, this.sceneData.level.id);
+      this.backdrop?.lightUp(earned.indices, earned.complete);
+    }
     this.time.delayedCall(delay, () => this.scene.launch(SCENES.results, payload));
   }
 

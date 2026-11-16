@@ -10,7 +10,7 @@ describe('liste des Astres', () => {
 
   it('charges des pouvoirs selon le Game Designer', () => {
     expect(companionById('pip')?.power.maxCharges).toBe(4);
-    expect(companionById('nuage-lune')?.power).toMatchObject({ kind: 'reserve', maxCharges: 1 });
+    expect(companionById('nuage-lune')?.power).toMatchObject({ kind: 'reserve', maxCharges: 2 });
     for (const c of COMPANION_ROSTER)
       expect(c.power.maxCharges === 0).toBe(c.power.kind === 'immediate');
   });
