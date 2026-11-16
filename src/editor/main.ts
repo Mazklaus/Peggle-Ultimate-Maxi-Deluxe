@@ -25,6 +25,7 @@ import {
   emptyLevel,
   makePeg,
   pegAt,
+  pegRadius,
   setKind,
   snap,
   type ToolKind,
@@ -207,13 +208,7 @@ function drawPeg(p: LevelPeg, isSelected: boolean, isCrowded: boolean): void {
     ctx.strokeStyle = isCrowded ? '#FF7A6B' : '#FFFFFF';
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.arc(
-      p.x,
-      p.y,
-      (p.shape === 'brick' ? (p.w ?? BRICK_W) / 2 : DEFAULT_PEG_R) + 6,
-      0,
-      Math.PI * 2,
-    );
+    ctx.arc(p.x, p.y, pegRadius(p) + 6, 0, Math.PI * 2);
     ctx.stroke();
   }
 }
@@ -360,7 +355,7 @@ function placed(x: number, y: number): { x: number; y: number } {
   return clampToZone(snap(x, g), snap(y, g));
 }
 
-let drag: { index: number; dx: number; dy: number; moved: boolean } | null = null;
+let drag: { index: number; dx: number; dy: number; moved: boolean; placed: boolean } | null = null;
 
 canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 canvas.addEventListener('mousedown', (e) => {
@@ -375,12 +370,12 @@ canvas.addEventListener('mousedown', (e) => {
   if (hit >= 0) {
     const p = level.pegs[hit] as LevelPeg;
     selected = hit;
-    drag = { index: hit, dx: p.x - pt.x, dy: p.y - pt.y, moved: false };
+    drag = { index: hit, dx: p.x - pt.x, dy: p.y - pt.y, moved: false, placed: false };
   } else {
     const pos = placed(pt.x, pt.y);
     level.pegs.push(makePeg(pos.x, pos.y, tool.shape(), tool.kind()));
     selected = level.pegs.length - 1;
-    drag = { index: selected, dx: 0, dy: 0, moved: true };
+    drag = { index: selected, dx: 0, dy: 0, moved: true, placed: true };
   }
   refresh();
 });
@@ -400,6 +395,8 @@ window.addEventListener('mousemove', (e) => {
 window.addEventListener('mouseup', () => {
   if (!drag) return;
   if (!drag.moved) history.pop(); // simple sélection : rien à annuler
+  // Après une pose, on désélectionne : changer d'outil ne doit pas modifier ce peg.
+  if (drag.placed) selected = -1;
   drag = null;
   refresh();
 });

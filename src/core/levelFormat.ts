@@ -227,12 +227,46 @@ export function checkLayout(pegs: readonly LevelPeg[], assign: LevelAssign): str
   return errors;
 }
 
-/** JSON stable et lisible : un peg par ligne, pour des diffs propres dans le dépôt. */
+const LEVEL_KEYS = [
+  'format',
+  'id',
+  'chapter',
+  'index',
+  'companion',
+  'companionLocked',
+  'title',
+  'rhythm',
+  'orbs',
+  'stars',
+  'assign',
+] as const;
+const PEG_KEYS = ['x', 'y', 'shape', 'r', 'w', 'h', 'angle', 'kind'] as const;
+
+/** Objet ou tableau court sur une ligne : {"x": 60, "y": 120}. */
+function inline(value: unknown): string {
+  return JSON.stringify(value).replace(/([:,])(?=["\d[{tfn-])/g, '$1 ');
+}
+
+/**
+ * Forme canonique des fichiers du dépôt (public/levels) : clés dans un ordre fixe,
+ * un peg par ligne. Relire puis réécrire un fichier canonique le laisse identique.
+ */
 export function serializeLevel(level: LevelData): string {
-  const { pegs, ...head } = level;
-  const json = JSON.stringify({ ...head, pegs: [] }, null, 2);
-  const body = pegs.length
-    ? `[\n${pegs.map((p) => '    ' + JSON.stringify(p)).join(',\n')}\n  ]`
-    : '[]';
-  return json.replace('"pegs": []', () => `"pegs": ${body}`) + '\n';
+  const head = LEVEL_KEYS.filter((k) => level[k] !== undefined).map((k) => {
+    const v = level[k];
+    const text =
+      k === 'stars'
+        ? `[\n    ${(v as number[]).join(',\n    ')}\n  ]`
+        : k === 'assign'
+          ? JSON.stringify(v, null, 2).replace(/\n/g, '\n  ')
+          : JSON.stringify(v);
+    return `  "${k}": ${text}`;
+  });
+  const pegs = level.pegs.map((p) => {
+    const ordered: Record<string, unknown> = {};
+    for (const k of PEG_KEYS) if (p[k] !== undefined) ordered[k] = p[k];
+    return '    ' + inline(ordered);
+  });
+  const pegsText = pegs.length ? `[\n${pegs.join(',\n')}\n  ]` : '[]';
+  return `{\n${[...head, `  "pegs": ${pegsText}`, `  "decor": ${JSON.stringify(level.decor)}`].join(',\n')}\n}\n`;
 }
