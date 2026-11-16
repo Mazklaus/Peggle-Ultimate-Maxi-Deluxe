@@ -45,10 +45,100 @@
         color: #f4f1ff;
         opacity: 1;
       }
+      /* Mobile : l'éditeur reste un outil de bureau (specs UI/UX jalon 3, 7.2). */
+      @media (pointer: coarse) {
+        #editor-link {
+          display: none !important;
+        }
+      }
+      /* Portrait sur mobile : « tourne ton appareil », sans texte obligatoire (jalon 3, 7.2). */
+      #rotate {
+        display: none;
+      }
+      @media (orientation: portrait) and (pointer: coarse) {
+        #rotate {
+          position: fixed;
+          inset: 0;
+          z-index: 10;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 28px;
+          background: #0b1026;
+        }
+        #game {
+          visibility: hidden;
+        }
+      }
+      #rotate .phone {
+        width: 132px;
+        height: 132px;
+        animation: rotate-hint 2.4s ease-in-out infinite;
+      }
+      #rotate .astre {
+        width: 84px;
+        height: 84px;
+        transform-origin: 50% 90%;
+        animation: tilt 2.4s ease-in-out infinite;
+      }
+      @keyframes rotate-hint {
+        0%,
+        20% {
+          transform: rotate(0deg);
+        }
+        55%,
+        80% {
+          transform: rotate(-90deg);
+        }
+        100% {
+          transform: rotate(0deg);
+        }
+      }
+      @keyframes tilt {
+        0%,
+        20% {
+          transform: rotate(0deg);
+        }
+        55%,
+        80% {
+          transform: rotate(-24deg);
+        }
+        100% {
+          transform: rotate(0deg);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #rotate .phone,
+        #rotate .astre {
+          animation: none;
+        }
+      }
     </style>
   </head>
   <body>
     <div id="game"></div>
+    <div id="rotate" role="img" aria-label="Tourne ton appareil en paysage">
+      <img class="phone" src="./da/icones/tourne-appareil.svg" alt="" />
+      <svg class="astre" viewBox="0 0 84 84" aria-hidden="true">
+        <path
+          d="M42 6 L51 30 L77 31 L56 47 L64 73 L42 58 L20 73 L28 47 L7 31 L33 30 Z"
+          fill="#FFE45C"
+          stroke="#FFE45C"
+          stroke-width="6"
+          stroke-linejoin="round"
+        />
+        <ellipse cx="34" cy="42" rx="3.5" ry="5" fill="#1B2350" />
+        <ellipse cx="50" cy="42" rx="3.5" ry="5" fill="#1B2350" />
+        <path
+          d="M36 52 Q42 57 48 52"
+          stroke="#1B2350"
+          stroke-width="3"
+          fill="none"
+          stroke-linecap="round"
+        />
+      </svg>
+    </div>
     <a id="editor-link" href="./editor.html">✎ Éditeur de niveaux</a>
     <script type="module" src="/src/main.ts"></script>
   </body>

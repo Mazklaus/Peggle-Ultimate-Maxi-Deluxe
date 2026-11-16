@@ -182,3 +182,19 @@ describe('Constellation du jour (save.daily)', () => {
     expect(loadSave(storage)).not.toHaveProperty('daily');
   });
 });
+
+describe('vitesse du jeu (jalon 3)', () => {
+  it('défaut normal, valeur inconnue ramenée à 1', () => {
+    const store = new Map<string, string>();
+    const storage = {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => void store.set(k, v),
+    };
+    expect(loadSave(storage).options.speed).toBe(1);
+    const s = loadSave(storage);
+    store.set('ricochet:save', JSON.stringify({ ...s, options: { ...s.options, speed: 3 } }));
+    expect(loadSave(storage).options.speed).toBe(1);
+    store.set('ricochet:save', JSON.stringify({ ...s, options: { ...s.options, speed: 0.8 } }));
+    expect(loadSave(storage).options.speed).toBe(0.8);
+  });
+});

@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { audio } from '../audio';
 import { GAME_HEIGHT, GAME_WIDTH } from '../config';
 import type { CrystalKind } from '../core/level';
-import { writeSave, type Options, type SaveData } from '../core/save';
+import { GAME_SPEEDS, writeSave, type Options, type SaveData } from '../core/save';
 import { OPTIONS_CHANGED, REGISTRY, SCENES } from './keys';
 import { CRYSTAL_COLORS, CRYSTAL_COLORS_CB, setColorblindPower, textStyle } from './theme';
 import { panel, veil } from './ui';
@@ -11,6 +11,7 @@ import {
   icon,
   iconButton,
   label,
+  segmented,
   slider,
   toggle,
   type IconName,
@@ -70,7 +71,7 @@ export class OptionsScene extends Phaser.Scene {
       diameter: 48,
     });
 
-    const rowY = (i: number) => top + 116 + i * 66;
+    const rowY = (i: number) => top + 112 + i * 58;
     const row = (i: number, name: IconName, text: string) => {
       icon(this, left + 60, rowY(i), name, 32);
       label(this, left + 150, rowY(i), text, 16).setOrigin(0, 0.5);
@@ -119,7 +120,18 @@ export class OptionsScene extends Phaser.Scene {
       updateOptions(this, { reducedMotion: v }),
     );
 
-    enableKeyboardFocus(this, [music, sfx, voice, soft, mono, cb, motion, back], 0);
+    row(7, 'next', 'Vitesse');
+    const speedIndex = Math.max(0, GAME_SPEEDS.indexOf(o.speed));
+    const speed = segmented(
+      this,
+      ctrlX + 10,
+      rowY(7),
+      ['Lent', 'Normal', 'Rapide'],
+      speedIndex,
+      (i) => updateOptions(this, { speed: GAME_SPEEDS[i] ?? 1 }),
+    );
+
+    enableKeyboardFocus(this, [music, sfx, voice, soft, mono, cb, motion, speed, back], 0);
     this.input.keyboard?.on('keydown-ESC', () => this.close());
   }
 
