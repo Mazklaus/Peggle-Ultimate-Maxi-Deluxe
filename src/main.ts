@@ -8,6 +8,7 @@ import { BootScene } from './scenes/BootScene';
 import { CompanionLayer } from './scenes/CompanionLayer';
 import { CompanionSelectScene } from './scenes/CompanionSelectScene';
 import { CutsceneScene } from './scenes/CutsceneScene';
+import { DailyScene } from './scenes/DailyScene';
 import { GameScene } from './scenes/GameScene';
 import { MapScene } from './scenes/MapScene';
 import { MemoriesScene } from './scenes/MemoriesScene';
@@ -63,6 +64,7 @@ function startGame(): void {
       CompanionLayer,
       CompanionSelectScene,
       MemoriesScene,
+      DailyScene,
     ],
   });
 }
