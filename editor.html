@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Éditeur de niveaux</title>
+    <link rel="stylesheet" href="/src/editor/editor.css" />
+  </head>
+  <body>
+    <header>
+      <strong>Éditeur de niveaux</strong>
+      <div class="actions">
+        <button id="new">Nouveau</button>
+        <button id="import">Importer…</button>
+        <input id="file" type="file" accept=".json,application/json" hidden />
+        <button id="export">Exporter .json</button>
+        <button id="copy">Copier le JSON</button>
+        <button id="undo" title="Ctrl+Z">Annuler</button>
+        <button id="test" class="primary">▶ Tester</button>
+        <a href="./">Jeu</a>
+      </div>
+    </header>
+    <main>
+      <aside id="tools">
+        <h2>Outil</h2>
+        <fieldset id="kinds">
+          <legend>Kind (touches 1 à 5)</legend>
+          <label
+            ><input type="radio" name="kind" value="auto" checked /> Auto (tiré via assign)</label
+          >
+          <label><input type="radio" name="kind" value="heart" /> Cœur</label>
+          <label><input type="radio" name="kind" value="common" /> Commun</label>
+          <label><input type="radio" name="kind" value="power" /> Pouvoir</label>
+          <label><input type="radio" name="kind" value="wall" /> Mur (incassable)</label>
+        </fieldset>
+        <fieldset>
+          <legend>Forme (touche B)</legend>
+          <label><input type="radio" name="shape" value="circle" checked /> Rond</label>
+          <label><input type="radio" name="shape" value="brick" /> Brique</label>
+        </fieldset>
+        <label><input id="snap" type="checkbox" checked /> Grille magnétique</label>
+        <label>Pas <input id="grid" type="number" min="2" max="80" value="20" /></label>
+        <h2>Sélection</h2>
+        <div id="selection">Aucun peg sélectionné.</div>
+        <p class="help">
+          Clic : poser / sélectionner. Glisser : déplacer. Clic droit ou Suppr : effacer. Q / E :
+          tourner une brique. Les kinds choisis s'appliquent aussi au peg sélectionné.
+        </p>
+      </aside>
+      <section id="stage">
+        <canvas id="canvas" width="880" height="656"></canvas>
+        <div id="counts"></div>
+      </section>
+      <aside id="meta">
+        <h2>Niveau</h2>
+        <label>id <input id="f-id" /></label>
+        <label>chapter <input id="f-chapter" type="number" min="0" max="8" /></label>
+        <label>index <input id="f-index" type="number" min="1" max="12" /></label>
+        <label
+          >companion
+          <select id="f-companion"></select
+        ></label>
+        <label><input id="f-companionLocked" type="checkbox" /> companionLocked</label>
+        <label>title <input id="f-title" /></label>
+        <label
+          >rhythm
+          <select id="f-rhythm"></select
+        ></label>
+        <label>orbs <input id="f-orbs" type="number" min="1" /></label>
+        <label>stars 2★ <input id="f-star2" type="number" min="0" step="1000" /></label>
+        <label>stars 3★ <input id="f-star3" type="number" min="0" step="1000" /></label>
+        <h2>assign (tirage)</h2>
+        <label>hearts <input id="f-hearts" type="number" min="0" /></label>
+        <label>power <input id="f-power" type="number" min="0" /></label>
+        <label>bonus <input id="f-bonus" type="number" min="0" /></label>
+        <h2>Validation</h2>
+        <ul id="errors"></ul>
+      </aside>
+    </main>
+    <script type="module" src="/src/editor/main.ts"></script>
+  </body>
+</html>
