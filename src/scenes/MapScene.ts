@@ -28,6 +28,7 @@ import {
   astreDef,
   chapter as chapterDef,
   CHAPTERS,
+  MAP_BACKGROUNDS,
   miniPoints,
   PROLOGUE_NODES,
   SKY,
@@ -91,12 +92,9 @@ export class MapScene extends Phaser.Scene {
   }
 
   preload(): void {
-    const svg = (key: string, file: string) => {
+    // Normalement déjà chargés par le Boot (pas de noir prolongé à l'entrée de la carte).
+    for (const { key, file } of MAP_BACKGROUNDS)
       if (!this.textures.exists(key)) this.load.svg(key, file, { width: 1280, height: 720 });
-    };
-    for (const c of CHAPTERS) svg(c.bg.key, c.bg.file);
-    svg(SKY.bg.key, SKY.bg.file);
-    svg(SKY.observatory.key, SKY.observatory.file);
   }
 
   create(data: MapSceneData = {}): void {
@@ -402,8 +400,10 @@ export class MapScene extends Phaser.Scene {
     const r = v.r[0] + (v.r[1] - v.r[0]) * k;
     const a = v.alpha[0] + (v.alpha[1] - v.alpha[0]) * k;
     const glow = this.add.graphics({ x: v.x, y: v.y });
-    for (let i = 8; i >= 1; i--)
-      glow.fillStyle(0xffe9c2, (a / 8) * 1.4).fillCircle(0, 0, (r * i) / 8);
+    // Dégradé radial quasi continu : beaucoup de couches très légères (pas de paliers visibles).
+    const layers = 40;
+    for (let i = layers; i >= 1; i--)
+      glow.fillStyle(0xffe9c2, (a / layers) * 1.4).fillCircle(0, 0, (r * i) / layers);
     const body = this.add.graphics({ x: v.x, y: v.y });
     body.fillStyle(0xffe9c2, 0.95).fillPoints(starPoints8(0, 0, 30, 18), true);
     // Yeux fermés.

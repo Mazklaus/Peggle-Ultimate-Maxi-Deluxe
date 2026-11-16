@@ -101,7 +101,10 @@ export class CompanionSelectScene extends Phaser.Scene {
       frame
         .fillStyle(PALETTE.nightLight, 1)
         .fillRoundedRect(-LOGE.w / 2, -LOGE.h / 2, LOGE.w, LOGE.h, 14);
-      root.add(this.add.text(0, 0, '?', textStyle(40, TEXT.dim)).setOrigin(0.5));
+      // Pas encore réveillé : silhouette neutre + « ? », sans sol coloré (spec 2.2).
+      const shadow = this.add.graphics();
+      shadow.fillStyle(0x141b3d, 1).fillCircle(0, 4, 30);
+      root.add([shadow, this.add.text(0, 2, '?', textStyle(40, TEXT.dim)).setOrigin(0.5)]);
     } else {
       frame
         .fillStyle(0x232a5c, selectable ? 1 : 0.5)
@@ -141,15 +144,15 @@ export class CompanionSelectScene extends Phaser.Scene {
   private paintLoge(id: string, chosen: boolean): void {
     const l = this.loges.get(id);
     if (!l) return;
+    const awake =
+      COMPANION_ROSTER.find((c) => c.id === id)!.wakesAtChapter <= this.data0.reachedChapter;
     l.floor.clear();
-    l.floor.fillStyle(l.color, chosen ? 0.35 : 0.15).fillEllipse(0, 36 + 4, 76, 16);
+    if (awake) l.floor.fillStyle(l.color, chosen ? 0.35 : 0.15).fillEllipse(0, 36 + 4, 76, 16);
     l.root.setY(LOGE.y - (chosen ? LOGE.raise : 0));
     l.frame.lineStyle(3, PALETTE.accent, chosen ? 1 : 0);
     if (chosen) l.frame.strokeRoundedRect(-LOGE.w / 2, -LOGE.h / 2, LOGE.w, LOGE.h, 14);
     else {
       // Redessine sans contour.
-      const awake =
-        COMPANION_ROSTER.find((c) => c.id === id)!.wakesAtChapter <= this.data0.reachedChapter;
       const selectable = this.data0.choices.includes(id);
       l.frame.clear();
       l.frame
