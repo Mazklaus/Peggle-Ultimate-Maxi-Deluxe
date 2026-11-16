@@ -15,10 +15,23 @@
         width: 100%;
         height: 100%;
       }
+      /* Accès discret à l'éditeur de niveaux (outil interne). */
+      #editor-link {
+        position: fixed;
+        right: 8px;
+        bottom: 6px;
+        font: 12px sans-serif;
+        color: #a9b0d6;
+        opacity: 0.5;
+      }
+      #editor-link:hover {
+        opacity: 1;
+      }
     </style>
   </head>
   <body>
     <div id="game"></div>
+    <a id="editor-link" href="./editor.html">Éditeur de niveaux</a>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

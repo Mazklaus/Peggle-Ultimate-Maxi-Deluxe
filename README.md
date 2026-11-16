@@ -62,5 +62,6 @@ merge main  -> Deploy web (.github/workflows/deploy-web.yml) : build puis public
 
 - Build web jouable : https://mazklaus.github.io/Peggle-Ultimate-Maxi-Deluxe/
 - Redéployer à la main : onglet Actions > Deploy web > Run workflow.
+- Éditeur de niveaux : https://mazklaus.github.io/Peggle-Ultimate-Maxi-Deluxe/editor.html (format : [docs/level-format.md](docs/level-format.md)).
 - Tester la build de prod en local : `npm run build && npm run preview`.
 - Archive pour itch.io : zipper le contenu de `dist/` (le `base: './'` de Vite rend les chemins relatifs).

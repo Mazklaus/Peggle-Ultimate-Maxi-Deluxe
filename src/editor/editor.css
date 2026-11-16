@@ -1,0 +1,130 @@
+:root {
+  --bg: #0b1026;
+  --panel: #1b2350;
+  --text: #f4f1ff;
+  --muted: #a9b0d6;
+  --accent: #b9a6ff;
+  --ok: #4ff0a8;
+  --alert: #ff7a6b;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font:
+    14px/1.4 system-ui,
+    sans-serif;
+}
+header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  background: var(--panel);
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+button {
+  background: #232a5c;
+  color: var(--text);
+  border: 1px solid #3b2e6e;
+  border-radius: 6px;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+button.primary {
+  background: var(--accent);
+  color: var(--bg);
+  font-weight: 600;
+}
+a {
+  color: var(--accent);
+}
+main {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr) 220px;
+  gap: 12px;
+  padding: 12px 16px;
+}
+aside {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+h2 {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  margin: 10px 0 2px;
+}
+fieldset {
+  border: 1px solid #3b2e6e;
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+legend {
+  color: var(--muted);
+}
+label {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: space-between;
+}
+fieldset label {
+  justify-content: flex-start;
+}
+input:not([type='checkbox'], [type='radio']),
+select {
+  width: 110px;
+  background: #141b3d;
+  color: var(--text);
+  border: 1px solid #3b2e6e;
+  border-radius: 4px;
+  padding: 3px 5px;
+}
+#stage {
+  min-width: 0;
+}
+canvas {
+  width: 100%;
+  height: auto;
+  border-radius: 8px;
+  cursor: crosshair;
+  display: block;
+}
+#counts {
+  margin-top: 6px;
+  color: var(--muted);
+}
+#errors {
+  padding-left: 18px;
+  margin: 0;
+  color: var(--alert);
+}
+#errors li.ok {
+  color: var(--ok);
+  list-style: none;
+  margin-left: -18px;
+}
+.help {
+  color: var(--muted);
+  font-size: 12px;
+}
+@media (max-width: 900px) {
+  main {
+    grid-template-columns: 1fr;
+  }
+}
