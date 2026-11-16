@@ -8,7 +8,8 @@ import Phaser from 'phaser';
 import { gameEvents, type GameEventName } from '../core/events';
 import { drawGardienne, LANTERN } from './gardienne';
 import { drawPowerHex, drawPowerIcon } from './powerIcons';
-import { PALETTE, TEXT, textStyle } from './theme';
+import { powerParticle } from './powerFx';
+import { PALETTE, powerColor, TEXT, textStyle } from './theme';
 
 /** Géométrie des specs (coordonnées écran 1280 × 720). */
 export const HUD_LAYOUT = {
@@ -27,7 +28,6 @@ export const HUD_LAYOUT = {
 
 const LOGE_BG = 0x232a5c;
 const CORAL = '#FF7A6B';
-const MINT = 0x4ff0a8;
 const LABEL = (s: number) => ({ ...textStyle(s, TEXT.dim), fontStyle: 'bold' });
 
 export interface HudState {
@@ -139,6 +139,17 @@ export class GameHud {
     scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.unsubscribe());
   }
 
+  /** Mode daltonien changé en cours de niveau : hexagone et pastilles à la nouvelle couleur. */
+  recolorPower(): void {
+    const g = this.powerIcon?.list[0];
+    if (g instanceof Phaser.GameObjects.Graphics && this.opts.power) {
+      g.clear();
+      drawPowerHex(g, 0, 0, POWER_HEX);
+      drawPowerIcon(g, this.opts.power.id, 0, 0, POWER_HEX * 0.62);
+    }
+    this.drawPower();
+  }
+
   /** Charges du pouvoir sous l'Astre (pastilles « tir suivant », bouclier « réserve »). */
   setPower(charges: number, max: number, lit: boolean): void {
     const prev = this.power.charges;
@@ -181,25 +192,25 @@ export class GameHud {
     if (kind === 'next') {
       for (let i = 0; i < max; i++) {
         const x = x0 + i * 16;
-        if (i < charges) g.fillStyle(MINT, 1).fillCircle(x, p.y, 5);
-        else g.lineStyle(2, MINT, 0.35).strokeCircle(x, p.y, 5);
+        if (i < charges) g.fillStyle(powerColor(), 1).fillCircle(x, p.y, 5);
+        else g.lineStyle(2, powerColor(), 0.35).strokeCircle(x, p.y, 5);
       }
     } else if (kind === 'reserve') {
       // Un bouclier par charge en réserve (Nuage-Lune : 2 au plus).
       for (let i = 0; i < Math.max(1, max); i++) {
         const pts = shield(x0 + 4 + i * SHIELD_STEP, p.y, 9);
-        if (i < charges) g.fillStyle(MINT, 1).fillPoints(pts, true);
-        else g.lineStyle(2, MINT, 0.35).strokePoints(pts, true);
+        if (i < charges) g.fillStyle(powerColor(), 1).fillPoints(pts, true);
+        else g.lineStyle(2, powerColor(), 0.35).strokePoints(pts, true);
       }
     } else {
       if (ring > 0) {
         // Volte : anneau qui se vide sur la durée de l'effet.
-        g.lineStyle(3, MINT, 0.9).beginPath();
+        g.lineStyle(3, powerColor(), 0.9).beginPath();
         g.arc(p.x, p.y, POWER_HEX / 2 + 5, -Math.PI / 2, -Math.PI / 2 + ring * Math.PI * 2);
         g.strokePath();
       }
       if (twins) {
-        g.fillStyle(MINT, 1).fillCircle(x0, p.y - 5, 4);
+        g.fillStyle(powerColor(), 1).fillCircle(x0, p.y - 5, 4);
         g.fillCircle(x0, p.y + 5, 4);
       }
     }
@@ -210,7 +221,7 @@ export class GameHud {
     const to = this.opts.cannon;
     if (!to) return;
     const p = this.powerPos();
-    const dot = this.scene.add.circle(p.x + POWER_HEX / 2 + 12 + index * 16, p.y, 5, MINT);
+    const dot = this.scene.add.circle(p.x + POWER_HEX / 2 + 12 + index * 16, p.y, 5, powerColor());
     dot.setDepth(20);
     this.scene.tweens.add({
       targets: dot,
@@ -230,7 +241,7 @@ export class GameHud {
     const cx = p.x + POWER_HEX / 2 + 16 + index * SHIELD_STEP;
     for (let i = 0; i < 8; i++) {
       const a = (i / 8) * Math.PI * 2;
-      const bit = this.scene.add.circle(cx, p.y, 2.5, MINT).setDepth(20);
+      const bit = powerParticle(this.scene, cx, p.y, 2.5, 1).setDepth(20);
       this.scene.tweens.add({
         targets: bit,
         x: cx + Math.cos(a) * 18,
@@ -328,7 +339,7 @@ export class GameHud {
       });
     }
     if (name === 'tir_lance') this.shotText.setFontSize(20);
-    if (name === 'orbe_recupere') this.pop(this.orbsText, 1.3, 300, MINT);
+    if (name === 'orbe_recupere') this.pop(this.orbsText, 1.3, 300, PALETTE.success);
     if (name === 'pouvoir_active') this.powerPop();
   }
 

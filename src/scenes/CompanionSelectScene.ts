@@ -4,8 +4,8 @@ import { writeSave, type SaveData } from '../core/save';
 import type { LevelData } from '../core/levelFormat';
 import { CompanionView } from './CompanionView';
 import { REGISTRY, SCENES } from './keys';
-import { drawPowerHex, drawPowerIcon, POWER_MINT } from './powerIcons';
-import { PALETTE, textStyle, bodyStyle, TEXT } from './theme';
+import { drawPowerHex, drawPowerIcon } from './powerIcons';
+import { PALETTE, powerColor, textStyle, bodyStyle, TEXT } from './theme';
 import { fadeTo, panel, veil } from './ui';
 import { iconButton, primaryButton } from './widgets';
 
@@ -198,7 +198,7 @@ export class CompanionSelectScene extends Phaser.Scene {
     // Type du pouvoir (icône) et charges max.
     const t = this.add.graphics();
     const tx = cx + 300;
-    t.lineStyle(3.5, POWER_MINT, 1).fillStyle(POWER_MINT, 1);
+    t.lineStyle(3.5, powerColor(), 1).fillStyle(powerColor(), 1);
     if (c.power.kind === 'immediate') {
       t.fillPoints(starLightning(tx, SHEET_Y - 22), true);
     } else if (c.power.kind === 'next') {
@@ -212,7 +212,7 @@ export class CompanionSelectScene extends Phaser.Scene {
     if (c.power.kind !== 'immediate') {
       for (let i = 0; i < c.power.maxCharges; i++) {
         const px = tx + (i - (c.power.maxCharges - 1) / 2) * 20;
-        t.fillStyle(POWER_MINT, 1).fillCircle(px, SHEET_Y + 16, 6);
+        t.fillStyle(powerColor(), 1).fillCircle(px, SHEET_Y + 16, 6);
       }
     }
     s.add(t);
@@ -259,7 +259,7 @@ export class CompanionSelectScene extends Phaser.Scene {
     const orbY = (t: number) => y0 + 10 + (DEMO.h - 20) * t;
     const id = this.selected;
     // Pouvoir en menthe.
-    g.lineStyle(2, POWER_MINT, 0.6).fillStyle(POWER_MINT, 0.6);
+    g.lineStyle(2, powerColor(), 0.6).fillStyle(powerColor(), 0.6);
     if (id === 'pip') {
       for (let k = 0; k < 14; k++) {
         const t = k / 13;
@@ -291,7 +291,7 @@ export class CompanionSelectScene extends Phaser.Scene {
       const zig = id === 'volte' ? Math.sin(t * 30) * 10 : 0;
       g.fillStyle(PALETTE.orb, 1).fillCircle(orbX(t) + zig, orbY(t), 5);
       if (id === 'grelot')
-        g.lineStyle(2, POWER_MINT, 0.7).lineBetween(
+        g.lineStyle(2, powerColor(), 0.7).lineBetween(
           orbX(t),
           orbY(t),
           orbX(Math.max(0, t - 0.12)),
@@ -299,7 +299,7 @@ export class CompanionSelectScene extends Phaser.Scene {
         );
     }
     if (id === 'nuage-lune' && t > 0.9) {
-      g.lineStyle(2, POWER_MINT, 0.7).lineBetween(orbX(t), orbY(t), orbX(t), y0 + 10);
+      g.lineStyle(2, powerColor(), 0.7).lineBetween(orbX(t), orbY(t), orbX(t), y0 + 10);
     }
   }
 

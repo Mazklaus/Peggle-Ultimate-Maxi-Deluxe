@@ -13,7 +13,7 @@ import { MapScene } from './scenes/MapScene';
 import { applyAudioOptions, OptionsScene } from './scenes/OptionsScene';
 import { PauseScene } from './scenes/PauseScene';
 import { ResultsScene } from './scenes/ResultsScene';
-import { loadFonts } from './scenes/theme';
+import { loadFonts, setColorblindPower } from './scenes/theme';
 import { TitleScene } from './scenes/TitleScene';
 import { setEditorLinkVisible } from './scenes/ui';
 
@@ -21,6 +21,7 @@ import { setEditorLinkVisible } from './scenes/ui';
 gameEvents.onAny((name, data) => audio.onGameEvent(name, data));
 const { options } = loadSave();
 applyAudioOptions(options);
+setColorblindPower(options.colorblind);
 // Le navigateur n'autorise l'audio qu'après un geste du joueur.
 const unlockAudio = () => audio.unlock();
 window.addEventListener('pointerdown', unlockAudio, { once: true });

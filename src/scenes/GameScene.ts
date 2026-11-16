@@ -55,10 +55,18 @@ import { OPTIONS_CHANGED, REGISTRY, SCENES } from './keys';
 import { wakeSequenceFor } from '../core/story';
 import { CompanionView } from './CompanionView';
 import type { ResultsData } from './ResultsScene';
-import { CRYSTAL_COLORS, CRYSTAL_COLORS_CB, PALETTE, textStyle } from './theme';
+import { CRYSTAL_COLORS, CRYSTAL_COLORS_CB, PALETTE, powerColor, textStyle } from './theme';
 import { ChapterBackdrop, preloadBackdrop } from './ChapterBackdrop';
 import { earnedStars } from '../core/backdrop';
 import { DecorLayer } from './DecorLayer';
+import {
+  hexPoints,
+  outlinedCircle,
+  outlinedHex,
+  outlinedLine,
+  powerFlash,
+  powerParticle,
+} from './powerFx';
 import { PORTAL } from '../core/decor';
 import { LANTERN } from './gardienne';
 import { GameHud, HUD_LAYOUT } from './Hud';
@@ -375,6 +383,7 @@ export class GameScene extends Phaser.Scene {
       for (const c of this.level.crystals) {
         if (!c.lit) this.views.get(c.id)?.setFillStyle(this.colors[c.kind]);
       }
+      this.hud.recolorPower();
     };
     this.game.events.on(OPTIONS_CHANGED, onOptions);
     // Perte de focus de la fenêtre : pause automatique (specs UI/UX 4).
@@ -530,9 +539,9 @@ export class GameScene extends Phaser.Scene {
   private setCrazy(o: Phaser.GameObjects.Arc, on: boolean): void {
     const body = o.body as MatterJS.BodyType | null;
     if (body) body.restitution = on ? VOLTE.restitution : ORB_RESTITUTION;
-    if (on) o.setStrokeStyle(3, PALETTE.success, 0.95);
+    if (on) o.setStrokeStyle(3, powerColor(), 0.95);
     else if (o !== this.twin) o.setStrokeStyle();
-    else o.setStrokeStyle(2, PALETTE.success, 0.9);
+    else o.setStrokeStyle(2, powerColor(), 0.9);
   }
 
   /** Durée et plafond de vitesse du rebond fou, plus une traînée menthe en zigzag. */
@@ -552,7 +561,7 @@ export class GameScene extends Phaser.Scene {
         (o as unknown as Phaser.Physics.Matter.Components.Velocity).setVelocity(v.x * k, v.y * k);
       }
       if (Math.random() < 0.5) {
-        const spark = this.add.circle(o.x, o.y, 2.5, PALETTE.success, 0.8).setDepth(o.depth - 1);
+        const spark = powerParticle(this, o.x, o.y, 2.5, 0.8).setDepth(o.depth - 1);
         this.tweens.add({
           targets: spark,
           alpha: 0,
@@ -577,7 +586,7 @@ export class GameScene extends Phaser.Scene {
       .map((c) => ({ id: c.id, ...toWorld(c) }));
     for (const o of this.shotOrbs()) {
       const pull = magnetPull(o, hearts);
-      g.lineStyle(1.5, PALETTE.success, 0.18).strokeCircle(o.x, o.y, MOUSSE_POWER.range);
+      outlinedCircle(g, 1.5, 0.18, o.x, o.y, MOUSSE_POWER.range);
       if (!pull) continue;
       const v = this.orbVelocity(o);
       // px/s² -> px par pas de référence, sur dt secondes de jeu.
@@ -588,7 +597,7 @@ export class GameScene extends Phaser.Scene {
       );
       const t = hearts.find((h) => h.id === pull.targetId);
       if (!t) continue;
-      g.lineStyle(2, PALETTE.success, 0.25 + 0.6 * pull.strength).lineBetween(o.x, o.y, t.x, t.y);
+      outlinedLine(g, 2, 0.25 + 0.6 * pull.strength, o.x, o.y, t.x, t.y);
       g.strokeCircle(t.x, t.y, 14 + 4 * Math.sin(this.time.now / 90));
     }
   }
@@ -664,20 +673,12 @@ export class GameScene extends Phaser.Scene {
     const sx = Math.max(Math.abs(vx) * TWIN.speed, speed * TWIN.minSideShare);
     const sy = Math.sign(vy || 1) * Math.sqrt(Math.max(0, speed * speed - sx * sx));
     const twin = this.spawnOrb(src.x, src.y, side * sx, sy);
-    twin.setStrokeStyle(2, PALETTE.success, 0.9);
+    twin.setStrokeStyle(2, powerColor(), 0.9);
     this.twin = twin;
     if (this.crazyLeft > 0) this.setCrazy(twin, true);
     this.twinRef = { x: src.x, y: src.y, t: this.time.now };
     // Petit éclat menthe au point de scission.
-    const flash = this.add.circle(src.x, src.y, ORB_RADIUS, PALETTE.success, 0.5).setDepth(6);
-    this.tweens.add({
-      targets: flash,
-      scale: 3,
-      alpha: 0,
-      duration: 260,
-      ease: 'Quad.Out',
-      onComplete: () => flash.destroy(),
-    });
+    powerFlash(this, src.x, src.y, ORB_RADIUS, 6);
   }
 
   // --- Astre hors de sa loge (API des overlays du Lead) ---------------------
@@ -1104,14 +1105,14 @@ export class GameScene extends Phaser.Scene {
   /** Réceptacle élargi par un pouvoir : bord menthe pendant l'effet (specs UI/UX jalon 2 §3). */
   private widenBucket(scale: number): void {
     this.bucketEdgeTween?.stop();
-    this.bucket.setScale(scale, 1).setStrokeStyle(2, PALETTE.success, 0.95);
+    this.bucket.setScale(scale, 1).setStrokeStyle(2, powerColor(), 0.95);
   }
 
   /** Fin de l'effet : taille normale, le bord menthe revient au lavande en 200 ms puis s'efface. */
   private releaseBucket(): void {
     if (this.bucket.scaleX === 1) return;
     this.bucket.setScale(1);
-    const from = Phaser.Display.Color.ValueToColor(PALETTE.success);
+    const from = Phaser.Display.Color.ValueToColor(powerColor());
     const to = Phaser.Display.Color.ValueToColor(PALETTE.bucketEdge);
     this.bucketEdgeTween?.stop();
     this.bucketEdgeTween = this.tweens.addCounter({
@@ -1164,7 +1165,7 @@ export class GameScene extends Phaser.Scene {
     // La pastille-bouclier se brise en paillettes menthe, l'orbe repart vers le haut.
     for (let i = 0; i < 14; i++) {
       const a = Math.PI + (i / 13) * Math.PI;
-      const dot = this.add.circle(x, y, 3, PALETTE.success, 0.9).setDepth(30);
+      const dot = powerParticle(this, x, y, 3, 0.9).setDepth(30);
       this.tweens.add({
         targets: dot,
         x: x + Math.cos(a) * 46,
@@ -1176,7 +1177,8 @@ export class GameScene extends Phaser.Scene {
         onComplete: () => dot.destroy(),
       });
     }
-    this.cameras.main.flash(120, 126, 224, 198);
+    const fc = Phaser.Display.Color.IntegerToColor(powerColor());
+    this.cameras.main.flash(120, fc.red, fc.green, fc.blue);
     // Réceptacle 2 fois plus large pour le reste du tir.
     this.widenBucket(NUAGE_LUNE_POWER.bucketScale);
     this.refreshPower();
@@ -1194,7 +1196,7 @@ export class GameScene extends Phaser.Scene {
     mo.setVelocity(v.x * GRELOT.speed, v.y * GRELOT.speed);
     const body = orb.body as MatterJS.BodyType;
     body.collisionFilter.mask = 0xffffffff & ~CRYSTAL_CATEGORY;
-    orb.setStrokeStyle(3, PALETTE.success, 0.95);
+    orb.setStrokeStyle(3, powerColor(), 0.95);
     this.pierceLeft = GRELOT.pierce;
     this.pierced.clear();
     this.boltLeft = GRELOT.maxSeconds;
@@ -1219,7 +1221,7 @@ export class GameScene extends Phaser.Scene {
       this.pierceLeft -= 1;
       this.onCrystalHit(c.id);
     }
-    const spark = this.add.circle(to.x, to.y, 4, PALETTE.success, 0.7).setDepth(orb.depth - 1);
+    const spark = powerParticle(this, to.x, to.y, 4, 0.7).setDepth(orb.depth - 1);
     this.tweens.add({
       targets: spark,
       alpha: 0,
@@ -1356,8 +1358,9 @@ export class GameScene extends Phaser.Scene {
    */
   private shockwave(from: Crystal): void {
     const c = toWorld(from);
-    const ring = this.add.circle(c.x, c.y, 1).setStrokeStyle(4, PALETTE.success, 0.9).setDepth(6);
-    ring.setFillStyle(PALETTE.success, 0.12);
+    // Onde hexagonale (forme des pouvoirs) au départ d'un éclat à cœur blanc chaud.
+    const ring = this.add.graphics().setDepth(6);
+    powerFlash(this, c.x, c.y, 10, 6.5, 2.5, 220);
     const wave = { r: 0 };
     this.tweens.add({
       targets: wave,
@@ -1365,7 +1368,15 @@ export class GameScene extends Phaser.Scene {
       duration: SHOCKWAVE.seconds * 1000,
       ease: 'Quad.Out',
       onUpdate: () => {
-        ring.setRadius(wave.r).setAlpha(1 - (wave.r / SHOCKWAVE.radius) * 0.6);
+        const a = 1 - (wave.r / SHOCKWAVE.radius) * 0.6;
+        // Hexagone circonscrit au cercle de l'onde : tout cristal allumé est dedans.
+        const hr = wave.r / Math.cos(Math.PI / 6);
+        const pts = hexPoints(hr).map((p) => new Phaser.Math.Vector2(p.x + c.x, p.y + c.y));
+        ring
+          .clear()
+          .fillStyle(powerColor(), 0.12 * a)
+          .fillPoints(pts, true);
+        outlinedHex(ring, 4, 0.9 * a, c.x, c.y, hr);
         for (const k of this.level.crystals) {
           if (k.lit || k.kind === 'wall' || k.id === from.id) continue;
           const w = toWorld(k);
@@ -1617,7 +1628,7 @@ export class GameScene extends Phaser.Scene {
     const start = this.muzzle();
     // Tir suivant armé : anneau menthe 40 % autour de la bouche du canon (specs UI/UX §3).
     if (this.reveal.armed && companionById(this.companionId)?.power.kind === 'next')
-      this.guide.lineStyle(3, PALETTE.success, 0.4).strokeCircle(start.x, start.y, 13);
+      outlinedCircle(this.guide, 3, 0.4, start.x, start.y, 13);
     const input = {
       x: start.x,
       y: start.y,

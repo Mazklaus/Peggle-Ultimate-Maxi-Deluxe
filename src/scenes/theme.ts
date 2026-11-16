@@ -28,6 +28,20 @@ export const PALETTE = {
   textDim: 0xa9b0d6,
 };
 
+/**
+ * Couleur des effets de pouvoir : menthe, ou en mode daltonien le jaune Okabe-Ito du cristal
+ * pouvoir (même famille de couleur que la source de l'effet). Réglée au démarrage et à chaque
+ * changement d'options.
+ */
+let colorblindPower = false;
+export function setColorblindPower(on: boolean): void {
+  colorblindPower = on;
+}
+export function powerColor(): number {
+  return colorblindPower ? CB_POWER : PALETTE.success;
+}
+const CB_POWER = 0xf0e442;
+
 /** Opacité standard des panneaux d'UI. */
 export const PANEL_ALPHA = 0.85;
 
