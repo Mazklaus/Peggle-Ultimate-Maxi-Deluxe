@@ -556,8 +556,10 @@ export class MapScene extends Phaser.Scene {
       go();
       return;
     }
-    cam.pan(at.x, at.y, ZOOM.ms, 'Sine.easeInOut');
-    cam.zoomTo(ZOOM.factor, ZOOM.ms, 'Sine.easeInOut', false, (_c, p) => {
+    // force : un dézoom d'arrivée encore en cours (clic pendant le déblocage) ne doit pas
+    // avaler ce zoom, sinon son rappel ne vient jamais et la carte reste figée (QA, P1).
+    cam.pan(at.x, at.y, ZOOM.ms, 'Sine.easeInOut', true);
+    cam.zoomTo(ZOOM.factor, ZOOM.ms, 'Sine.easeInOut', true, (_c, p) => {
       if (p === 1) go();
     });
   }
@@ -616,7 +618,7 @@ export class MapScene extends Phaser.Scene {
       this.scene.restart({ view: 'sky', from: c.n, unlock } satisfies MapSceneData);
     };
     this.time.delayedCall(UNLOCK.lightUp, next);
-    this.input.once('pointerup', () => this.finishUnlock(unlock));
+    this.skipCatcher(() => this.finishUnlock(unlock));
   }
 
   /** Étape 2, vue ciel : le chemin se trace, la miniature se dessine, l'Astre arrive. */
@@ -654,7 +656,17 @@ export class MapScene extends Phaser.Scene {
     this.time.delayedCall(t0 + UNLOCK.path + UNLOCK.draw + UNLOCK.astre, () =>
       this.finishUnlock(unlock),
     );
-    this.input.once('pointerup', () => this.finishUnlock(unlock));
+    this.skipCatcher(() => this.finishUnlock(unlock));
+  }
+
+  /**
+   * Pendant la séquence, un clic n'importe où la passe : un capteur plein écran au-dessus de
+   * tout empêche le clic d'ouvrir aussi un niveau ou un autre chapitre.
+   */
+  private skipCatcher(skip: () => void): void {
+    const z = this.add.zone(640, 360, 1280, 720).setScrollFactor(0).setDepth(1000);
+    z.setInteractive();
+    z.once('pointerup', skip);
   }
 
   /** Le nouvel Astre tombe du ciel près de sa miniature, avec un « ! ». */
@@ -713,6 +725,8 @@ export class MapScene extends Phaser.Scene {
     // Avec la pastille de l'Astre à droite, le titre se resserre pour ne pas la toucher.
     if (choice.selected && title.width > 200) title.setScale(200 / title.width);
     c.add(title);
+    // La touche C ne doit jamais rouvrir le sélecteur d'une fiche précédente (QA, P2).
+    this.input.keyboard?.off('keydown-C');
     if (choice.selected) c.add(this.companionBadge(level, choice));
 
     // Aperçu : positions des cristaux en points.
