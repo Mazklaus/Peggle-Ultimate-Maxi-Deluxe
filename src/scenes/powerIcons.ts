@@ -4,10 +4,8 @@
  * Partagé par la carte (pastille, sélecteur) et la loge de l'Astre en jeu.
  */
 import Phaser from 'phaser';
-import { PALETTE } from './theme';
+import { powerColor } from './theme';
 
-/** Menthe des pouvoirs (tout ce qui vient d'un pouvoir reste menthe). */
-export const POWER_MINT = PALETTE.success;
 const INK = 0x0b1026;
 
 type V = Phaser.Math.Vector2;
@@ -26,7 +24,7 @@ export function drawPowerHex(
     const a = -Math.PI / 2 + (i * Math.PI) / 3;
     return v(x + Math.cos(a) * r, y + Math.sin(a) * r);
   });
-  g.fillStyle(POWER_MINT, alpha).fillPoints(pts, true);
+  g.fillStyle(powerColor(), alpha).fillPoints(pts, true);
 }
 
 /** Pictogramme du pouvoir de l'Astre `id`, en encre nuit, dans un carré de côté size. */

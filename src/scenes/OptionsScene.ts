@@ -4,7 +4,7 @@ import { GAME_HEIGHT, GAME_WIDTH } from '../config';
 import type { CrystalKind } from '../core/level';
 import { writeSave, type Options, type SaveData } from '../core/save';
 import { OPTIONS_CHANGED, REGISTRY, SCENES } from './keys';
-import { CRYSTAL_COLORS, CRYSTAL_COLORS_CB, textStyle } from './theme';
+import { CRYSTAL_COLORS, CRYSTAL_COLORS_CB, setColorblindPower, textStyle } from './theme';
 import { panel, veil } from './ui';
 import {
   enableKeyboardFocus,
@@ -29,6 +29,7 @@ export function updateOptions(scene: Phaser.Scene, patch: Partial<Options>): Opt
   Object.assign(save.options, patch);
   writeSave(save);
   applyAudioOptions(save.options);
+  setColorblindPower(save.options.colorblind);
   scene.game.events.emit(OPTIONS_CHANGED, save.options);
   return save.options;
 }
