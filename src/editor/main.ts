@@ -85,7 +85,8 @@ function loadDraft(): LevelData {
   if (text) {
     try {
       const draft = JSON.parse(text) as LevelData;
-      if (draft.format === 1 && Array.isArray(draft.pegs)) return { ...emptyLevel(), ...draft };
+      if ((draft.format === 1 || draft.format === 2) && Array.isArray(draft.pegs))
+        return { ...emptyLevel(), ...draft };
     } catch {
       /* brouillon illisible : on repart d'un niveau vide */
     }
@@ -489,7 +490,7 @@ $<HTMLInputElement>('file').addEventListener('change', async (e) => {
   const text = await file.text();
   try {
     const raw = JSON.parse(text) as Partial<LevelData>;
-    if (raw.format !== 1) throw new Error('format attendu : 1');
+    if (raw.format !== 1 && raw.format !== 2) throw new Error('format attendu : 1 ou 2');
     checkpoint();
     // On garde aussi un niveau invalide, pour pouvoir le corriger ; les erreurs s'affichent.
     level = { ...emptyLevel(), ...raw, pegs: raw.pegs ?? [] } as LevelData;

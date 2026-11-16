@@ -1,9 +1,13 @@
 /**
- * Format JSON des niveaux, v1 (voir docs/level-format.md) : types, validation et sérialisation.
+ * Format JSON des niveaux, v1 et v2 (voir docs/level-format.md) : types, validation et sérialisation.
  * Utilisé par le chargeur du jeu et par l'éditeur de niveaux. Sans Phaser.
  */
 
+/** Format écrit par défaut (niveau sans décor). */
 export const LEVEL_FORMAT = 1;
+/** Format requis dès qu'un niveau a du décor ou des pegs rattachés à un groupe. */
+export const LEVEL_FORMAT_DECOR = 2;
+export type LevelFormatVersion = 1 | 2;
 /** Zone de jeu, en px, origine en haut à gauche. */
 export const ZONE_W = 880;
 export const ZONE_H = 656;
@@ -53,7 +57,82 @@ export interface LevelPeg {
   angle?: number;
   /** Absent : tiré au hasard via `assign`. */
   kind?: PegKind;
+  /** v2 : id de l'élément de décor qui anime ce peg ; x, y = position à t = 0. */
+  group?: string;
 }
+
+// ---------- décor (v2) ----------
+
+export const DECOR_TYPES = ['rotate', 'orbit', 'magnet', 'portal', 'regen'] as const;
+export type DecorType = (typeof DECOR_TYPES)[number];
+export type Spin = 1 | -1;
+
+/** Les pegs du groupe tournent autour de (cx, cy). */
+export interface DecorRotate {
+  id: string;
+  type: 'rotate';
+  cx: number;
+  cy: number;
+  periodS: number;
+  dir: Spin;
+}
+/** 1 à 4 pegs parcourent l'ellipse (cx, cy, rx, ry). */
+export interface DecorOrbit {
+  id: string;
+  type: 'orbit';
+  cx: number;
+  cy: number;
+  rx: number;
+  ry: number;
+  periodS: number;
+  dir: Spin;
+}
+/** Attire l'orbe ; aucun peg dans le groupe. */
+export interface DecorMagnet {
+  id: string;
+  type: 'magnet';
+  x: number;
+  y: number;
+  radius: number;
+  strength: number;
+}
+export interface Point {
+  x: number;
+  y: number;
+}
+/** L'orbe entre en a et ressort en b avec la même vitesse (et inversement). */
+export interface DecorPortal {
+  id: string;
+  type: 'portal';
+  a: Point;
+  b: Point;
+}
+/** Un cristal brisé du groupe réapparaît après `shots` tirs (jamais un cœur). */
+export interface DecorRegen {
+  id: string;
+  type: 'regen';
+  shots: number;
+}
+export type DecorItem = DecorRotate | DecorOrbit | DecorMagnet | DecorPortal | DecorRegen;
+
+/** Bornes (format-decor-v2 du Level Designer). */
+export const DECOR_LIMITS = {
+  rotatePeriodS: [6, 12],
+  orbitPeriodS: [2, 12],
+  orbitRadius: [40, 90],
+  magnetRadius: [20, 300],
+  magnetStrength: [0.1, 3],
+  regenShots: [1, 10],
+  orbitPegs: [1, 4],
+  portalR: 18,
+} as const;
+export const DECOR_KEYS: Record<DecorType, readonly string[]> = {
+  rotate: ['id', 'type', 'cx', 'cy', 'periodS', 'dir'],
+  orbit: ['id', 'type', 'cx', 'cy', 'rx', 'ry', 'periodS', 'dir'],
+  magnet: ['id', 'type', 'x', 'y', 'radius', 'strength'],
+  portal: ['id', 'type', 'a', 'b'],
+  regen: ['id', 'type', 'shots'],
+};
 
 export interface LevelAssign {
   hearts: number;
@@ -62,7 +141,8 @@ export interface LevelAssign {
 }
 
 export interface LevelData {
-  format: 1;
+  /** Format lu ; à l'écriture, serializeLevel recalcule 1 ou 2 (voir levelFormatOf). */
+  format: LevelFormatVersion;
   id: string;
   chapter: number;
   index: number;
@@ -76,7 +156,7 @@ export interface LevelData {
   stars: [number, number];
   assign: LevelAssign;
   pegs: LevelPeg[];
-  decor: unknown[];
+  decor: DecorItem[];
 }
 
 export type ParseResult =
@@ -127,7 +207,176 @@ function parsePeg(raw: unknown, i: number, errors: string[]): LevelPeg | null {
       errors.push(`${where} : kind inconnu « ${String(raw.kind)} ».`);
     else peg.kind = raw.kind;
   }
+  if (raw.group !== undefined) {
+    if (typeof raw.group !== 'string' || !raw.group) errors.push(`${where} : group = id de décor.`);
+    else peg.group = raw.group;
+  }
   return peg;
+}
+
+function parseDecor(raw: unknown, i: number, errors: string[]): DecorItem | null {
+  const where = `decor[${i}]`;
+  if (!isObj(raw)) {
+    errors.push(`${where} : objet attendu.`);
+    return null;
+  }
+  const id = raw.id;
+  if (typeof id !== 'string' || !/^[a-z0-9-]+$/i.test(id)) {
+    errors.push(`${where} : id obligatoire (lettres, chiffres, tirets).`);
+    return null;
+  }
+  const at = `decor « ${id} »`;
+  const before = errors.length;
+  const num = (key: string, range?: readonly [number, number]): number => {
+    const v = raw[key];
+    if (!isNum(v)) errors.push(`${at} : ${key} numérique obligatoire.`);
+    else if (range && (v < range[0] || v > range[1]))
+      errors.push(`${at} : ${key} entre ${range[0]} et ${range[1]} (${v}).`);
+    return v as number;
+  };
+  const spin = (): Spin => {
+    const v = raw.dir ?? 1;
+    if (v !== 1 && v !== -1) errors.push(`${at} : dir = 1 (horaire) ou -1.`);
+    return v as Spin;
+  };
+  const point = (key: string): Point => {
+    const v = raw[key];
+    if (!isObj(v) || !isNum(v.x) || !isNum(v.y)) {
+      errors.push(`${at} : ${key} = { x, y } obligatoire.`);
+      return { x: 0, y: 0 };
+    }
+    const r = DECOR_LIMITS.portalR;
+    if (v.x < r || v.x > ZONE_W - r || v.y < r || v.y > ZONE_H - r)
+      errors.push(`${at} : ${key} hors zone (${v.x}, ${v.y}).`);
+    return { x: v.x, y: v.y };
+  };
+  const L = DECOR_LIMITS;
+  let item: DecorItem;
+  switch (raw.type) {
+    case 'rotate':
+      item = {
+        id,
+        type: 'rotate',
+        cx: num('cx'),
+        cy: num('cy'),
+        periodS: num('periodS', L.rotatePeriodS),
+        dir: spin(),
+      };
+      break;
+    case 'orbit':
+      item = {
+        id,
+        type: 'orbit',
+        cx: num('cx'),
+        cy: num('cy'),
+        rx: num('rx', L.orbitRadius),
+        ry: num('ry', L.orbitRadius),
+        periodS: num('periodS', L.orbitPeriodS),
+        dir: spin(),
+      };
+      break;
+    case 'magnet':
+      item = {
+        id,
+        type: 'magnet',
+        x: num('x', [0, ZONE_W]),
+        y: num('y', [0, ZONE_H]),
+        radius: num('radius', L.magnetRadius),
+        strength: num('strength', L.magnetStrength),
+      };
+      break;
+    case 'portal':
+      item = { id, type: 'portal', a: point('a'), b: point('b') };
+      break;
+    case 'regen': {
+      const shots = raw.shots;
+      if (!isInt(shots) || shots < L.regenShots[0] || shots > L.regenShots[1])
+        errors.push(`${at} : shots entier ${L.regenShots[0]}..${L.regenShots[1]}.`);
+      item = { id, type: 'regen', shots: shots as number };
+      break;
+    }
+    default:
+      errors.push(`${at} : type inconnu « ${String(raw.type)} » (${DECOR_TYPES.join(', ')}).`);
+      return null;
+  }
+  return errors.length === before ? item : null;
+}
+
+/** Position d'un peg d'orbite après une fraction `t` de tour (0..1). */
+export function orbitPosition(o: DecorOrbit, start: Point, t: number): Point {
+  const a0 = Math.atan2((start.y - o.cy) / o.ry, (start.x - o.cx) / o.rx);
+  const a = a0 + o.dir * t * Math.PI * 2;
+  return { x: o.cx + o.rx * Math.cos(a), y: o.cy + o.ry * Math.sin(a) };
+}
+
+/** Règles du décor : groupes existants, contenus valides, zone et écarts sur tout le tour. */
+export function checkDecor(pegs: readonly LevelPeg[], decor: readonly DecorItem[]): string[] {
+  const errors: string[] = [];
+  const byId = new Map<string, DecorItem>();
+  for (const d of decor) {
+    if (byId.has(d.id)) errors.push(`decor : id « ${d.id} » en double.`);
+    byId.set(d.id, d);
+  }
+  const members = new Map<string, number[]>();
+  pegs.forEach((p, i) => {
+    if (p.group === undefined) return;
+    if (!byId.has(p.group)) errors.push(`pegs[${i}] : group « ${p.group} » inconnu.`);
+    else members.set(p.group, [...(members.get(p.group) ?? []), i]);
+  });
+  const inZone = (x: number, y: number): boolean => x >= 0 && x <= ZONE_W && y >= 0 && y <= ZONE_H;
+  for (const d of decor) {
+    const ids = members.get(d.id) ?? [];
+    const list = ids.map((i) => ({ i, p: pegs[i] as LevelPeg }));
+    if ((d.type === 'magnet' || d.type === 'portal') && ids.length)
+      errors.push(`decor « ${d.id} » (${d.type}) ne prend pas de peg (pegs ${ids.join(', ')}).`);
+    if (d.type === 'regen')
+      for (const { i, p } of list)
+        if (p.kind === 'heart')
+          errors.push(`pegs[${i}] : un cœur ne peut pas être dans regen « ${d.id} ».`);
+    if (d.type === 'rotate')
+      for (const { i, p } of list) {
+        const r = Math.hypot(p.x - d.cx, p.y - d.cy);
+        if (!inZone(d.cx - r, d.cy - r) || !inZone(d.cx + r, d.cy + r))
+          errors.push(`pegs[${i}] sort de la zone en tournant autour de « ${d.id} ».`);
+      }
+    if (d.type === 'orbit') {
+      const [min, max] = DECOR_LIMITS.orbitPegs;
+      if (ids.length < min || ids.length > max)
+        errors.push(`orbit « ${d.id} » : ${min} à ${max} pegs (${ids.length}).`);
+      if (!inZone(d.cx - d.rx, d.cy - d.ry) || !inZone(d.cx + d.rx, d.cy + d.ry))
+        errors.push(`orbit « ${d.id} » sort de la zone.`);
+      for (const { i, p } of list) {
+        const e = ((p.x - d.cx) / d.rx) ** 2 + ((p.y - d.cy) / d.ry) ** 2;
+        if (Math.abs(Math.sqrt(e) - 1) > 0.05)
+          errors.push(`pegs[${i}] n'est pas sur l'anneau de « ${d.id} ».`);
+      }
+      // Sur une ellipse, l'écart entre deux pegs varie pendant le tour : on échantillonne.
+      const circles = list.filter(({ p }) => p.shape !== 'brick');
+      for (let a = 0; a < circles.length; a++)
+        for (let b = a + 1; b < circles.length; b++) {
+          const A = circles[a] as { i: number; p: LevelPeg };
+          const B = circles[b] as { i: number; p: LevelPeg };
+          let minD = Infinity;
+          for (let k = 0; k < 72; k++) {
+            const pa = orbitPosition(d, A.p, k / 72);
+            const pb = orbitPosition(d, B.p, k / 72);
+            minD = Math.min(minD, Math.hypot(pa.x - pb.x, pa.y - pb.y));
+          }
+          if (minD < MIN_CIRCLE_GAP)
+            errors.push(
+              `pegs[${A.i}] et pegs[${B.i}] se rapprochent à ${minD.toFixed(1)} px sur l'orbite « ${d.id} ».`,
+            );
+        }
+    }
+  }
+  return errors;
+}
+
+/** Format à écrire : 2 si le niveau utilise du décor ou des groupes, sinon 1. */
+export function levelFormatOf(level: Pick<LevelData, 'pegs' | 'decor'>): LevelFormatVersion {
+  return level.decor.length > 0 || level.pegs.some((p) => p.group !== undefined)
+    ? LEVEL_FORMAT_DECOR
+    : LEVEL_FORMAT;
 }
 
 /** Valide un niveau (texte JSON ou objet déjà lu). Champs inconnus ignorés. */
@@ -143,9 +392,12 @@ export function parseLevel(input: string | unknown): ParseResult {
   if (!isObj(raw)) return { errors: ['Le niveau doit être un objet JSON.'] };
   const errors: string[] = [];
 
-  if (raw.format !== LEVEL_FORMAT)
+  const format = raw.format;
+  if (format !== LEVEL_FORMAT && format !== LEVEL_FORMAT_DECOR)
     return {
-      errors: [`format ${String(raw.format)} non pris en charge (attendu : ${LEVEL_FORMAT}).`],
+      errors: [
+        `format ${String(format)} non pris en charge (attendu : ${LEVEL_FORMAT} ou ${LEVEL_FORMAT_DECOR}).`,
+      ],
     };
   const id = raw.id;
   if (typeof id !== 'string' || !/^[a-z0-9-]+$/.test(id))
@@ -191,9 +443,23 @@ export function parseLevel(input: string | unknown): ParseResult {
 
   errors.push(...checkLayout(pegs, assign));
 
+  // Décor : réservé et ignoré en v1, typé et validé en v2.
+  let decor: DecorItem[] = [];
+  if (raw.decor !== undefined && !Array.isArray(raw.decor)) errors.push('decor : tableau.');
+  const rawDecor = Array.isArray(raw.decor) ? raw.decor : [];
+  if (format === LEVEL_FORMAT) {
+    if (pegs.some((p) => p.group !== undefined) || rawDecor.length)
+      errors.push(`décor et « group » demandent "format": ${LEVEL_FORMAT_DECOR}.`);
+  } else {
+    decor = rawDecor
+      .map((d, i) => parseDecor(d, i, errors))
+      .filter((d): d is DecorItem => d !== null);
+    if (decor.length === rawDecor.length) errors.push(...checkDecor(pegs, decor));
+  }
+
   if (errors.length) return { errors };
   const level: LevelData = {
-    format: 1,
+    format,
     id: id as string,
     chapter: chapter as number,
     index: index as number,
@@ -203,7 +469,7 @@ export function parseLevel(input: string | unknown): ParseResult {
     stars: [(stars as number[])[0] as number, (stars as number[])[1] as number],
     assign,
     pegs,
-    decor: Array.isArray(raw.decor) ? raw.decor : [],
+    decor,
   };
   if (raw.title !== undefined) level.title = raw.title as string;
   if (raw.rhythm !== undefined) level.rhythm = raw.rhythm as Rhythm;
@@ -249,7 +515,7 @@ const LEVEL_KEYS = [
   'stars',
   'assign',
 ] as const;
-const PEG_KEYS = ['x', 'y', 'shape', 'r', 'w', 'h', 'angle', 'kind'] as const;
+const PEG_KEYS = ['x', 'y', 'shape', 'r', 'w', 'h', 'angle', 'kind', 'group'] as const;
 
 /** Objet ou tableau court sur une ligne : {"x": 60, "y": 120}. */
 function inline(value: unknown): string {
@@ -261,8 +527,9 @@ function inline(value: unknown): string {
  * un peg par ligne. Relire puis réécrire un fichier canonique le laisse identique.
  */
 export function serializeLevel(level: LevelData): string {
-  const head = LEVEL_KEYS.filter((k) => level[k] !== undefined).map((k) => {
-    const v = level[k];
+  const out: LevelData = { ...level, format: levelFormatOf(level) };
+  const head = LEVEL_KEYS.filter((k) => out[k] !== undefined).map((k) => {
+    const v = out[k];
     const text =
       k === 'stars'
         ? `[\n    ${(v as number[]).join(',\n    ')}\n  ]`
@@ -277,5 +544,11 @@ export function serializeLevel(level: LevelData): string {
     return '    ' + inline(ordered);
   });
   const pegsText = pegs.length ? `[\n${pegs.join(',\n')}\n  ]` : '[]';
-  return `{\n${[...head, `  "pegs": ${pegsText}`, `  "decor": ${JSON.stringify(level.decor)}`].join(',\n')}\n}\n`;
+  const decor = level.decor.map((d) => {
+    const ordered: Record<string, unknown> = {};
+    for (const k of DECOR_KEYS[d.type]) ordered[k] = (d as unknown as Record<string, unknown>)[k];
+    return '    ' + inline(ordered);
+  });
+  const decorText = decor.length ? `[\n${decor.join(',\n')}\n  ]` : '[]';
+  return `{\n${[...head, `  "pegs": ${pegsText}`, `  "decor": ${decorText}`].join(',\n')}\n}\n`;
 }

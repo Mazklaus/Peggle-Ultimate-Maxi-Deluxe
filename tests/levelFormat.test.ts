@@ -56,7 +56,7 @@ describe('format de niveau v1', () => {
 
   it('refuse un JSON cassé ou un autre format', () => {
     expect(parseLevel('{').errors?.[0]).toContain('JSON invalide');
-    expect(parseLevel({ ...sample, format: 2 }).errors?.[0]).toContain('format');
+    expect(parseLevel({ ...sample, format: 3 }).errors?.[0]).toContain('format');
   });
 
   it('refuse les pegs hors zone', () => {
