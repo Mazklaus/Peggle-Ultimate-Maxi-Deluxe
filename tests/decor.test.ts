@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  pathNearPortal,
   isMovingDecor,
   MAGNET,
   magnetAccel,
@@ -99,5 +100,28 @@ describe('portails', () => {
   it('hors des bouches, rien', () => {
     expect(portalStep([p], 300, 300, null)).toEqual({ to: null, inside: null });
     expect(PORTAL.r).toBe(18);
+  });
+});
+
+describe('trajet près d’un portail (prédiction du final)', () => {
+  const portals = [
+    { id: 'p1', type: 'portal' as const, a: { x: 100, y: 100 }, b: { x: 400, y: 100 } },
+  ];
+  it('voit un segment qui enjambe la bouche entre deux points', () => {
+    // Points à 60 px de part et d'autre de la bouche : aucun point dedans, le segment la traverse.
+    expect(
+      pathNearPortal(portals, [
+        { x: 40, y: 100 },
+        { x: 160, y: 100 },
+      ]),
+    ).toBe(true);
+  });
+  it('tient compte de la marge (rayon de l’orbe)', () => {
+    const path = [
+      { x: 0, y: 125 },
+      { x: 200, y: 125 },
+    ];
+    expect(pathNearPortal(portals, path)).toBe(false);
+    expect(pathNearPortal(portals, path, 8)).toBe(true);
   });
 });

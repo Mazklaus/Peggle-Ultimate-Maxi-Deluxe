@@ -10,10 +10,10 @@
 import Phaser from 'phaser';
 import { toWorld } from '../config';
 import {
+  pathNearPortal,
   isMagnet,
   isPortal,
   PORTAL,
-  portalMouthAt,
   portalStep,
   isMovingDecor,
   magnetAccel,
@@ -138,10 +138,14 @@ export class DecorLayer {
   }
 
   /** Le trajet passe-t-il par une bouche de portail ? (la prédiction du final s'abstient) */
-  touchesPortal(path: ReadonlyArray<{ x: number; y: number }>): boolean {
+  touchesPortal(path: ReadonlyArray<{ x: number; y: number }>, margin = 0): boolean {
     if (this.portals.length === 0) return false;
     const o = toWorld({ x: 0, y: 0 });
-    return path.some((q) => portalMouthAt(this.portals, q.x - o.x, q.y - o.y) !== null);
+    return pathNearPortal(
+      this.portals,
+      path.map((q) => ({ x: q.x - o.x, y: q.y - o.y })),
+      margin,
+    );
   }
 
   /** Une orbe vient de passer : les deux bouches flashent. */
@@ -388,7 +392,8 @@ export class DecorLayer {
   }
 
   destroy(): void {
-    this.scene.matter.world.off(Phaser.Physics.Matter.Events.BEFORE_UPDATE, this.step, this);
+    // Le monde Matter peut être déjà détruit à l'arrêt de la scène (relance directe).
+    this.scene.matter?.world?.off(Phaser.Physics.Matter.Events.BEFORE_UPDATE, this.step, this);
     this.gfx.destroy();
     this.top?.destroy();
   }

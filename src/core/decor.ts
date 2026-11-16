@@ -129,6 +129,35 @@ export function portalMouthAt(
 }
 
 /**
+ * Le trajet (points successifs, coordonnées du terrain) passe-t-il à moins de PORTAL.r + margin
+ * du centre d'une bouche ? Teste les SEGMENTS, pas seulement les points : une orbe rapide peut
+ * enjamber le bord d'une bouche entre deux points (faux final QA ch5-09).
+ */
+export function pathNearPortal(
+  portals: ReadonlyArray<DecorPortal>,
+  path: ReadonlyArray<{ x: number; y: number }>,
+  margin = 0,
+): boolean {
+  const reach = PORTAL.r + margin;
+  const mouths = portals.flatMap((p) => [p.a, p.b]);
+  for (let i = 0; i < path.length; i++) {
+    const q = path[i] as { x: number; y: number };
+    const prev = path[i - 1] ?? q;
+    const dx = q.x - prev.x;
+    const dy = q.y - prev.y;
+    const len2 = dx * dx + dy * dy;
+    for (const m of mouths) {
+      const t =
+        len2 === 0
+          ? 0
+          : Math.max(0, Math.min(1, ((m.x - prev.x) * dx + (m.y - prev.y) * dy) / len2));
+      if (Math.hypot(prev.x + dx * t - m.x, prev.y + dy * t - m.y) <= reach) return true;
+    }
+  }
+  return false;
+}
+
+/**
  * Un pas de portail pour une orbe : `inside` = bouche où elle se trouve déjà (rien ne se
  * passe tant qu'elle n'en est pas sortie). Renvoie la nouvelle position si elle passe,
  * et la bouche où elle se trouve après ce pas.
