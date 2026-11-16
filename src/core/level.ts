@@ -184,7 +184,7 @@ export function hitCrystal(s: LevelState, id: number): number {
 /** Bonus de chaîne d'un tir (points, arrondis) selon son score et ses rebonds. */
 export function chainBonus(shotScore: number, bounces: number, tuning: Tuning = TUNING): number {
   const c = tuning.chainBonus;
-  const rate = Math.min(c.max, Math.max(0, bounces - c.fromBounces) * c.perBounce);
+  const rate = Math.min(c.max, Math.max(0, bounces - tuning.chainBounces) * c.perBounce);
   return Math.round(shotScore * rate);
 }
 

@@ -435,10 +435,7 @@ export class GameScene extends Phaser.Scene {
           const by = other === pair.bodyA ? pair.bodyB : pair.bodyA;
           if (other.label.startsWith('crystal:'))
             this.onCrystalHit(Number(other.label.slice(8)), by);
-          else if (other.label === 'wall') {
-            gameEvents.emit('mur_touche', {});
-            this.countBounce();
-          }
+          else if (other.label === 'wall') gameEvents.emit('mur_touche', {});
         }
       },
     );
@@ -1412,7 +1409,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * Un rebond compte pour la chaîne, sauf les rebonds sur place d'une orbe coincée
+   * Rebond de chaîne (GD) : contact avec un cristal, allumé ou non ; murs et bords exclus.
+   * Pas les rebonds sur place d'une orbe coincée
    * (QA A19 : Pip fêtait une « chaîne longue » pendant un blocage).
    */
   private countBounce(): void {
@@ -1427,15 +1425,12 @@ export class GameScene extends Phaser.Scene {
     const crystal = this.level.crystals.find((c) => c.id === id);
     if (crystal?.kind === 'wall') {
       gameEvents.emit('mur_touche', {});
-      this.countBounce();
       return;
     }
     const points = hitCrystal(this.level, id);
     if (!crystal) return;
-    if (points === 0) {
-      this.countBounce(); // rebond sur un cristal déjà allumé
-      return;
-    }
+    this.countBounce(); // allumé ou non, tout contact de cristal compte
+    if (points === 0) return;
     this.chain += 1;
     this.views.get(id)?.setFillStyle(PALETTE.lit);
     this.breakdown.add(crystal.kind, points);

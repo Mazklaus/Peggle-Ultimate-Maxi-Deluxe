@@ -168,7 +168,8 @@ describe('catalogue : défis et duel', () => {
   it('challenge dans parseLevel : astre connu et seulement avec astre_impose', () => {
     const errs = (c: unknown) => parseLevel(def('d', c)).errors ?? [];
     expect(errs({ goal: 'nettoyage' })).toEqual([]);
-    expect(errs({ goal: 'chaine' })).toEqual([]);
+    expect(errs({ goal: 'chaine', value: 18 })).toEqual([]);
+    expect(errs({ goal: 'chaine' })).not.toEqual([]); // valeur obligatoire (GD)
     expect(errs({ goal: 'pouvoir', value: 3, constraint: 'astre_impose', astre: 'pip' })).toEqual(
       [],
     );

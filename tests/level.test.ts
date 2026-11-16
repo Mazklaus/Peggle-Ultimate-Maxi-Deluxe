@@ -150,9 +150,10 @@ describe('victoire et échec', () => {
 });
 
 describe('bonus de chaîne et réglages GD', () => {
-  it('+10 % par rebond au-delà de 10, au plus +100 %', () => {
-    expect(chainBonus(1000, 10)).toBe(0);
-    expect(chainBonus(1000, 13)).toBe(300);
+  it('+10 % par contact au-delà de 18, au plus +100 %', () => {
+    expect(TUNING.chainBounces).toBe(18);
+    expect(chainBonus(1000, 18)).toBe(0);
+    expect(chainBonus(1000, 21)).toBe(300);
     expect(chainBonus(1000, 40)).toBe(1000);
   });
 

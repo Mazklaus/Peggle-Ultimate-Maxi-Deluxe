@@ -29,7 +29,7 @@ export type ChallengeConstraint = (typeof CHALLENGE_CONSTRAINTS)[number];
 
 export interface Challenge {
   goal: ChallengeGoal;
-  /** S points, N cœurs, K orbes, P activations, rebonds minimum (absent pour nettoyage). */
+  /** S points, N cœurs, K orbes, P activations, contacts de cristaux en un tir (absent pour nettoyage seulement). */
   value?: number;
   constraint?: ChallengeConstraint;
   /** Astre imposé (contrainte astre_impose). */
@@ -41,13 +41,10 @@ export const CHALLENGE_RULES = {
   reducedOrbs: 3,
   /** Contrainte chrono : 90 s de jeu (pause exclue). */
   chronoSeconds: 90,
-  /** Objectif chaine sans valeur : 15 rebonds. */
-  defaultChain: 15,
 };
 
 /** Valeur cible de l'objectif (0 pour nettoyage, mesuré en part de cristaux). */
 export function goalTarget(c: Challenge): number {
-  if (c.goal === 'chaine') return c.value ?? CHALLENGE_RULES.defaultChain;
   if (c.goal === 'nettoyage') return 1;
   return c.value ?? 0;
 }
@@ -65,7 +62,7 @@ export function challengeErrors(raw: unknown, companions?: readonly string[]): s
     errors.push(`challenge.goal : un de ${CHALLENGE_GOALS.join(', ')}.`);
   if (r.value !== undefined && !(Number.isInteger(r.value) && (r.value as number) > 0))
     errors.push('challenge.value : entier positif.');
-  if (r.goal !== 'nettoyage' && r.goal !== 'chaine' && r.value === undefined)
+  if (r.goal !== 'nettoyage' && r.value === undefined)
     errors.push('challenge.value : requis pour cet objectif.');
   if (
     r.constraint !== undefined &&

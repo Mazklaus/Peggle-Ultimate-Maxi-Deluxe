@@ -12,10 +12,12 @@ describe('ShotTracker', () => {
     expect(events).toEqual(['gros_coup']);
   });
 
-  it('émet chaine_longue à 10 rebonds ou 3 000 points, une seule fois', () => {
+  it('émet chaine_longue à 18 contacts ou 3 000 points, une seule fois', () => {
     const a = new ShotTracker();
     a.shotFired();
-    const ev = Array.from({ length: 12 }, () => a.bounced()).flat();
+    const before = Array.from({ length: 17 }, () => a.bounced()).flat();
+    expect(before).toEqual([]);
+    const ev = Array.from({ length: 5 }, () => a.bounced()).flat();
     expect(ev).toEqual(['chaine_longue']);
     const b = new ShotTracker();
     b.shotFired();
