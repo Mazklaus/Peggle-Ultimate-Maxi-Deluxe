@@ -127,6 +127,15 @@ describe('format de niveau v2 : décor', () => {
       ],
     };
     expect(errorsOf({ ...out, decor: [{ ...decor[0], cx: 100 }] })).toContain('sort de la zone');
+    // Passe devant le canon (y < 80) ou dans le réceptacle (y > 600) pendant le tour.
+    const high = {
+      decor,
+      pegs: [
+        { x: 100, y: 200 },
+        { x: 440, y: 590, group: 'roue' },
+      ],
+    };
+    expect(errorsOf(high)).toContain('sort de la zone');
   });
 
   it('orbit : 1 à 4 pegs, sur l’anneau, écartés sur tout le tour', () => {
@@ -144,6 +153,15 @@ describe('format de niveau v2 : décor', () => {
     expect(level([])).toContain('1 à 4 pegs');
     expect(level([on(0), on(72), on(144), on(216), on(288)])).toContain('1 à 4 pegs');
     expect(level([{ x: 440, y: 300, group: 'o' }])).toContain("pas sur l'anneau");
+    expect(
+      errorsOf({
+        decor: [{ ...orbit, cy: 110 }],
+        pegs: [
+          { x: 100, y: 200 },
+          { x: 530, y: 110, kind: 'common', group: 'o' },
+        ],
+      }),
+    ).toContain('sort de la zone');
     // 35° d'écart : jamais sous 22 px. 30° d'écart : loin au départ (65°/95°), mais ~21 px
     // quand les deux pegs passent au bout du grand axe.
     expect(level([on(0), on(35)])).toBe('');
