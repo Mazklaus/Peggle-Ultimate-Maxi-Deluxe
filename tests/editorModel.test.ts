@@ -4,6 +4,7 @@ import {
   clampToZone,
   countPegs,
   crowdedPegs,
+  designWarnings,
   emptyLevel,
   makePeg,
   pegAt,
@@ -46,5 +47,17 @@ describe('éditeur de niveaux : modèle', () => {
     level.assign = { hearts: 1, power: 0, bonus: 0 };
     level.pegs.push(makePeg(100, 200, 'circle', 'auto'), makePeg(300, 300, 'brick', 'common', 15));
     expect(parseLevel(level).errors).toBeUndefined();
+  });
+
+  it('signale les murs presque horizontaux, sans bloquer', () => {
+    const at = (angle: number, kind: 'wall' | 'common' = 'wall') =>
+      designWarnings([makePeg(300, 300, 'brick', kind, angle)]).length;
+    expect(at(0)).toBe(1);
+    expect(at(-5)).toBe(1);
+    expect(at(175)).toBe(1);
+    expect(at(87)).toBe(1); // face courte horizontale
+    expect(at(10)).toBe(0);
+    expect(at(45)).toBe(0);
+    expect(at(0, 'common')).toBe(0); // cassable : pas concerné
   });
 });

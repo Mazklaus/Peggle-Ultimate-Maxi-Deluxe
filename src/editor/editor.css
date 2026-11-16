@@ -114,6 +114,11 @@ canvas {
   margin: 0;
   color: var(--alert);
 }
+#errors li.warn {
+  color: #ffb23f;
+  list-style: none;
+  margin-left: -18px;
+}
 #errors li.ok {
   color: var(--ok);
   list-style: none;
