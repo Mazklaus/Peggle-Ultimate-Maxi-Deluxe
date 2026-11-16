@@ -108,7 +108,8 @@ const HORLOGE = { scale: 0.5, realMs: 6500, bucketScale: 1.5, follow: 14, keySpe
 /**
  * Orbe éclair de Grelot (GD reglages-jalon1, charges de reglages-jalon2 §4 bis) : tir chargé
  * en ligne droite sans gravité, à 1,3 fois la vitesse ; perce 3 cristaux (allumés sans
- * rebond), puis physique normale. Les murs renvoient l'orbe normalement pendant l'éclair.
+ * rebond ; les cristaux déjà allumés sont traversés sans compter, décision GD), puis physique
+ * normale. Les murs renvoient l'orbe normalement pendant l'éclair.
  * maxSeconds : filet de sécurité (temps de jeu) si l'orbe ne trouve pas 3 cristaux.
  */
 const GRELOT = { speed: 1.3, pierce: 3, maxSeconds: 4 };
@@ -416,6 +417,7 @@ export class GameScene extends Phaser.Scene {
     this.updateCrazyBounce(delta / 1000);
     this.updateMagnet(delta / 1000);
     this.updateTwin(time);
+    this.hud.setPowerActivity(this.crazyLeft > 0 ? this.crazyLeft / VOLTE.seconds : 0, !!this.twin);
     const caught = this.inBucket(orb);
     if (caught || orb.y > GAME_HEIGHT + ORB_RADIUS * 2) {
       if (!caught && this.secondChance(orb)) return;
@@ -733,6 +735,8 @@ export class GameScene extends Phaser.Scene {
       stars: level.stars,
       astreColor: astre.def?.color ?? null,
       heartColor: this.colors.heart,
+      power: astre.def && astre.id ? { id: astre.id, kind: companionKind(astre.id) } : null,
+      cannon: this.muzzle(),
     });
     button(this, 1236, 32, 'II', () => this.openPause(), { width: 48, size: 18 });
   }
@@ -1105,7 +1109,7 @@ export class GameScene extends Phaser.Scene {
     const to = { x: orb.x, y: orb.y };
     this.boltPrev = to;
     const hits = this.level.crystals
-      .filter((c) => c.kind !== 'wall' && !this.pierced.has(c.id))
+      .filter((c) => c.kind !== 'wall' && !c.lit && !this.pierced.has(c.id))
       .map((c) => ({ c, t: sweepHit(from, to, c, ORB_RADIUS) }))
       .filter((h): h is { c: Crystal; t: number } => h.t !== null)
       .sort((a, b) => a.t - b.t);
@@ -1291,6 +1295,7 @@ export class GameScene extends Phaser.Scene {
     this.powerGfx.clear();
     this.endTimeWarp();
     this.endBolt();
+    this.hud.setPowerActivity(0, false);
     this.hud.endShot();
     this.applyGameScale(1);
     const result = endShot(this.level, catches);
@@ -1494,6 +1499,9 @@ export class GameScene extends Phaser.Scene {
     this.guide.clear();
     if (this.ending || !canShoot(this.level)) return;
     const start = this.muzzle();
+    // Tir suivant armé : anneau menthe 40 % autour de la bouche du canon (specs UI/UX §3).
+    if (this.reveal.armed && companionById(this.companionId)?.power.kind === 'next')
+      this.guide.lineStyle(3, PALETTE.success, 0.4).strokeCircle(start.x, start.y, 13);
     const input = {
       x: start.x,
       y: start.y,
@@ -1657,4 +1665,8 @@ function sweepHit(
     if (Math.abs(lx) <= shape.w / 2 + r && Math.abs(ly) <= shape.h / 2 + r) return t;
   }
   return null;
+}
+
+function companionKind(id: string): 'next' | 'immediate' | 'reserve' {
+  return companionById(id)?.power.kind ?? 'immediate';
 }

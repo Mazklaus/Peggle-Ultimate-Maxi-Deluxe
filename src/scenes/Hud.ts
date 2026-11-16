@@ -7,6 +7,7 @@
 import Phaser from 'phaser';
 import { gameEvents, type GameEventName } from '../core/events';
 import { drawGardienne, LANTERN } from './gardienne';
+import { drawPowerHex, drawPowerIcon } from './powerIcons';
 import { PALETTE, TEXT, textStyle } from './theme';
 
 /** Géométrie des specs (coordonnées écran 1280 × 720). */
@@ -50,7 +51,14 @@ export interface HudOptions {
   astreColor: number | null;
   /** Couleur des cœurs (palette normale ou daltonienne). */
   heartColor: number;
+  /** Pouvoir de l'Astre (pictogramme et type d'indicateur), absent sans Astre. */
+  power?: { id: string; kind: 'next' | 'immediate' | 'reserve' } | null;
+  /** Bouche du canon (écran) : les charges consommées y volent. */
+  cannon?: { x: number; y: number };
 }
+
+/** Loge : hexagone du pouvoir Ø 26 et indicateurs (specs UI/UX jalon 2, section 3). */
+const POWER_HEX = 26;
 
 export class GameHud {
   private scene: Phaser.Scene;
@@ -66,6 +74,9 @@ export class GameHud {
   private heartsText: Phaser.GameObjects.Text;
   private heartIcon: Phaser.GameObjects.Polygon;
   private powerGfx: Phaser.GameObjects.Graphics;
+  /** Hexagone + pictogramme (conteneur : pulsation et flash). */
+  private powerIcon?: Phaser.GameObjects.Container;
+  private power = { charges: 0, max: 0, lit: false, ring: 0, twins: false };
   private shotBadge: Phaser.GameObjects.Container;
   private shotText: Phaser.GameObjects.Text;
   private shown = 0;
@@ -81,6 +92,13 @@ export class GameHud {
     const L = HUD_LAYOUT;
     this.drawLoge();
     this.powerGfx = scene.add.graphics();
+    if (opts.power && opts.astreColor !== null) {
+      const g = scene.add.graphics();
+      drawPowerHex(g, 0, 0, POWER_HEX);
+      drawPowerIcon(g, opts.power.id, 0, 0, POWER_HEX * 0.62);
+      const p = this.powerPos();
+      this.powerIcon = scene.add.container(p.x, p.y, [g]).setAlpha(0.6);
+    }
 
     this.main = scene.add.container(0, 0);
     const add = <T extends Phaser.GameObjects.GameObject>(o: T): T => {
@@ -119,21 +137,125 @@ export class GameHud {
     scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.unsubscribe());
   }
 
-  /** Pastilles du pouvoir sous l'Astre : hexagone menthe + tirs restants. */
+  /** Charges du pouvoir sous l'Astre (pastilles « tir suivant », bouclier « réserve »). */
   setPower(charges: number, max: number, lit: boolean): void {
-    const g = this.powerGfx;
-    g.clear();
-    if (this.opts.astreColor === null || max === 0) return;
-    const y = HUD_LAYOUT.anchor.y + 26;
-    const x0 = HUD_LAYOUT.anchor.x - ((max - 1) * 16) / 2 + 12;
-    const hx = x0 - 26;
-    g.fillStyle(MINT, lit || charges > 0 ? 1 : 0.3);
-    g.fillPoints(ring(6, 9, hx, y), true);
-    for (let i = 0; i < max; i++) {
-      const x = x0 + i * 16;
-      if (i < charges) g.fillStyle(MINT, 1).fillCircle(x, y, 5);
-      else g.lineStyle(2, MINT, 0.35).strokeCircle(x, y, 5);
+    const prev = this.power.charges;
+    this.power = { ...this.power, charges, max, lit };
+    const kind = this.opts.power?.kind;
+    if (charges < prev && kind === 'next') this.flyCharge(charges);
+    if (charges < prev && kind === 'reserve') this.shatterShield();
+    this.drawPower();
+  }
+
+  /**
+   * Pouvoirs immédiats pendant le tir : `ring` = part restante de l'effet (anneau de Volte,
+   * 0 = rien), `twins` = les deux orbes de Twi & Nkl sont en vol.
+   */
+  setPowerActivity(ring: number, twins: boolean): void {
+    const r = Math.round(ring * 60) / 60;
+    if (r === this.power.ring && twins === this.power.twins) return;
+    this.power = { ...this.power, ring: r, twins };
+    this.drawPower();
+  }
+
+  private powerPos(): { x: number; y: number } {
+    const kind = this.opts.power?.kind;
+    const max = kind === 'next' ? Math.max(1, this.power.max) : 1;
+    const x = HUD_LAYOUT.anchor.x - (max * 16 + POWER_HEX) / 2 + POWER_HEX / 2 - 4;
+    return { x: kind === 'next' ? x : HUD_LAYOUT.anchor.x - 12, y: HUD_LAYOUT.anchor.y + 28 };
+  }
+
+  private drawPower(): void {
+    const g = this.powerGfx.clear();
+    const kind = this.opts.power?.kind;
+    if (this.opts.astreColor === null || !kind || !this.powerIcon) return;
+    const { charges, max, lit, ring, twins } = this.power;
+    const p = this.powerPos();
+    this.powerIcon.setPosition(p.x, p.y);
+    const active = kind === 'immediate' ? lit || ring > 0 || twins : charges > 0 || lit;
+    this.powerIcon.setAlpha(active ? 1 : 0.6);
+    const x0 = p.x + POWER_HEX / 2 + 12;
+    if (kind === 'next') {
+      for (let i = 0; i < max; i++) {
+        const x = x0 + i * 16;
+        if (i < charges) g.fillStyle(MINT, 1).fillCircle(x, p.y, 5);
+        else g.lineStyle(2, MINT, 0.35).strokeCircle(x, p.y, 5);
+      }
+    } else if (kind === 'reserve') {
+      const pts = shield(x0 + 4, p.y, 9);
+      if (charges > 0) g.fillStyle(MINT, 1).fillPoints(pts, true);
+      else g.lineStyle(2, MINT, 0.35).strokePoints(pts, true);
+    } else {
+      if (ring > 0) {
+        // Volte : anneau qui se vide sur la durée de l'effet.
+        g.lineStyle(3, MINT, 0.9).beginPath();
+        g.arc(p.x, p.y, POWER_HEX / 2 + 5, -Math.PI / 2, -Math.PI / 2 + ring * Math.PI * 2);
+        g.strokePath();
+      }
+      if (twins) {
+        g.fillStyle(MINT, 1).fillCircle(x0, p.y - 5, 4);
+        g.fillCircle(x0, p.y + 5, 4);
+      }
     }
+  }
+
+  /** Une charge consommée au tir : la pastille se vide et vole vers le canon. */
+  private flyCharge(index: number): void {
+    const to = this.opts.cannon;
+    if (!to) return;
+    const p = this.powerPos();
+    const dot = this.scene.add.circle(p.x + POWER_HEX / 2 + 12 + index * 16, p.y, 5, MINT);
+    dot.setDepth(20);
+    this.scene.tweens.add({
+      targets: dot,
+      x: to.x,
+      y: to.y,
+      scale: 0.5,
+      alpha: 0.4,
+      duration: 380,
+      ease: 'Cubic.In',
+      onComplete: () => dot.destroy(),
+    });
+  }
+
+  /** Seconde chance utilisée : le bouclier se brise en paillettes. */
+  private shatterShield(): void {
+    const p = this.powerPos();
+    const cx = p.x + POWER_HEX / 2 + 16;
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      const bit = this.scene.add.circle(cx, p.y, 2.5, MINT).setDepth(20);
+      this.scene.tweens.add({
+        targets: bit,
+        x: cx + Math.cos(a) * 18,
+        y: p.y + Math.sin(a) * 18,
+        alpha: 0,
+        duration: 420,
+        onComplete: () => bit.destroy(),
+      });
+    }
+  }
+
+  /** pouvoir_active : flash de l'hexagone et pictogramme qui jaillit au-dessus de la loge. */
+  private powerPop(): void {
+    const icon = this.powerIcon;
+    const power = this.opts.power;
+    if (!icon || !power) return;
+    icon.setAlpha(1).setScale(1.25);
+    this.scene.tweens.add({ targets: icon, scale: 1, duration: 220, ease: 'Back.Out' });
+    const g = this.scene.add.graphics();
+    drawPowerHex(g, 0, 0, POWER_HEX);
+    drawPowerIcon(g, power.id, 0, 0, POWER_HEX * 0.62);
+    const { anchor, loge } = HUD_LAYOUT;
+    const pop = this.scene.add.container(anchor.x, loge.y + 18, [g]).setDepth(20);
+    this.scene.tweens.add({
+      targets: pop,
+      scale: { from: 1.6, to: 0 },
+      y: loge.y - 6,
+      duration: 500,
+      ease: 'Quad.In',
+      onComplete: () => pop.destroy(),
+    });
   }
 
   update(s: HudState): void {
@@ -165,6 +287,10 @@ export class GameHud {
     this.heartIcon.setScale(this.pulse.hearts ? beat : 1);
     const slow = 0.6 + 0.4 * Math.sin((time / 1000) * Math.PI);
     this.orbsText.setAlpha(this.pulse.orbs ? slow : 1);
+    // Tir suivant armé : l'hexagone pulse à 1 Hz.
+    const armed = this.opts.power?.kind === 'next' && this.power.charges > 0;
+    if (this.powerIcon && !this.scene.tweens.isTweening(this.powerIcon))
+      this.powerIcon.setScale(armed ? 1 + 0.08 * Math.sin((time / 1000) * Math.PI * 2) : 1);
   }
 
   /** L'orbe est sortie : le score du tir s'efface. */
@@ -197,6 +323,7 @@ export class GameHud {
     }
     if (name === 'tir_lance') this.shotText.setFontSize(20);
     if (name === 'orbe_recupere') this.pop(this.orbsText, 1.3, 300, MINT);
+    if (name === 'pouvoir_active') this.powerPop();
   }
 
   private countScoreTo(target: number): void {
@@ -315,11 +442,10 @@ export class GameHud {
   private markLabels: Phaser.GameObjects.Text[] = [];
 }
 
-function ring(n: number, r: number, cx: number, cy: number): Phaser.Math.Vector2[] {
-  return Array.from({ length: n }, (_, i) => {
-    const a = (i * Math.PI * 2) / n;
-    return new Phaser.Math.Vector2(cx + Math.cos(a) * r, cy + Math.sin(a) * r);
-  });
+/** Écusson (bouclier) de hauteur 2h, pointe en bas. */
+function shield(cx: number, cy: number, h: number): Phaser.Math.Vector2[] {
+  const V = (x: number, y: number) => new Phaser.Math.Vector2(cx + x, cy + y);
+  return [V(-h * 0.8, -h), V(h * 0.8, -h), V(h * 0.8, 0), V(0, h), V(-h * 0.8, 0)];
 }
 
 function star5(cx: number, cy: number, outer: number, inner: number): Phaser.Math.Vector2[] {
