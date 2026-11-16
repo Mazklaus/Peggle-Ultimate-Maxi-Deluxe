@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { staggeredGrid } from '../src/core/layout';
 import {
   breakLitNow,
+  chainBonus,
   createLevel,
   endShot,
   heartsRemaining,
@@ -136,5 +137,19 @@ describe('victoire et échec', () => {
     hitCrystal(s, lit);
     expect(breakLitNow(s, [lit, unlit])).toEqual([lit]);
     expect(s.crystals.some((c) => c.id === unlit)).toBe(true);
+  });
+});
+
+describe('bonus de chaîne et réglages GD', () => {
+  it('+10 % par rebond au-delà de 10, au plus +100 %', () => {
+    expect(chainBonus(1000, 10)).toBe(0);
+    expect(chainBonus(1000, 13)).toBe(300);
+    expect(chainBonus(1000, 40)).toBe(1000);
+  });
+
+  it('orbe restant 1 000, pouvoir 50, orbe gratuit à 5 000', () => {
+    expect(TUNING.orbBonus).toBe(1000);
+    expect(TUNING.points.power).toBe(50);
+    expect(TUNING.freeOrbShotScore).toBe(5000);
   });
 });

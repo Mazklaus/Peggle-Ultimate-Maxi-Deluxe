@@ -15,6 +15,7 @@ import {
   startShot,
   type Crystal,
   type LevelState,
+  chainBonus,
 } from '../core/level';
 import type { LevelData } from '../core/levelFormat';
 import { levelFromData } from '../core/levelSetup';
@@ -69,13 +70,17 @@ const SLOWMO = { scale: 0.25, maxRealMs: 1500 };
 /** Gel d'image au contact du dernier cœur non anticipé (cas lent, demande GD), avant le ralenti. */
 const FINAL_HIT_STOP_MS = 80;
 /**
- * Anti-blocage garanti (règle GD) : orbe quasi immobile (moins de 12 px en
+ * Anti-blocage garanti (règle GD) : orbe quasi immobile (moins de STUCK_RADIUS_PX en
  * TUNING.antiStuckSeconds) -> cristaux allumés voisins brisés, sinon impulsion
  * (TUNING.antiStuckNudges essais), sinon dissolution. Vitesse de l'impulsion :
  */
 const STUCK_NUDGE_SPEED = 3 * ORB_PHYSICS.slowdown;
 /** orbe_coincee part 0,7 s avant l'impulsion : le souffle de l'Astre est déployé (DA). */
 const STUCK_BLOW_LEAD_MS = 700;
+/** Zone « sur place » de l'anti-blocage (px autour du point de référence). */
+const STUCK_RADIUS_PX = 40;
+/** En dessous (px/s), un contact n'est pas un rebond de chaîne mais un frottement. */
+const BOUNCE_MIN_SPEED = 90 * ORB_PHYSICS.slowdown;
 /** Marge de prudence de la prédiction du final (px retirés au rayon du dernier cœur). */
 const FINAL_PREDICT_MARGIN_PX = 3;
 /** Vitesse minimale (px/s) pour anticiper le final ; en dessous, seul le contact compte. */
@@ -252,7 +257,7 @@ export class GameScene extends Phaser.Scene {
           if (other.label.startsWith('crystal:')) this.onCrystalHit(Number(other.label.slice(8)));
           else if (other.label === 'wall') {
             gameEvents.emit('mur_touche', {});
-            this.emitAll(this.tracker.bounced());
+            this.countBounce();
           }
         }
       },
@@ -681,7 +686,7 @@ export class GameScene extends Phaser.Scene {
       endNow: (won) => {
         if (this.ending || this.orb) return;
         if (won) {
-          this.level.score += this.level.orbs * this.level.tuning.points.bonus;
+          this.level.score += this.level.orbs * this.level.tuning.orbBonus;
           gameEvents.emit('victoire', { score: this.level.score });
         } else gameEvents.emit('echec', { score: this.level.score });
         this.endLevel(won);
@@ -778,17 +783,28 @@ export class GameScene extends Phaser.Scene {
     this.refreshHud();
   }
 
+  /**
+   * Un rebond compte pour la chaîne, sauf les rebonds sur place d'une orbe coincée
+   * (QA A19 : Pip fêtait une « chaîne longue » pendant un blocage).
+   */
+  private countBounce(): void {
+    if (this.stuckAnnounced || !this.orb) return;
+    const v = this.orbVelocity(this.orb);
+    if (Math.hypot(v.x, v.y) * 60 < BOUNCE_MIN_SPEED) return;
+    this.emitAll(this.tracker.bounced());
+  }
+
   private onCrystalHit(id: number): void {
     const crystal = this.level.crystals.find((c) => c.id === id);
     if (crystal?.kind === 'wall') {
       gameEvents.emit('mur_touche', {});
-      this.emitAll(this.tracker.bounced());
+      this.countBounce();
       return;
     }
     const points = hitCrystal(this.level, id);
     if (!crystal) return;
     if (points === 0) {
-      this.emitAll(this.tracker.bounced()); // rebond sur un cristal déjà allumé
+      this.countBounce(); // rebond sur un cristal déjà allumé
       return;
     }
     this.chain += 1;
@@ -813,6 +829,12 @@ export class GameScene extends Phaser.Scene {
   /** finalX : abscisse retenue pour la zone finale (par défaut, celle de l'orbe). */
   private finishShot(caught: boolean, finalX = this.orb?.x): void {
     if (this.finalShot && finalX !== undefined) this.scoreFinalZone(finalX);
+    // Bonus de chaîne (GD) : +10 % du score du tir par rebond au-delà de 10, au plus +100 %.
+    const chain = chainBonus(this.level.shotScore, this.tracker.shotBounces, this.level.tuning);
+    if (chain > 0) {
+      this.level.score += chain;
+      this.breakdown.addChain(chain);
+    }
     this.orb?.destroy();
     this.orb = undefined;
     this.hud.endShot();
@@ -847,7 +869,7 @@ export class GameScene extends Phaser.Scene {
   private endLevel(won: boolean): void {
     this.ending = true;
     const score = this.level.score;
-    const orbBonus = won ? this.level.orbs * this.level.tuning.points.bonus : 0;
+    const orbBonus = won ? this.level.orbs * this.level.tuning.orbBonus : 0;
     const payload: ResultsData = {
       level: this.sceneData.level,
       score,
@@ -866,7 +888,9 @@ export class GameScene extends Phaser.Scene {
   private checkStuck(time: number): void {
     const orb = this.orb;
     if (!orb) return;
-    if (Math.hypot(orb.x - this.stuckRef.x, orb.y - this.stuckRef.y) > 12) {
+    // Rayon large : une orbe qui rebondit dans une petite boîte de murs reste « sur place »
+    // (QA T12), alors qu'une orbe libre (ou poussée) le quitte en un instant.
+    if (Math.hypot(orb.x - this.stuckRef.x, orb.y - this.stuckRef.y) > STUCK_RADIUS_PX) {
       this.stuckRef = { x: orb.x, y: orb.y, t: time };
       if (this.stuckAnnounced) {
         this.stuckAnnounced = false;
