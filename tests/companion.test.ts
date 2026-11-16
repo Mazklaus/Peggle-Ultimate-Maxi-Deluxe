@@ -221,4 +221,65 @@ describe('CompanionBrain', () => {
     run(b, 1.2, { aim: { dx: 300, dy: 200 } });
     expect(b.state.reaction).toMatch(/meche|pas_moi|pas_grave/);
   });
+
+  it('une réaction en attente trop vieille est oubliée', () => {
+    const b = new CompanionBrain(PIP, seeded());
+    b.setPhase('flight');
+    b.onEvent('victoire'); // pose gardée : rien ne se met en file derrière
+    b.onEvent('echec');
+    b.onEvent('rate');
+    run(b, 4);
+    b.setPhase('aiming');
+    run(b, 0.1);
+    expect(b.state.reaction ?? '').not.toMatch(/meche|pas_moi|pas_grave|echec/);
+
+    const c = new CompanionBrain(PIP, seeded());
+    c.setPhase('flight');
+    c.onEvent('final_ralenti');
+    const finalDur = PIP.reactions.final_ralenti!.find((r) => r.id === c.state.reaction)!.duration;
+    c.onEvent('rate'); // en file
+    c.onEvent('presque'); // en file, devant « rate »
+    run(c, finalDur + 0.05);
+    expect(c.state.reaction).toMatch(/noooon|souffle/);
+    run(c, 1.3); // « rate » attend depuis plus de pendingMaxAgeSeconds : oublié
+    expect(c.state.reaction ?? '').not.toMatch(/meche|pas_moi|pas_grave/);
+  });
+
+  it('« oh ! » complet une fois par tir avec 3 cœurs ou moins, muet au-delà', () => {
+    const near = (nearHeart: boolean, heartsLeft: number) => ({
+      orb: { dx: 300, dy: 100, vy: 0, depth: 0.3, nearHeart, heartsLeft },
+    });
+    const b = new CompanionBrain(PIP, seeded());
+    b.setPhase('flight');
+    const cries: string[] = [];
+    for (let i = 0; i < 3; i++) {
+      for (const n of [true, false]) {
+        for (let f = 0; f < 30; f++) {
+          const p = b.update(1 / 60, near(n, 2));
+          if (p.cry) cries.push(p.cry.reaction);
+        }
+      }
+    }
+    expect(cries.filter((c) => c.includes('oh') || c.startsWith('pip_'))).toHaveLength(1);
+
+    const m = new CompanionBrain(PIP, seeded());
+    m.setPhase('flight');
+    let p = m.update(1 / 60, near(true, 10));
+    expect(p.cry).toBeNull();
+    expect(p.eyes).toBe('wide');
+    for (let f = 0; f < 60; f++) p = m.update(1 / 60, near(f % 20 < 10, 10));
+    expect(m.state.reaction).toBeNull();
+  });
+});
+
+describe('CompanionBrain : sommeil forcé (pause)', () => {
+  it('s’endort sur demande et se réveille en sursaut', () => {
+    const b = new CompanionBrain(PIP, seeded());
+    b.setSleeping(true);
+    run(b, 1);
+    expect(b.state.sleeping).toBe(true);
+    b.setSleeping(false);
+    expect(b.state.sleeping).toBe(false);
+    expect(b.state.reaction).toBe('pip_sursaut');
+  });
 });

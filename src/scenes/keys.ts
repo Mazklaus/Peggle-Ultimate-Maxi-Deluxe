@@ -8,6 +8,8 @@ export const SCENES = {
   results: 'Results',
   options: 'Options',
   cutscene: 'Cutscene',
+  /** Calque de l'Astre au-dessus des overlays de fin. */
+  companionLayer: 'CompanionLayer',
 } as const;
 
 /** Niveaux qui déclenchent une cinématique (ids du format v1). */

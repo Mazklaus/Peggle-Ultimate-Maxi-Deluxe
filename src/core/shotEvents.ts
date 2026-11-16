@@ -2,6 +2,7 @@
  * Détection des événements de jeu (seuils : Game Designer, reglages-jalon1.md section 5).
  * Logique pure : la scène appelle ces méthodes et relaie les noms renvoyés sur le bus.
  */
+import { ORB_PHYSICS } from './physics';
 import type { CrystalKind } from './level';
 
 export const EVENT_THRESHOLDS = {
@@ -10,7 +11,8 @@ export const EVENT_THRESHOLDS = {
   longChainShotScore: 3000,
   nearMissMaxHearts: 3,
   nearMissEdgePx: 12,
-  finalSlowmoLeadSeconds: 0.4,
+  /** 0,4 s à la vitesse du prototype, allongé avec le ralenti de l'orbe (GD). */
+  finalSlowmoLeadSeconds: 0.4 / ORB_PHYSICS.slowdown,
   idleFirstSeconds: 8,
   idleRepeatSeconds: 12,
 };
@@ -122,8 +124,17 @@ export class ShotTracker {
     return [];
   }
 
-  /** À chaque frame du vol : presque et final_ralenti. hearts = cœurs non allumés. */
-  orbMoved(orb: OrbSample, hearts: ReadonlyArray<HeartTarget>): DetectedEvent[] {
+  /**
+   * À chaque frame du vol : presque et final_ralenti. hearts = cœurs non allumés.
+   * contactTime prédit le temps (s) avant contact avec le dernier cœur, ou null s'il n'aura
+   * pas lieu ; par défaut en ligne droite, la scène fournit une prédiction avec gravité et
+   * rebonds (sinon faux finals, rapport QA).
+   */
+  orbMoved(
+    orb: OrbSample,
+    hearts: ReadonlyArray<HeartTarget>,
+    contactTime: (orb: OrbSample, heart: HeartTarget) => number | null = timeToContact,
+  ): DetectedEvent[] {
     const out: DetectedEvent[] = [];
     if (!this.nearMissSent && hearts.length > 0 && hearts.length <= this.t.nearMissMaxHearts) {
       const near = hearts.find((h) => edgeDistance(orb, h) < this.t.nearMissEdgePx);
@@ -140,7 +151,7 @@ export class ShotTracker {
     }
     const last = hearts.length === 1 ? hearts[0] : undefined;
     if (!this.finalSent && last) {
-      const ttc = timeToContact(orb, last);
+      const ttc = contactTime(orb, last);
       if (ttc !== null && ttc < this.t.finalSlowmoLeadSeconds) {
         this.finalSent = true;
         out.push('final_ralenti');
