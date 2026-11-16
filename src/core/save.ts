@@ -19,6 +19,12 @@ export interface Options {
   reducedMotion: boolean;
   musicVolume: number;
   sfxVolume: number;
+  /** Voix des Astres, séparée des effets (Sound Designer, jalon 3). */
+  voiceVolume: number;
+  /** Mode doux : aigus adoucis, explosions moins fortes. */
+  softAudio: boolean;
+  /** Son mono. */
+  monoAudio: boolean;
 }
 
 /** Une ligne par niveau joué jusqu'au bout : sert au Game Designer pour recaler les étoiles. */
@@ -52,6 +58,9 @@ export const DEFAULT_OPTIONS: Options = {
   reducedMotion: false,
   musicVolume: 0.8,
   sfxVolume: 0.8,
+  voiceVolume: 0.8,
+  softAudio: false,
+  monoAudio: false,
 };
 
 export function emptySave(): SaveData {
