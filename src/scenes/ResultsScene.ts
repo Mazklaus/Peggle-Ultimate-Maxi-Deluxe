@@ -28,7 +28,7 @@ export interface ResultsData {
 /** Où l'Astre vient se poser hors de sa loge (pieds, coordonnées écran). */
 export const ASTRE_SPOTS = {
   victoire: { x: 300, y: 420 },
-  consolation: { x: 420, y: 400 },
+  consolation: { x: 380, y: 400 },
 };
 
 const FAIL_PANEL = { w: 360, h: 240 };
@@ -248,7 +248,7 @@ export class ResultsScene extends Phaser.Scene {
     for (let i = 0; i < 3; i++) {
       const lit = i < stars;
       const s = this.add
-        .text((i - 1) * 64, starY, '★', textStyle(52, lit ? '#FFB23F' : '#2E3870'))
+        .text((i - 1) * 64, starY, '★', textStyle(52, lit ? '#B9A6FF' : '#2E3870'))
         .setOrigin(0.5)
         .setScale(0);
       box.add(s);
