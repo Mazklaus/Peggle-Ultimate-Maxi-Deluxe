@@ -5,3 +5,5 @@ package-lock.json
 # Niveaux : format canonique de serializeLevel (un peg par ligne)
 public/levels
 public/da
+# Rig des Astres de la DA (copie, voir en-tête des fichiers)
+src/companions/da/*.js

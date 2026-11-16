@@ -3,10 +3,12 @@
  * Couleurs : DA (astres-rig.js). Pouvoirs et charges : Game Designer (reglages-jalon1.md,
  * reglages-jalon2.md §4 bis). Un Astre se réveille au chapitre où il apparaît.
  *
- * `def` vaut null tant que l'Astre n'est pas encore porté en jeu : le sélecteur le grise.
+ * `def` vaut null tant que l'Astre n'est pas encore jouable (pouvoir pas encore codé) :
+ * le sélecteur le grise. Pour les tests, ?astre=<id> force n'importe quel Astre en jeu.
  */
 import type { CompanionDef } from '../core/companion/types';
 import type { Companion } from '../core/levelFormat';
+import { BOURDON } from './astres';
 import { PIP } from './pip';
 
 /** next = s'applique au tir suivant (charges), immediate = agit pendant le tir, reserve = charge gardée. */
@@ -42,7 +44,7 @@ export const COMPANION_ROSTER: readonly CompanionInfo[] = [
     id: 'bourdon',
     name: 'Bourdon',
     color: 0xffa98a,
-    def: null,
+    def: BOURDON,
     power: { name: 'Onde de choc', kind: 'immediate', maxCharges: 0 },
     wakesAtChapter: 2,
   },

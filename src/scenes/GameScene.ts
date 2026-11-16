@@ -1,7 +1,9 @@
 import Phaser from 'phaser';
 import { audio } from '../audio';
 import { GAME_HEIGHT, GAME_WIDTH, PLAYFIELD, toWorld } from '../config';
-import { PIP } from '../companions/pip';
+import { companionById } from '../companions';
+import { DA_DEFS } from '../companions/astres';
+import type { CompanionDef } from '../core/companion/types';
 import { debugEnabled, mountDebugPanel } from '../debug/debugPanel';
 import { gameEvents, type GameEventName } from '../core/events';
 import {
@@ -52,6 +54,8 @@ export interface GameSceneData {
   level: LevelData;
   /** Lancé depuis l'éditeur : pas de sauvegarde, pas de carte. */
   test?: boolean;
+  /** Astre choisi dans le sélecteur (sinon celui du niveau). */
+  companion?: string;
 }
 
 const ORB_RADIUS = 8;
@@ -70,6 +74,8 @@ const FAIL_DELAY_MS = 400;
 const SLOWMO = { scale: 0.25, maxRealMs: 1500 };
 /** Gel d'image au contact du dernier cœur non anticipé (cas lent, demande GD), avant le ralenti. */
 const FINAL_HIT_STOP_MS = 80;
+/** Onde de choc de Bourdon : rayon (px) et durée de propagation (s). */
+const SHOCKWAVE = { radius: 110, seconds: 0.3 };
 /**
  * Anti-blocage garanti (règle GD) : orbe quasi immobile (moins de STUCK_RADIUS_PX en
  * TUNING.antiStuckSeconds) -> cristaux allumés voisins brisés, sinon impulsion
@@ -141,6 +147,8 @@ export class GameScene extends Phaser.Scene {
   private paused = false;
   private stuckRef = { x: 0, y: 0, t: 0 };
   private decor!: DecorLayer;
+  /** Astre en jeu (id de la liste), null sans Astre. */
+  private companionId: string | null = null;
   /** Impulsions anti-blocage déjà données sur ce tir. */
   private stuckNudges = 0;
   /** orbe_coincee envoyé, en attente de orbe_debloquee. */
@@ -462,36 +470,48 @@ export class GameScene extends Phaser.Scene {
 
   private makeHud(): void {
     const level = this.sceneData.level;
-    const forced = new URLSearchParams(window.location.search).get('astre');
-    const hasAstre = (forced ?? level.companion) === 'pip';
+    const astre = this.resolveCompanion();
     this.hud = new GameHud(this, {
       levelLabel: levelLabel(level.id),
       stars: level.stars,
-      astreColor: hasAstre ? PIP.color : null,
+      astreColor: astre.def?.color ?? null,
       heartColor: this.colors.heart,
     });
     button(this, 1236, 32, 'II', () => this.openPause(), { width: 48, size: 18 });
   }
 
+  /** Astre du niveau : forcé (?astre=, tests QA), choisi au sélecteur, ou celui du niveau. */
+  private resolveCompanion(): { id: string | null; def: CompanionDef | undefined } {
+    const forced = new URLSearchParams(window.location.search).get('astre');
+    const id = forced ?? this.sceneData.companion ?? this.sceneData.level.companion;
+    const def =
+      companionById(id)?.def ??
+      (forced ? (DA_DEFS as Record<string, CompanionDef | undefined>)[forced] : undefined);
+    return { id, def };
+  }
+
   private makeCompanion(): void {
     // ?astre=pip force l'Astre sur n'importe quel niveau (tests QA).
-    const forced = new URLSearchParams(window.location.search).get('astre');
-    const id = forced ?? this.sceneData.level.companion;
+    const { id, def } = this.resolveCompanion();
     // Aide après 3 échecs sur un niveau pas encore fini (règle LD, arbitrage GD).
     const save = this.registry.get(REGISTRY.save) as SaveData | undefined;
     const needsHelp =
       !this.sceneData.test &&
       !!save &&
       failsBeforeFirstWin(save, this.sceneData.level.id) >= HELP_AFTER_FAILS;
-    if (id !== 'pip') {
+    this.companionId = def && id ? id : null;
+    if (!def) {
       // Sans Astre (prologue) : la lanterne de la Gardienne allonge le guide du 1er tir.
       if (needsHelp) this.lanternShots = 1;
       return;
     }
-    this.companion = new CompanionView(this, PIP, COMPANION_ANCHOR);
+    this.companion = new CompanionView(this, def, COMPANION_ANCHOR);
     this.companion.attach();
-    // Avec Pip : le 1er tir montre sa trajectoire révélée.
-    if (needsHelp) this.reveal.grant(1);
+    // Avec Pip : le 1er tir montre sa trajectoire révélée ; sinon la lanterne.
+    if (needsHelp) {
+      if (id === 'pip') this.reveal.grant(1);
+      else this.lanternShots = 1;
+    }
   }
 
   /**
@@ -613,7 +633,7 @@ export class GameScene extends Phaser.Scene {
   private emitAll(events: DetectedEvent[]): void {
     for (const e of events) {
       if (e === 'final_ralenti') this.startSlowmo();
-      if (e === 'pouvoir_active' && this.companion) {
+      if (e === 'pouvoir_active' && this.companionId === 'pip') {
         this.reveal.gain();
         this.refreshPower();
       }
@@ -833,6 +853,7 @@ export class GameScene extends Phaser.Scene {
     this.breakdown.add(crystal.kind, points);
     gameEvents.emit('cristal_allume', { kind: crystal.kind, chain: this.chain, points });
     this.emitAll(this.tracker.crystalLit(crystal.kind, this.level.shotScore, crystal.id));
+    if (crystal.kind === 'power' && this.companionId === 'bourdon') this.shockwave(crystal);
     if (isFinalHeartLit(this.level)) {
       // Filet de sécurité : le dernier cœur touché sans prédiction préalable.
       // Pas encore de ralenti, ou un ralenti déjà terminé pendant ce tir : petit gel
@@ -845,6 +866,33 @@ export class GameScene extends Phaser.Scene {
       this.showFinalZones();
     }
     this.refreshHud();
+  }
+
+  /**
+   * Pouvoir de Bourdon, onde de choc (GD reglages-jalon1, rayon ×1,1 en 880 × 656) :
+   * tous les cristaux dans le rayon s'allument quand l'onde les atteint (0,3 s), sans
+   * pousser l'orbe. Une onde peut en déclencher une autre sur un cristal pouvoir.
+   */
+  private shockwave(from: Crystal): void {
+    const c = toWorld(from);
+    const ring = this.add.circle(c.x, c.y, 1).setStrokeStyle(4, PALETTE.success, 0.9).setDepth(6);
+    ring.setFillStyle(PALETTE.success, 0.12);
+    const wave = { r: 0 };
+    this.tweens.add({
+      targets: wave,
+      r: SHOCKWAVE.radius,
+      duration: SHOCKWAVE.seconds * 1000,
+      ease: 'Quad.Out',
+      onUpdate: () => {
+        ring.setRadius(wave.r).setAlpha(1 - (wave.r / SHOCKWAVE.radius) * 0.6);
+        for (const k of this.level.crystals) {
+          if (k.lit || k.kind === 'wall' || k.id === from.id) continue;
+          const w = toWorld(k);
+          if (Math.hypot(w.x - c.x, w.y - c.y) <= wave.r) this.onCrystalHit(k.id);
+        }
+      },
+      onComplete: () => ring.destroy(),
+    });
   }
 
   /** finalX : abscisse retenue pour la zone finale (par défaut, celle de l'orbe). */
