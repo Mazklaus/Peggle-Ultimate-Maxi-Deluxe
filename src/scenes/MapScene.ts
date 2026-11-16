@@ -135,7 +135,7 @@ export class MapScene extends Phaser.Scene {
     this.companion = undefined;
     if (current) {
       const pipAwake = this.nodes.some((n) => n.level.chapter >= 1 && n.state !== 'locked');
-      this.companion = new MapCompanion(this, pipAwake ? PIP : null, current);
+      this.companion = new MapCompanion(this, pipAwake ? PIP : null, current, this.nodes);
       this.openCard(current.level);
     }
   }
