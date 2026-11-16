@@ -19,7 +19,12 @@ import {
 import type { LevelData } from '../core/levelFormat';
 import { levelFromData } from '../core/levelSetup';
 import { FINAL_ZONES, finalZoneAt } from '../core/finalZones';
-import { GRAVITY_PER_STEP, ORB_PHYSICS } from '../core/physics';
+import {
+  GRAVITY_PER_STEP,
+  ORB_PHYSICS,
+  applyMatterInternals,
+  type MatterInternals,
+} from '../core/physics';
 import { PIP_POWER, RevealCharges } from '../core/powers';
 import { failsBeforeFirstWin, markSeen, writeSave, type SaveData } from '../core/save';
 import {
@@ -65,8 +70,27 @@ const HEART_RADIUS = 10;
 /** Restitution effective des rebonds (Matter : max orbe / obstacle). */
 const ORB_RESTITUTION = ORB_PHYSICS.orbRestitution;
 const PIP_COLOR = 0xffe45c;
+/** Aide : nombre d'échecs avant le coup de pouce, rebonds du guide de la lanterne. */
+const HELP_AFTER_FAILS = 3;
+const LANTERN_GUIDE_BOUNCES = 2;
+/** Lueur de la lanterne de la Gardienne (ambre chaud). */
+const LANTERN_COLOR = 0xffc870;
 
-type CrystalView = Phaser.GameObjects.Arc | Phaser.GameObjects.Rectangle;
+type CrystalView =
+  Phaser.GameObjects.Arc | Phaser.GameObjects.Rectangle | Phaser.GameObjects.Polygon;
+
+/** Contour d'un cristal rond selon son type (null : cercle simple). */
+function crystalOutline(kind: Crystal['kind'], r: number): { x: number; y: number }[] | null {
+  const ring = (n: number, radius: (i: number) => number, start = -Math.PI / 2) =>
+    Array.from({ length: n }, (_, i) => {
+      const a = start + (i * Math.PI * 2) / n;
+      return { x: Math.cos(a) * radius(i), y: Math.sin(a) * radius(i) };
+    });
+  if (kind === 'heart') return ring(4, () => r * 1.3);
+  if (kind === 'bonus') return ring(8, (i) => (i % 2 === 0 ? r * 1.45 : r * 0.5));
+  if (kind === 'power') return ring(6, () => r * 1.1, 0);
+  return null;
+}
 
 /**
  * Scène de jeu : un niveau JSON, la boucle viser / tirer / rebondir / briser.
@@ -98,6 +122,8 @@ export class GameScene extends Phaser.Scene {
   private slowmoUntil = 0;
   private gameScale = 1;
   private reveal = new RevealCharges();
+  /** Tirs restants avec le guide allongé de la lanterne (aide sans Astre). */
+  private lanternShots = 0;
   /** Le dernier cœur est touché : l'orbe finit sa course dans les zones de bonus. */
   private finalShot = false;
   private finalZonesGfx?: Phaser.GameObjects.Container;
@@ -277,10 +303,7 @@ export class GameScene extends Phaser.Scene {
   /** Orbe ralentie (même trajectoire, parcourue plus lentement) et petits rebonds conservés. */
   private setupPhysics(): void {
     this.matter.world.setGravity(0, 1, ORB_PHYSICS.gravityScale);
-    const matterLib = (
-      Phaser.Physics.Matter as unknown as { Matter: { Resolver: { _restingThresh: number } } }
-    ).Matter;
-    matterLib.Resolver._restingThresh = ORB_PHYSICS.restingThreshold;
+    applyMatterInternals((Phaser.Physics.Matter as unknown as { Matter: MatterInternals }).Matter);
   }
 
   /** Murs gauche, droit et haut de la zone de jeu ; le bas reste ouvert. */
@@ -309,20 +332,18 @@ export class GameScene extends Phaser.Scene {
       view.setRotation(Phaser.Math.DegToRad(shape.angle));
       return view;
     }
-    // Doublage forme / couleur : cœurs carrés, pouvoirs en losange, les autres ronds.
+    // Doublage forme / couleur (DA, obligatoire dans les deux palettes) : cœur en losange,
+    // standard rond, bonus en étoile à 4 branches, pouvoir en hexagone.
     const r = shape.r;
-    let view: CrystalView;
-    if (c.kind === 'heart') view = this.add.rectangle(x, y, r * 1.8, r * 1.8, color);
-    else if (c.kind === 'power') view = this.add.rectangle(x, y, r * 1.6, r * 1.6, color);
-    else view = this.add.circle(x, y, r, color);
+    const points = crystalOutline(c.kind, r);
+    const view: CrystalView = points
+      ? this.add.polygon(x, y, points, color)
+      : this.add.circle(x, y, r, color);
     this.matter.add.gameObject(view, {
       isStatic: true,
       label,
       shape: { type: 'circle', radius: r },
     });
-    // L'angle d'affichage suit celui du corps Matter : on tourne le corps (losange).
-    if (c.kind === 'power')
-      this.matter.body.setAngle(view.body as MatterJS.BodyType, Math.PI / 4, false);
     return view;
   }
 
@@ -345,14 +366,21 @@ export class GameScene extends Phaser.Scene {
     // ?astre=pip force l'Astre sur n'importe quel niveau (tests QA).
     const forced = new URLSearchParams(window.location.search).get('astre');
     const id = forced ?? this.sceneData.level.companion;
-    if (id !== 'pip') return; // prologue sans Astre ; les autres Astres arrivent au jalon 2
+    // Aide après 3 échecs sur un niveau pas encore fini (règle LD, arbitrage GD).
+    const save = this.registry.get(REGISTRY.save) as SaveData | undefined;
+    const needsHelp =
+      !this.sceneData.test &&
+      !!save &&
+      failsBeforeFirstWin(save, this.sceneData.level.id) >= HELP_AFTER_FAILS;
+    if (id !== 'pip') {
+      // Sans Astre (prologue) : la lanterne de la Gardienne allonge le guide du 1er tir.
+      if (needsHelp) this.lanternShots = 1;
+      return;
+    }
     this.companion = new CompanionView(this, PIP, COMPANION_ANCHOR);
     this.companion.attach();
-    // Aide après 3 échecs sur un niveau pas encore fini : le 1er tir montre la trajectoire de Pip.
-    const save = this.registry.get(REGISTRY.save) as SaveData | undefined;
-    if (!this.sceneData.test && save && failsBeforeFirstWin(save, this.sceneData.level.id) >= 3) {
-      this.reveal.grant(1);
-    }
+    // Avec Pip : le 1er tir montre sa trajectoire révélée.
+    if (needsHelp) this.reveal.grant(1);
     this.chargeDots = this.add.graphics();
   }
 
@@ -631,6 +659,7 @@ export class GameScene extends Phaser.Scene {
     this.stuckRef = { x: start.x, y: start.y, t: this.time.now };
     this.companion?.setPhase('flight');
     this.reveal.fire();
+    this.lanternShots = Math.max(0, this.lanternShots - 1);
     this.refreshPower();
     this.emitAll(this.tracker.shotFired());
     if (this.debugForceFinal) {
@@ -791,7 +820,11 @@ export class GameScene extends Phaser.Scene {
       for (const b of path.bounces) this.guide.strokeCircle(b.x, b.y, 7);
       return;
     }
-    const guideBounces = this.sceneData.level.guideBounces ?? 0;
+    const lantern = this.lanternShots > 0;
+    const guideBounces = Math.max(
+      this.sceneData.level.guideBounces ?? 0,
+      lantern ? LANTERN_GUIDE_BOUNCES : 0,
+    );
     const points =
       guideBounces > 0
         ? predictPath({
@@ -801,6 +834,14 @@ export class GameScene extends Phaser.Scene {
             maxSteps: 240,
           }).points
         : aimGuide(input);
+    if (lantern) {
+      // Lanterne : points chauds qui pulsent doucement.
+      this.guide.fillStyle(LANTERN_COLOR, 0.55 + 0.2 * Math.sin(this.time.now / 220));
+      points.forEach((pt, i) => {
+        if (i % 3 === 0) this.guide.fillCircle(pt.x, pt.y, 3.5);
+      });
+      return;
+    }
     this.guide.fillStyle(PALETTE.lit, 0.6);
     points.forEach((pt, i) => {
       if (i % 3 === 0) this.guide.fillCircle(pt.x, pt.y, 3);

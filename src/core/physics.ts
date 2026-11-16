@@ -29,3 +29,16 @@ export const ORB_PHYSICS = {
 
 /** Gravité effective en px par pas de référence au carré (prédictions de trajectoire). */
 export const GRAVITY_PER_STEP = ORB_PHYSICS.gravityScale * (1000 / 60) ** 2;
+
+/** Partie interne de Matter.js que l'on règle (seul point du code qui y touche). */
+export interface MatterInternals {
+  Resolver: { _restingThresh: number };
+}
+
+/**
+ * Réglage global et interne à Matter (valable pour tout le jeu) : centralisé ici, appelé
+ * par GameScene avec la bibliothèque Matter embarquée par Phaser.
+ */
+export function applyMatterInternals(matter: MatterInternals): void {
+  matter.Resolver._restingThresh = ORB_PHYSICS.restingThreshold;
+}
