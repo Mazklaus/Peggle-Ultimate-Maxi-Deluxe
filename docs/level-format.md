@@ -92,8 +92,8 @@ lecture       format 1 et 2 acceptés (un v1 = un v2 sans decor ni group)
 ```
 
 ```
-rotate  cx, cy, periodS (6..12), dir (1 horaire, -1 anti) : les pegs du groupe tournent autour du centre
-orbit   cx, cy, rx, ry (40..90), periodS, dir : 1 à 4 pegs sur l'anneau
+rotate  cx, cy, periodS (8..18), dir (1 horaire, -1 anti) : les pegs du groupe tournent autour du centre
+orbit   cx, cy, rx, ry (40..90), periodS (4..8), dir : 1 à 4 pegs sur l'anneau
 magnet  x, y, radius, strength (1 = réglage Game Designer) : attire l'orbe, aucun peg dans le groupe
 portal  a, b (r = 18) : l'orbe entre en a et ressort en b avec la même vitesse (et inversement)
 regen   shots : un cristal du groupe brisé réapparaît après N tirs (jamais un cœur)

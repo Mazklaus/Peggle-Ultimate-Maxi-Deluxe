@@ -183,4 +183,20 @@ describe('format de niveau v2 : décor', () => {
     expect(p.x).toBeCloseTo(0);
     expect(p.y).toBeCloseTo(50);
   });
+
+  it('refuse un peg mobile qui passe sur un peg fixe', () => {
+    const decor = [{ id: 'roue', type: 'rotate', cx: 440, cy: 340, periodS: 12, dir: 1 }];
+    const moving = { x: 440, y: 220, kind: 'common', group: 'roue' };
+    // Exemple de QA : le peg (rayon 120) passe sur (440, 460).
+    expect(errorsOf({ decor, pegs: [{ x: 440, y: 460 }, moving] })).toContain(
+      'passe sur le peg fixe',
+    );
+    expect(errorsOf({ decor, pegs: [{ x: 440, y: 500 }, moving] })).toBe('');
+    const brick = { x: 560, y: 340, shape: 'brick', w: 40, h: 12, angle: 90, kind: 'wall' };
+    expect(errorsOf({ decor, pegs: [{ x: 100, y: 200, kind: 'heart' }, brick, moving] })).toContain(
+      'passe sur le peg fixe',
+    );
+    // Un peg regen est fixe ; l'exemple complet reste valide.
+    expect(parseLevel(sample).errors).toBeUndefined();
+  });
 });

@@ -373,6 +373,58 @@ export function checkDecor(pegs: readonly LevelPeg[], decor: readonly DecorItem[
         }
     }
   }
+  errors.push(...checkSweep(pegs, byId));
+  return errors;
+}
+
+/** Position d'un peg en rotation après une fraction `t` de tour (0..1). */
+export function rotatePosition(r: DecorRotate, start: Point, t: number): Point {
+  const a = r.dir * t * Math.PI * 2;
+  const dx = start.x - r.cx;
+  const dy = start.y - r.cy;
+  return {
+    x: r.cx + dx * Math.cos(a) - dy * Math.sin(a),
+    y: r.cy + dx * Math.sin(a) + dy * Math.cos(a),
+  };
+}
+
+/** Distance d'un point au segment central d'une brique. */
+function brickDistance(p: Point, b: LevelPeg): number {
+  const a = ((b.angle ?? 0) * Math.PI) / 180;
+  const half = (b.w ?? 0) / 2;
+  const t = Math.max(-half, Math.min(half, (p.x - b.x) * Math.cos(a) + (p.y - b.y) * Math.sin(a)));
+  return Math.hypot(p.x - (b.x + t * Math.cos(a)), p.y - (b.y + t * Math.sin(a)));
+}
+
+/**
+ * Trajectoires : un cercle en rotation ou en orbite ne doit croiser aucun peg fixe
+ * (22 px avec un cercle, contact avec une brique). Les briques mobiles ne sont pas vérifiées.
+ */
+function checkSweep(pegs: readonly LevelPeg[], byId: ReadonlyMap<string, DecorItem>): string[] {
+  const errors: string[] = [];
+  const isMoving = (p: LevelPeg): DecorRotate | DecorOrbit | null => {
+    const d = p.group === undefined ? undefined : byId.get(p.group);
+    return d && (d.type === 'rotate' || d.type === 'orbit') ? d : null;
+  };
+  const fixed = pegs.map((p, i) => ({ p, i })).filter(({ p }) => !isMoving(p));
+  const STEPS = 120;
+  pegs.forEach((p, i) => {
+    const d = isMoving(p);
+    if (!d || p.shape === 'brick') return;
+    const r = p.r ?? DEFAULT_PEG_R;
+    for (const { p: f, i: j } of fixed) {
+      let hit = false;
+      for (let k = 0; k < STEPS && !hit; k++) {
+        const pos =
+          d.type === 'rotate' ? rotatePosition(d, p, k / STEPS) : orbitPosition(d, p, k / STEPS);
+        hit =
+          f.shape === 'brick'
+            ? brickDistance(pos, f) < r + (f.h ?? 0) / 2
+            : Math.hypot(pos.x - f.x, pos.y - f.y) < MIN_CIRCLE_GAP;
+      }
+      if (hit) errors.push(`pegs[${i}] (« ${d.id} ») passe sur le peg fixe pegs[${j}].`);
+    }
+  });
   return errors;
 }
 
