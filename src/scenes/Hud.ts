@@ -6,6 +6,7 @@
  */
 import Phaser from 'phaser';
 import { gameEvents, type GameEventName } from '../core/events';
+import { drawGardienne, LANTERN } from './gardienne';
 import { PALETTE, TEXT, textStyle } from './theme';
 
 /** Géométrie des specs (coordonnées écran 1280 × 720). */
@@ -25,7 +26,6 @@ export const HUD_LAYOUT = {
 
 const LOGE_BG = 0x232a5c;
 const CORAL = '#FF7A6B';
-const AMBER = 0xffb23f;
 const MINT = 0x4ff0a8;
 const LABEL = (s: number) => ({ ...textStyle(s, TEXT.dim), fontStyle: 'bold' });
 
@@ -229,28 +229,11 @@ export class GameHud {
     const { loge, anchor } = HUD_LAYOUT;
     const g = this.scene.add.graphics();
     g.fillStyle(LOGE_BG, 0.9).fillRoundedRect(loge.x, loge.y, loge.w, loge.h, 16);
-    const glow = this.opts.astreColor ?? AMBER;
+    const glow = this.opts.astreColor ?? LANTERN.glow;
     // Sol en arc lumineux à la couleur signature (15 %).
     g.fillStyle(glow, 0.15).fillEllipse(anchor.x, anchor.y + 6, 132, 26);
     g.lineStyle(2, glow, 0.35).strokeEllipse(anchor.x, anchor.y + 6, 132, 26);
-    if (this.opts.astreColor === null) this.drawGardienne(g);
-  }
-
-  /** Prologue sans Astre : la Gardienne en silhouette avec sa lanterne. */
-  private drawGardienne(g: Phaser.GameObjects.Graphics): void {
-    const { x, y } = HUD_LAYOUT.anchor;
-    const ink = 0x3a3f7a;
-    g.fillStyle(ink, 1);
-    // Robe et capuche
-    g.fillTriangle(x - 30, y, x + 30, y, x, y - 92);
-    g.fillCircle(x, y - 92, 17);
-    g.fillStyle(LOGE_BG, 1).fillCircle(x + 3, y - 90, 10); // creux du visage sous la capuche
-    // Bras tendu et lanterne
-    g.lineStyle(6, ink, 1).lineBetween(x + 6, y - 62, x + 34, y - 52);
-    g.lineStyle(2, ink, 1).lineBetween(x + 34, y - 52, x + 34, y - 42);
-    g.fillStyle(AMBER, 0.18).fillCircle(x + 34, y - 32, 26);
-    g.fillStyle(AMBER, 0.35).fillCircle(x + 34, y - 32, 14);
-    g.fillStyle(0xffe0a0, 1).fillRoundedRect(x + 28, y - 40, 12, 16, 4);
+    if (this.opts.astreColor === null) drawGardienne(g, anchor.x, anchor.y, LOGE_BG);
   }
 
   private drawStars(score: number): void {

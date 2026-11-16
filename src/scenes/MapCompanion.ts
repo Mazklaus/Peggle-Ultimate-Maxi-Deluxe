@@ -6,15 +6,22 @@
 import Phaser from 'phaser';
 import type { CompanionDef } from '../core/companion/types';
 import { CompanionView } from './CompanionView';
+import { drawGardienne } from './gardienne';
 
 export type MapNodeState = 'locked' | 'open' | 'done';
 
 /** Échelle de l'Astre sur la carte et placement autour de l'étoile. */
-const MAP_ASTRE = { scale: 0.5, dx: 30, dy: 8 };
+const MAP_ASTRE = { scale: 0.5 };
+/** Places possibles de l'Astre autour de l'étoile : on garde la plus loin des autres étoiles. */
+const ASTRE_SPOTS = [
+  { dx: 30, dy: 8 },
+  { dx: 30, dy: 34 },
+  { dx: -58, dy: 10 },
+  { dx: 6, dy: 40 },
+  { dx: 30, dy: -24 },
+];
 const GARDIENNE = { dx: -20, dy: 6, scale: 0.55 };
 const HOP_MS = 280;
-const AMBER = 0xffb23f;
-const INK = 0x3a3f7a;
 
 export class MapCompanion {
   readonly view: CompanionView | null;
@@ -25,12 +32,21 @@ export class MapCompanion {
   private travel?: Phaser.Tweens.Tween;
 
   /** def = null : pas encore d'Astre (prologue), la Gardienne est seule. */
-  constructor(scene: Phaser.Scene, def: CompanionDef | null, star: { x: number; y: number }) {
+  private avoid: ReadonlyArray<{ x: number; y: number }>;
+
+  /** avoid = les autres étoiles de la carte, que l'Astre ne doit pas recouvrir. */
+  constructor(
+    scene: Phaser.Scene,
+    def: CompanionDef | null,
+    star: { x: number; y: number },
+    avoid: ReadonlyArray<{ x: number; y: number }> = [],
+  ) {
     this.scene = scene;
+    this.avoid = avoid;
     this.star = { ...star };
     this.gardienne = scene.add.graphics().setDepth(19);
     drawGardienne(this.gardienne);
-    this.feet = { x: star.x + MAP_ASTRE.dx, y: star.y + MAP_ASTRE.dy };
+    this.feet = this.spotFor(star.x, star.y);
     this.view = def ? new CompanionView(scene, def, { x: 0, y: 0 }) : null;
     this.place(0);
     scene.events.on(Phaser.Scenes.Events.UPDATE, this.tick, this);
@@ -43,7 +59,7 @@ export class MapCompanion {
     this.travel?.stop();
     const from = { ...this.star };
     const fromFeet = { ...this.feet };
-    const to = { x: x + MAP_ASTRE.dx, y: y + MAP_ASTRE.dy };
+    const to = this.spotFor(x, y);
     const dist = Math.hypot(to.x - fromFeet.x, to.y - fromFeet.y);
     const hops = Math.max(1, Math.min(6, Math.round(dist / 70)));
     const t = { u: 0 };
@@ -78,6 +94,24 @@ export class MapCompanion {
     else if (state === 'done') b.onEvent('tir_moyen');
   }
 
+  /** Pieds de l'Astre près de l'étoile (x, y), là où il ne cache aucune autre étoile. */
+  private spotFor(x: number, y: number): { x: number; y: number } {
+    const others = this.avoid.filter((o) => o.x !== x || o.y !== y);
+    let best = { x: x + (ASTRE_SPOTS[0]?.dx ?? 30), y: y + (ASTRE_SPOTS[0]?.dy ?? 8) };
+    let bestGap = -1;
+    for (const s of ASTRE_SPOTS) {
+      // Centre du corps de l'Astre (pieds - ~19 px à l'échelle 0,5).
+      const cx = x + s.dx;
+      const cy = y + s.dy - 19;
+      const gap = Math.min(Infinity, ...others.map((o) => Math.hypot(o.x - cx, o.y - cy)));
+      if (gap > bestGap + 8) {
+        bestGap = gap;
+        best = { x: x + s.dx, y: y + s.dy };
+      }
+    }
+    return best;
+  }
+
   private place(arc: number): void {
     this.gardienne.setPosition(this.star.x + GARDIENNE.dx, this.star.y + GARDIENNE.dy);
     this.gardienne.setScale(GARDIENNE.scale);
@@ -99,17 +133,4 @@ export class MapCompanion {
     this.view?.destroy();
     this.gardienne.destroy();
   }
-}
-
-/** Silhouette de la Gardienne (pieds en 0, 0) avec sa lanterne. */
-function drawGardienne(g: Phaser.GameObjects.Graphics): void {
-  g.fillStyle(INK, 1);
-  g.fillTriangle(-30, 0, 30, 0, 0, -92);
-  g.fillCircle(0, -92, 17);
-  g.fillStyle(0x232a5c, 1).fillCircle(3, -90, 10);
-  g.lineStyle(6, INK, 1).lineBetween(6, -62, 34, -52);
-  g.lineStyle(2, INK, 1).lineBetween(34, -52, 34, -42);
-  g.fillStyle(AMBER, 0.18).fillCircle(34, -32, 26);
-  g.fillStyle(AMBER, 0.35).fillCircle(34, -32, 14);
-  g.fillStyle(0xffe0a0, 1).fillRoundedRect(28, -40, 12, 16, 4);
 }

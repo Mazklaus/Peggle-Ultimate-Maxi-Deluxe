@@ -42,6 +42,7 @@ import { OPTIONS_CHANGED, REGISTRY, SCENES, STORY_LEVELS } from './keys';
 import { CompanionView } from './CompanionView';
 import type { ResultsData } from './ResultsScene';
 import { CRYSTAL_COLORS, CRYSTAL_COLORS_CB, PALETTE, textStyle } from './theme';
+import { LANTERN } from './gardienne';
 import { GameHud, HUD_LAYOUT } from './Hud';
 import { button } from './widgets';
 
@@ -79,8 +80,8 @@ const PIP_COLOR = 0xffe45c;
 /** Aide : nombre d'échecs avant le coup de pouce, rebonds du guide de la lanterne. */
 const HELP_AFTER_FAILS = 3;
 const LANTERN_GUIDE_BOUNCES = 2;
-/** Lueur de la lanterne de la Gardienne (ambre chaud). */
-const LANTERN_COLOR = 0xffc870;
+/** Lueur de la lanterne de la Gardienne (DA : or pâle, jamais l'ambre des cœurs). */
+const LANTERN_COLOR = LANTERN.glow;
 
 type CrystalView =
   Phaser.GameObjects.Arc | Phaser.GameObjects.Rectangle | Phaser.GameObjects.Polygon;
