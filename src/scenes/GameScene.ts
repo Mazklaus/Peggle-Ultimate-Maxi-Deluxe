@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { GAME_HEIGHT, GAME_WIDTH, PLAYFIELD, toWorld } from '../config';
-import { gameEvents } from '../core/events';
+import { PIP } from '../companions/pip';
+import { gameEvents, type GameEventName } from '../core/events';
 import {
   breakLitNow,
   canShoot,
@@ -16,9 +17,16 @@ import {
 import type { LevelData } from '../core/levelFormat';
 import { levelFromData } from '../core/levelSetup';
 import type { SaveData } from '../core/save';
+import {
+  ShotTracker,
+  edgeDistance,
+  type DetectedEvent,
+  type HeartTarget,
+} from '../core/shotEvents';
 import { aimGuide } from '../core/trajectory';
 import { TUNING } from '../core/tuning';
 import { REGISTRY, SCENES } from './keys';
+import { CompanionView } from './CompanionView';
 import type { ResultsData } from './ResultsScene';
 import { CRYSTAL_COLORS, CRYSTAL_COLORS_CB, PALETTE, textStyle, TEXT } from './theme';
 import { button } from './widgets';
@@ -39,8 +47,15 @@ const BUCKET = { width: 100, height: 18, y: GAME_HEIGHT - 14 };
 const MIN_AIM = Phaser.Math.DegToRad(8);
 const MAX_AIM = Phaser.Math.DegToRad(172);
 const WALL_THICKNESS = 40;
-/** Délai entre la fin du dernier tir et l'écran de résultats. */
-const RESULTS_DELAY_MS = 900;
+/** Délai entre la fin du dernier tir et l'écran de résultats (laisse l'Astre réagir). */
+const RESULTS_DELAY_MS = 1400;
+/** Final au ralenti (GD) : tout le jeu à 0,25 pendant 1,5 s réelles au maximum. */
+const SLOWMO = { scale: 0.25, maxRealMs: 1500 };
+/** Loge de l'Astre : colonne gauche sous le compteur d'orbes (pieds de l'Astre). */
+const COMPANION_ANCHOR = { x: 100, y: 400 };
+/** L'orbe « frôle » un cœur (réaction « oh ! » de l'Astre). */
+const NEAR_HEART_PX = 20;
+const HEART_RADIUS = 10;
 
 type CrystalView = Phaser.GameObjects.Arc | Phaser.GameObjects.Rectangle;
 
@@ -69,6 +84,10 @@ export class GameScene extends Phaser.Scene {
   private stuckRef = { x: 0, y: 0, t: 0 };
   private chain = 0;
   private ending = false;
+  private tracker = new ShotTracker();
+  private companion?: CompanionView;
+  private slowmoUntil = 0;
+  private gameScale = 1;
 
   constructor() {
     super(SCENES.game);
@@ -82,7 +101,9 @@ export class GameScene extends Phaser.Scene {
     this.views.clear();
     this.orb = undefined;
     this.ending = false;
+    this.slowmoUntil = 0;
     this.setTimeScale(1);
+    this.tracker = new ShotTracker();
     const save = this.registry.get(REGISTRY.save) as SaveData | undefined;
     this.colors = save?.options.colorblind ? CRYSTAL_COLORS_CB : CRYSTAL_COLORS;
     this.level = levelFromData(this.sceneData.level);
@@ -102,10 +123,17 @@ export class GameScene extends Phaser.Scene {
     );
     this.guide = this.add.graphics();
     this.makeHud();
+    this.makeCompanion();
 
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => this.aimAt(p));
+    // Souris : clic = tir. Tactile : on vise en glissant, le tir part au relâcher (règle GD).
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
       if (p.y < PLAYFIELD.y) return; // bandeau haut (bouton pause)
+      this.aimAt(p);
+      if (!p.wasTouch) this.shoot();
+    });
+    this.input.on('pointerup', (p: Phaser.Input.Pointer) => {
+      if (!p.wasTouch || p.downY < PLAYFIELD.y) return;
       this.aimAt(p);
       this.shoot();
     });
@@ -126,22 +154,39 @@ export class GameScene extends Phaser.Scene {
                 : null;
           if (!other) continue;
           if (other.label.startsWith('crystal:')) this.onCrystalHit(Number(other.label.slice(8)));
-          else if (other.label === 'wall') gameEvents.emit('mur_touche', {});
+          else if (other.label === 'wall') {
+            gameEvents.emit('mur_touche', {});
+            this.emitAll(this.tracker.bounced());
+          }
         }
       },
     );
 
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.companion?.destroy();
+      this.companion = undefined;
+    });
+
     this.refreshHud();
+    this.emitAll(this.tracker.beginAiming(heartsRemaining(this.level), this.level.orbs));
   }
 
-  update(time: number, delta: number): void {
+  update(time: number, realDelta: number): void {
+    this.updateSlowmo(time);
+    const delta = realDelta * this.gameScale;
     this.moveBucket(delta);
     this.cannon.setRotation(this.aimAngle);
     this.handleKeyboardAim(delta);
     this.drawGuide();
 
     const orb = this.orb;
-    if (!orb) return;
+    this.updateCompanion(delta / 1000, orb);
+    if (!orb) {
+      if (!this.ending && canShoot(this.level))
+        this.emitAll(this.tracker.updateAiming(realDelta / 1000));
+      return;
+    }
+    this.trackOrb(orb);
     const caught =
       orb.y + ORB_RADIUS >= BUCKET.y - BUCKET.height / 2 &&
       orb.y < GAME_HEIGHT &&
@@ -222,6 +267,100 @@ export class GameScene extends Phaser.Scene {
     button(this, GAME_WIDTH - 60, 32, 'II', () => this.openPause(), { width: 64, size: 20 });
   }
 
+  private makeCompanion(): void {
+    // ?astre=pip force l'Astre sur n'importe quel niveau (tests QA).
+    const forced = new URLSearchParams(window.location.search).get('astre');
+    const id = forced ?? this.sceneData.level.companion;
+    if (id !== 'pip') return; // prologue sans Astre ; les autres Astres arrivent au jalon 2
+    this.companion = new CompanionView(this, PIP, COMPANION_ANCHOR);
+    this.companion.attach();
+  }
+
+  private updateCompanion(dt: number, orb?: Phaser.GameObjects.Arc): void {
+    const c = this.companion;
+    if (!c) return;
+    if (orb) {
+      const v = (orb.body as MatterJS.BodyType | null)?.velocity ?? { x: 0, y: 0 };
+      c.update(dt, {
+        orb: { x: orb.x, y: orb.y, vy: v.y * 60 },
+        orbDepth: (orb.y - PLAYFIELD.y) / PLAYFIELD.h,
+        orbNearHeart: this.unlitHearts().some(
+          (h) =>
+            edgeDistance({ x: orb.x, y: orb.y, vx: 0, vy: 0, r: ORB_RADIUS }, h) < NEAR_HEART_PX,
+        ),
+      });
+    } else {
+      const m = this.muzzle();
+      c.update(dt, {
+        aim: { x: m.x + Math.cos(this.aimAngle) * 300, y: m.y + Math.sin(this.aimAngle) * 300 },
+      });
+    }
+  }
+
+  /** Cœurs pas encore touchés, en coordonnées écran. */
+  private unlitHearts(): HeartTarget[] {
+    return this.level.crystals
+      .filter((c) => c.kind === 'heart' && !c.lit)
+      .map((c) => {
+        const w = toWorld(c);
+        const r = c.shape?.type === 'circle' ? c.shape.r : HEART_RADIUS;
+        return { id: c.id, x: w.x, y: w.y, r };
+      });
+  }
+
+  /** Suivi de l'orbe : presque, final au ralenti. */
+  private trackOrb(orb: Phaser.GameObjects.Arc): void {
+    const v = (orb.body as MatterJS.BodyType | null)?.velocity ?? { x: 0, y: 0 };
+    // Vitesse Matter en px par pas (à l'échelle de temps courante) -> px/s réels de jeu.
+    const perSecond = 60 * (this.gameScale === 1 ? 1 : 1 / this.gameScale);
+    this.emitAll(
+      this.tracker.orbMoved(
+        { x: orb.x, y: orb.y, vx: v.x * perSecond, vy: v.y * perSecond, r: ORB_RADIUS },
+        this.unlitHearts(),
+      ),
+    );
+  }
+
+  /** Relaie sur le bus les événements détectés par le ShotTracker. */
+  private emitAll(events: DetectedEvent[]): void {
+    for (const e of events) {
+      if (e === 'final_ralenti') this.startSlowmo();
+      const data =
+        e === 'gros_coup'
+          ? { hits: this.tracker.shotHits }
+          : e === 'chaine_longue'
+            ? { bounces: this.tracker.shotBounces, shotScore: this.level.shotScore }
+            : e === 'tir_lance'
+              ? { angle: this.aimAngle }
+              : e === 'pouvoir_active'
+                ? { astre: this.sceneData.level.companion ?? 'aucun' }
+                : e === 'victoire' || e === 'echec'
+                  ? { score: this.level.score }
+                  : {};
+      gameEvents.emit(e as GameEventName, data as never);
+    }
+  }
+
+  private startSlowmo(): void {
+    if (this.slowmoUntil > 0) return;
+    this.slowmoUntil = this.time.now + SLOWMO.maxRealMs;
+    this.applyGameScale(SLOWMO.scale);
+  }
+
+  private updateSlowmo(now: number): void {
+    if (this.slowmoUntil > 0 && now >= this.slowmoUntil) {
+      this.slowmoUntil = -1; // une seule fois par tir
+      this.applyGameScale(1);
+    }
+  }
+
+  /** Échelle de temps de tout le jeu : physique, réceptacle, tweens, Astre. */
+  private applyGameScale(scale: number): void {
+    this.gameScale = scale;
+    this.setTimeScale(scale);
+    this.tweens.timeScale = scale;
+  }
+
   // --- Tir ------------------------------------------------------------------
 
   private aimAt(p: Phaser.Input.Pointer): void {
@@ -255,8 +394,10 @@ export class GameScene extends Phaser.Scene {
     );
     this.orb = orb;
     this.chain = 0;
+    this.slowmoUntil = 0;
     this.stuckRef = { x: start.x, y: start.y, t: this.time.now };
-    gameEvents.emit('tir_lance', { angle: this.aimAngle });
+    this.companion?.setPhase('flight');
+    this.emitAll(this.tracker.shotFired());
     this.refreshHud();
   }
 
@@ -264,48 +405,47 @@ export class GameScene extends Phaser.Scene {
     const crystal = this.level.crystals.find((c) => c.id === id);
     if (crystal?.kind === 'wall') {
       gameEvents.emit('mur_touche', {});
+      this.emitAll(this.tracker.bounced());
       return;
     }
     const points = hitCrystal(this.level, id);
-    if (points === 0 || !crystal) return;
+    if (!crystal) return;
+    if (points === 0) {
+      this.emitAll(this.tracker.bounced()); // rebond sur un cristal déjà allumé
+      return;
+    }
     this.chain += 1;
     this.views.get(id)?.setFillStyle(PALETTE.lit);
     gameEvents.emit('cristal_allume', { kind: crystal.kind, chain: this.chain, points });
-    if (crystal.kind === 'power') {
-      gameEvents.emit('pouvoir_active', { astre: this.sceneData.level.companion ?? 'aucun' });
-    }
-    if (isFinalHeartLit(this.level)) {
-      this.setTimeScale(0.3); // ralenti sur le dernier cœur
-      gameEvents.emit('final_ralenti', {});
-    }
+    this.emitAll(this.tracker.crystalLit(crystal.kind, this.level.shotScore, crystal.id));
+    // Filet de sécurité : le dernier cœur touché sans prédiction préalable.
+    if (isFinalHeartLit(this.level) && this.slowmoUntil === 0) this.emitAll(['final_ralenti']);
     this.refreshHud();
   }
 
   private finishShot(caught: boolean): void {
     this.orb?.destroy();
     this.orb = undefined;
-    this.setTimeScale(1);
+    this.applyGameScale(1);
     const result = endShot(this.level, caught);
     this.removeViews(result.removedIds);
     if (result.removedIds.length > 0) {
       gameEvents.emit('cristaux_brises', { count: result.removedIds.length });
     }
-    if (caught) {
-      gameEvents.emit('orbe_recupere', {});
-      this.cameras.main.flash(120, 185, 166, 255);
-    }
+    if (caught) this.cameras.main.flash(120, 185, 166, 255);
     // Le cristal bonus a pu changer de place.
     for (const c of this.level.crystals) {
       if (!c.lit) this.views.get(c.id)?.setFillStyle(this.colors[c.kind]);
     }
     this.refreshHud();
-    if (result.phase === 'won') {
-      gameEvents.emit('victoire', { score: this.level.score });
-      this.endLevel(true);
-    } else if (result.phase === 'lost') {
-      gameEvents.emit('echec', { score: this.level.score });
-      this.endLevel(false);
-    }
+    const bilan = this.tracker.shotEnded(caught, result.phase);
+    if (result.phase === 'aiming') this.companion?.setPhase('aiming');
+    else this.companion?.setPhase('over');
+    this.emitAll(bilan);
+    if (bilan.length === 0) this.companion?.brain.onShotEndQuiet();
+    if (result.phase === 'won') this.endLevel(true);
+    else if (result.phase === 'lost') this.endLevel(false);
+    else this.emitAll(this.tracker.beginAiming(heartsRemaining(this.level), this.level.orbs));
   }
 
   private endLevel(won: boolean): void {

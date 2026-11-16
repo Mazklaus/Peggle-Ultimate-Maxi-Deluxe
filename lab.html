@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Labo des Astres</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        background: #0b1026;
+        color: #f4f1ff;
+        font-family: sans-serif;
+      }
+      #game {
+        width: 1280px;
+        height: 720px;
+      }
+      #panel {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        padding: 8px;
+      }
+      #panel button {
+        background: #1b2350;
+        color: #f4f1ff;
+        border: 1px solid #3b2e6e;
+        border-radius: 6px;
+        padding: 6px 10px;
+        cursor: pointer;
+      }
+      #state {
+        padding: 0 8px;
+        font-family: monospace;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="panel"></div>
+    <div id="state"></div>
+    <div id="game"></div>
+    <script type="module" src="/src/lab/companionLab.ts"></script>
+  </body>
+</html>
