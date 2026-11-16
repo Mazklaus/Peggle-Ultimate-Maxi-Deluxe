@@ -10,6 +10,7 @@ import { CompanionSelectScene } from './scenes/CompanionSelectScene';
 import { CutsceneScene } from './scenes/CutsceneScene';
 import { GameScene } from './scenes/GameScene';
 import { MapScene } from './scenes/MapScene';
+import { MemoriesScene } from './scenes/MemoriesScene';
 import { applyAudioOptions, OptionsScene } from './scenes/OptionsScene';
 import { PauseScene } from './scenes/PauseScene';
 import { ResultsScene } from './scenes/ResultsScene';
@@ -61,6 +62,7 @@ function startGame(): void {
       OptionsScene,
       CompanionLayer,
       CompanionSelectScene,
+      MemoriesScene,
     ],
   });
 }
