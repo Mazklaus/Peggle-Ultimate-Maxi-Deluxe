@@ -1,4 +1,6 @@
 import Phaser from 'phaser';
+import { audio } from '../audio';
+import { cutsceneCue } from '../core/audio/storyMusic';
 import { GAME_HEIGHT, GAME_WIDTH } from '../config';
 import { sequenceChapter, type CutsceneSequence } from '../core/story';
 import { SCENES } from './keys';
@@ -114,6 +116,7 @@ export class CutsceneScene extends Phaser.Scene {
     if (this.shots.length === 0) return this.finish();
     this.add.image(0, 0, key).setOrigin(0);
     this.start = this.time.now;
+    this.onShotStart();
 
     const skip = this.add
       .text(GAME_WIDTH - 24, GAME_HEIGHT - 24, '▶▶', {
@@ -150,6 +153,7 @@ export class CutsceneScene extends Phaser.Scene {
         this.start = time;
         t = 0;
         this.resetActors();
+        this.onShotStart();
       } else {
         this.finish();
         return;
@@ -169,12 +173,23 @@ export class CutsceneScene extends Phaser.Scene {
     this.texture?.refresh();
   }
 
+  /** Musique du plan qui commence (thème du phare, silence, final de la Veilleuse). */
+  private onShotStart(): void {
+    const shot = this.shots[this.index];
+    if (!shot) return;
+    const cue = cutsceneCue(this.payload.sequence, shot.id, this.index);
+    if (cue?.kind === 'phare') audio.music.start('phare', { astres: cue.astres });
+    else if (cue?.kind === 'silence') audio.music.stop(1.2);
+    else if (cue?.kind === 'finale') audio.finale();
+  }
+
   /** Clic sur l'image : plan suivant. */
   private nextShot(): void {
     if (this.index < this.shots.length - 1) {
       this.index += 1;
       this.start = this.time.now;
       this.resetActors();
+      this.onShotStart();
     } else this.finish();
   }
 

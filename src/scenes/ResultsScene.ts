@@ -1,3 +1,4 @@
+import type { GameMode } from '../core/modes';
 import Phaser from 'phaser';
 import { audio } from '../audio';
 import { GAME_HEIGHT, GAME_WIDTH } from '../config';
@@ -24,6 +25,10 @@ export interface ResultsData {
   /** Décompte du score (écran de victoire). */
   breakdown?: Breakdown;
   test?: boolean;
+  /** Mode de jeu (jalon 3) : ResultsScene choisit ses boutons. */
+  mode?: GameMode;
+  /** Défi : objectif et médaille (succès = objectif atteint et niveau gagné). */
+  challenge?: { goal: string; success: boolean };
 }
 
 /** Où l'Astre vient se poser hors de sa loge (pieds, coordonnées écran). */

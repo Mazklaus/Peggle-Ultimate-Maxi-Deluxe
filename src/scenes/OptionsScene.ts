@@ -18,9 +18,13 @@ import {
 
 /** Applique les options qui agissent hors des scènes (volumes). */
 export function applyAudioOptions(o: Options): void {
-  audio.setVolume('music', o.musicVolume);
-  audio.setVolume('sfx', o.sfxVolume);
-  audio.setVolume('voice', o.sfxVolume);
+  audio.applySettings({
+    music: o.musicVolume,
+    sfx: o.sfxVolume,
+    voice: o.voiceVolume,
+    soft: o.softAudio,
+    mono: o.monoAudio,
+  });
 }
 
 /** Change une ou plusieurs options : sauvegarde immédiate, son, et signal aux scènes ouvertes. */
@@ -38,7 +42,7 @@ export function currentOptions(scene: Phaser.Scene): Options {
   return (scene.registry.get(REGISTRY.save) as SaveData).options;
 }
 
-const PANEL = { w: 560, h: 420 };
+const PANEL = { w: 600, h: 580 };
 
 /**
  * Écran Options (specs UI/UX 6 ter) : overlay par-dessus le titre, la carte ou la pause.
@@ -66,55 +70,56 @@ export class OptionsScene extends Phaser.Scene {
       diameter: 48,
     });
 
-    const rowY = (i: number) => top + 120 + i * 72;
+    const rowY = (i: number) => top + 116 + i * 66;
     const row = (i: number, name: IconName, text: string) => {
       icon(this, left + 60, rowY(i), name, 32);
       label(this, left + 150, rowY(i), text, 16).setOrigin(0, 0.5);
     };
     const ctrlX = left + PANEL.w - 170;
 
-    row(0, 'sound', 'Effets et voix');
-    const sfx = slider(
-      this,
-      ctrlX,
-      rowY(0),
-      o.sfxVolume,
-      (v) => updateOptions(this, { sfxVolume: v }),
-      {
+    const volume = (
+      i: number,
+      name: IconName,
+      text: string,
+      value: number,
+      key: 'sfxVolume' | 'musicVolume' | 'voiceVolume',
+    ) => {
+      row(i, name, text);
+      return slider(this, ctrlX, rowY(i), value, (v) => updateOptions(this, { [key]: v }), {
         width: 200,
-      },
+      });
+    };
+    const music = volume(0, 'music', 'Musique', o.musicVolume, 'musicVolume');
+    const sfx = volume(1, 'sound', 'Effets (rebonds)', o.sfxVolume, 'sfxVolume');
+    const voice = volume(2, 'sound', 'Voix des Astres', o.voiceVolume, 'voiceVolume');
+    row(3, 'sound', 'Son doux');
+    const soft = toggle(this, ctrlX + 70, rowY(3), o.softAudio, (v) =>
+      updateOptions(this, { softAudio: v }),
     );
-    row(1, 'music', 'Musique');
-    const music = slider(
-      this,
-      ctrlX,
-      rowY(1),
-      o.musicVolume,
-      (v) => updateOptions(this, { musicVolume: v }),
-      {
-        width: 200,
-      },
+    row(4, 'sound', 'Son mono');
+    const mono = toggle(this, ctrlX + 70, rowY(4), o.monoAudio, (v) =>
+      updateOptions(this, { monoAudio: v }),
     );
-    row(2, 'colorblind', 'Daltonien');
+    row(5, 'colorblind', 'Daltonien');
     const preview = this.add.graphics();
     const drawPreview = (cb: boolean) => {
       const colors = cb ? CRYSTAL_COLORS_CB : CRYSTAL_COLORS;
       preview.clear();
       (['heart', 'common', 'bonus', 'power'] as CrystalKind[]).forEach((k, i) => {
-        drawMiniCrystal(preview, ctrlX - 96 + i * 26, rowY(2), k, colors[k]);
+        drawMiniCrystal(preview, ctrlX - 96 + i * 26, rowY(5), k, colors[k]);
       });
     };
     drawPreview(o.colorblind);
-    const cb = toggle(this, ctrlX + 70, rowY(2), o.colorblind, (v) => {
+    const cb = toggle(this, ctrlX + 70, rowY(5), o.colorblind, (v) => {
       updateOptions(this, { colorblind: v });
       drawPreview(v);
     });
-    row(3, 'motion', 'Réduire les animations');
-    const motion = toggle(this, ctrlX + 70, rowY(3), o.reducedMotion, (v) =>
+    row(6, 'motion', 'Réduire les animations');
+    const motion = toggle(this, ctrlX + 70, rowY(6), o.reducedMotion, (v) =>
       updateOptions(this, { reducedMotion: v }),
     );
 
-    enableKeyboardFocus(this, [sfx, music, cb, motion, back], 0);
+    enableKeyboardFocus(this, [music, sfx, voice, soft, mono, cb, motion, back], 0);
     this.input.keyboard?.on('keydown-ESC', () => this.close());
   }
 

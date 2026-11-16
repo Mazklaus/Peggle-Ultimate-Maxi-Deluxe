@@ -20,6 +20,8 @@ const GLOW_KEY = 'jeu-veilleuse-glow';
 /** Amplitude de visée (px) qui pilote la parallaxe : la moitié de la largeur de jeu. */
 const AIM_SPAN = 440;
 const TWINKLES = 14;
+/** Bande visible de chaque couche mobile (calculée une fois par session). */
+const bandCache = new Map<string, { top: number; bottom: number } | null>();
 const CONSTELLATION = { guessed: 0.12, lit: 0.8, line: 0.35, stagger: 120 };
 
 /** Charge les couches du chapitre (à appeler dans preload). */
@@ -33,7 +35,8 @@ export function preloadBackdrop(scene: Phaser.Scene, chapter: number): void {
 
 interface MovingLayer {
   def: BackdropLayer;
-  sprite: Phaser.GameObjects.TileSprite;
+  /** Deux copies côte à côte : le défilement boucle sans TileSprite (shader coûteux). */
+  sprites: [Phaser.GameObjects.Image, Phaser.GameObjects.Image];
   drift: number;
 }
 
@@ -52,16 +55,32 @@ export class ChapterBackdrop {
     private readonly scene: Phaser.Scene,
     readonly chapter: number,
   ) {
-    const defs = backdropLayers(chapter);
-    this.starsParallax = defs.find((d) => d.key.endsWith('etoiles'))?.parallax ?? 0;
-    defs.forEach((def, i) => {
-      if (!scene.textures.exists(def.key)) return; // fichier manquant : fond uni
-      const sprite = scene.add
-        .tileSprite(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, def.key)
-        .setDepth(DEPTH + i);
-      this.layers.push({ def, sprite, drift: 0 });
-      if (i === 0) this.makeVeilleuse(DEPTH + 0.5);
-      if (def.key.endsWith('etoiles')) this.makeTwinkles(DEPTH + i + 0.5);
+    const defs = backdropLayers(chapter).filter((d) => scene.textures.exists(d.key));
+    // Perf (jalon 3) : en rendu logiciel, chaque couche plein écran coûte ~40 % d'images/s.
+    // Les couches sans dérive (ciel, étoiles, motif) sont fusionnées une fois pour toutes en
+    // une seule texture fixe : leur parallaxe (≤ 0,03, soit ≤ 13 px) ne se voyait pas.
+    const still = defs.filter((d) => d.drift === 0);
+    const moving = defs.filter((d) => d.drift !== 0);
+    this.starsParallax = 0;
+    if (still.length > 0) {
+      scene.add.image(0, 0, this.bakeStill(still)).setOrigin(0, 0).setDepth(DEPTH);
+      this.makeVeilleuse(DEPTH + 0.5);
+      if (still.some((d) => d.key.endsWith('etoiles'))) this.makeTwinkles(DEPTH + 0.6);
+    }
+    moving.forEach((def, i) => {
+      // Seule la bande non transparente de la couche est dessinée (nuages : quelques
+      // dizaines de px de haut au lieu de 720).
+      const band = this.opaqueBand(def.key);
+      if (!band) return;
+      const make = () =>
+        scene.add
+          .image(0, 0, def.key)
+          .setOrigin(0, 0)
+          .setCrop(0, band.top, GAME_WIDTH, band.bottom - band.top)
+          .setDepth(DEPTH + 1 + i);
+      // Images simples plutôt que TileSprite : en rendu logiciel, 5 TileSprite plein écran
+      // faisaient tomber le jeu de 30 à 8 i/s (mesure Lead, jalon 3).
+      this.layers.push({ def, sprites: [make(), make()], drift: 0 });
     });
     if (hasShootingStars(chapter)) this.scheduleShootingStar();
     if (chapter >= 1) {
@@ -88,7 +107,13 @@ export class ChapterBackdrop {
     this.shift += (aim - this.shift) * Math.min(1, dtSeconds * 4);
     for (const l of this.layers) {
       l.drift += l.def.drift * dtSeconds;
-      l.sprite.tilePositionX = this.shift * l.def.parallax - l.drift;
+      // Équivalent de tilePositionX : décalage modulo la largeur, deux copies jointives.
+      const pos = this.shift * l.def.parallax - l.drift;
+      const o = ((pos % GAME_WIDTH) + GAME_WIDTH) % GAME_WIDTH;
+      const [a, b] = l.sprites;
+      a.x = -o;
+      b.x = GAME_WIDTH - o;
+      b.setVisible(o > 0.5);
     }
     const dx = -this.shift * this.starsParallax;
     for (const t of this.twinkles) t.dot.x = t.x + dx;
@@ -125,6 +150,50 @@ export class ChapterBackdrop {
         this.sparkles(c.nodes),
       );
     }
+  }
+
+  /** Fusionne les couches fixes dans une texture canvas (une seule fois par chapitre). */
+  private bakeStill(defs: BackdropLayer[]): string {
+    const key = `${defs[0]?.key ?? 'jeu'}-fixe`;
+    if (this.scene.textures.exists(key)) return key;
+    const tex = this.scene.textures.createCanvas(key, GAME_WIDTH, GAME_HEIGHT);
+    const ctx = tex?.getContext();
+    if (!tex || !ctx) return defs[0]?.key ?? key;
+    for (const d of defs) {
+      const src = this.scene.textures.get(d.key).getSourceImage() as CanvasImageSource;
+      ctx.drawImage(src, 0, 0, GAME_WIDTH, GAME_HEIGHT);
+    }
+    tex.refresh();
+    return key;
+  }
+
+  /** Lignes extrêmes (haut, bas) contenant des pixels visibles, mises en cache par texture. */
+  private opaqueBand(key: string): { top: number; bottom: number } | null {
+    const cached = bandCache.get(key);
+    if (cached !== undefined) return cached;
+    const src = this.scene.textures.get(key).getSourceImage() as CanvasImageSource;
+    const canvas = document.createElement('canvas');
+    canvas.width = GAME_WIDTH;
+    canvas.height = GAME_HEIGHT;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    let band: { top: number; bottom: number } | null = { top: 0, bottom: GAME_HEIGHT };
+    if (ctx) {
+      ctx.drawImage(src, 0, 0, GAME_WIDTH, GAME_HEIGHT);
+      const data = ctx.getImageData(0, 0, GAME_WIDTH, GAME_HEIGHT).data;
+      const rowVisible = (y: number) => {
+        for (let x = 0, i = y * GAME_WIDTH * 4 + 3; x < GAME_WIDTH; x++, i += 4) {
+          if ((data[i] ?? 0) > 2) return true;
+        }
+        return false;
+      };
+      let top = 0;
+      while (top < GAME_HEIGHT && !rowVisible(top)) top++;
+      let bottom = GAME_HEIGHT;
+      while (bottom > top && !rowVisible(bottom - 1)) bottom--;
+      band = bottom > top ? { top, bottom } : null;
+    }
+    bandCache.set(key, band);
+    return band;
   }
 
   private makeVeilleuse(depth: number): void {

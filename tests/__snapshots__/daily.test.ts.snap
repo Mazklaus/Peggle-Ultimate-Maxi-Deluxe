@@ -1,0 +1,8 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Constellation du jour > même date = exactement le même JSON (empreinte figée) 1`] = `
+{
+  "hash": 2912168227,
+  "seed": 3540866798,
+}
+`;
