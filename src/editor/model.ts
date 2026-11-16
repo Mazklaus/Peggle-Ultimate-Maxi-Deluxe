@@ -104,3 +104,24 @@ export function crowdedPegs(pegs: readonly LevelPeg[]): Set<number> {
   });
   return out;
 }
+
+/** En dessous de cet écart à l'horizontale, un mur incassable est signalé (l'orbe peut s'y poser). */
+export const FLAT_WALL_DEG = 8;
+
+/**
+ * Avertissements de design (non bloquants). Une brique a une face horizontale à 0° comme à 90°,
+ * d'où l'angle pris modulo 90.
+ */
+export function designWarnings(pegs: readonly LevelPeg[]): string[] {
+  const out: string[] = [];
+  pegs.forEach((p, i) => {
+    if (p.shape !== 'brick' || p.kind !== 'wall') return;
+    const a = (((p.angle ?? 0) % 90) + 90) % 90;
+    const off = Math.min(a, 90 - a);
+    if (off < FLAT_WALL_DEG)
+      out.push(
+        `pegs[${i}] : mur presque horizontal (${off.toFixed(0)}° < ${FLAT_WALL_DEG}°), l'orbe peut s'y poser.`,
+      );
+  });
+  return out;
+}

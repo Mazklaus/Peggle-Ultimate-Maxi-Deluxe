@@ -22,6 +22,7 @@ import {
   clampToZone,
   countPegs,
   crowdedPegs,
+  designWarnings,
   emptyLevel,
   makePeg,
   pegAt,
@@ -242,15 +243,18 @@ function refresh(): void {
     `${c.auto} auto (tirage : ${level.assign.hearts} cœurs, ${level.assign.power} pouvoir, ` +
     `${level.assign.bonus} bonus).`;
   const errors = parseLevel(level).errors ?? [];
-  const list = $('errors');
-  list.replaceChildren(
-    ...(errors.length ? errors : ['Niveau valide.']).map((msg) => {
-      const li = document.createElement('li');
-      li.textContent = msg;
-      if (!errors.length) li.className = 'ok';
-      return li;
-    }),
+  const warnings = designWarnings(level.pegs);
+  const item = (msg: string, cls = ''): HTMLLIElement => {
+    const li = document.createElement('li');
+    li.textContent = msg;
+    li.className = cls;
+    return li;
+  };
+  $('errors').replaceChildren(
+    ...(errors.length ? errors.map((m) => item(m)) : [item('Niveau valide.', 'ok')]),
+    ...warnings.map((m) => item(`⚠ ${m}`, 'warn')),
   );
+
   renderSelection();
   storageSet(DRAFT_KEY, JSON.stringify(level));
 }
