@@ -265,11 +265,7 @@ export class MapScene extends Phaser.Scene {
       const def = awake ? astreDef(c.astre) : null;
       this.companion = new MapCompanion(this, def, start, this.nodes);
     }
-    // Thème du phare : une voix de plus par Astre réveillé (chapitre terminé).
-    const progress = this.save();
-    audio.music.start('phare', {
-      astres: awakeAstres((n) => chapterState(progress, n) === 'done'),
-    });
+    this.playPhareTheme();
     if (unlock) this.playChapterLightUp(c, unlock);
     else if (current?.level) this.openCard(current.level);
     else if (!own.some((n) => n.level)) {
@@ -348,10 +344,20 @@ export class MapScene extends Phaser.Scene {
     hit.on('pointerup', () => this.openCard(level));
   }
 
+  /** Thème du phare : une voix de plus par Astre réveillé (chapitre terminé). Même piste
+   * dans les deux vues, donc passer de l'une à l'autre ne la relance pas. */
+  private playPhareTheme(): void {
+    const progress = this.save();
+    audio.music.start('phare', {
+      astres: awakeAstres((n) => chapterState(progress, n) === 'done'),
+    });
+  }
+
   // --- Vue ciel ---------------------------------------------------------------
 
   private buildSky(from?: number, unlock?: number): void {
     const save = this.save();
+    this.playPhareTheme();
     const reduced = currentOptions(this).reducedMotion;
     // Perf (jalon 3) : fond et Observatoire fusionnés en une texture (un seul plein écran) ;
     // la Veilleuse, entre les deux, passe donc devant l'Observatoire (elle ne le chevauche pas).
