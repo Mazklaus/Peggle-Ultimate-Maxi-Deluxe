@@ -81,13 +81,14 @@ describe('ShotTracker', () => {
     expect(t.orbMoved(orb(100, 200), hearts)).toEqual([]);
   });
 
-  it('final_ralenti quand le contact avec le dernier cœur est prévu sous 0,4 s', () => {
+  it('final_ralenti quand le contact avec le dernier cœur est prévu sous 0,25 s de jeu', () => {
     const t = new ShotTracker();
     t.shotFired();
     const last = [heart(1, 100, 300)];
     expect(t.orbMoved(orb(100, 100, 0, 300), last)).toEqual([]); // ~0,6 s
-    expect(t.orbMoved(orb(100, 180, 0, 300), last)).toEqual(['final_ralenti']); // ~0,34 s
-    expect(t.orbMoved(orb(100, 200, 0, 300), last)).toEqual([]);
+    expect(t.orbMoved(orb(100, 180, 0, 300), last)).toEqual([]); // ~0,34 s
+    expect(t.orbMoved(orb(100, 220, 0, 300), last)).toEqual(['final_ralenti']); // ~0,2 s
+    expect(t.orbMoved(orb(100, 240, 0, 300), last)).toEqual([]);
   });
 });
 

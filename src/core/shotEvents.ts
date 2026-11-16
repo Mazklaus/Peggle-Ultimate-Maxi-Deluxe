@@ -2,7 +2,6 @@
  * Détection des événements de jeu (seuils : Game Designer, reglages-jalon1.md section 5).
  * Logique pure : la scène appelle ces méthodes et relaie les noms renvoyés sur le bus.
  */
-import { ORB_PHYSICS } from './physics';
 import type { CrystalKind } from './level';
 
 export const EVENT_THRESHOLDS = {
@@ -11,8 +10,12 @@ export const EVENT_THRESHOLDS = {
   longChainShotScore: 3000,
   nearMissMaxHearts: 3,
   nearMissEdgePx: 12,
-  /** 0,4 s à la vitesse du prototype, allongé avec le ralenti de l'orbe (GD). */
-  finalSlowmoLeadSeconds: 0.4 / ORB_PHYSICS.slowdown,
+  /**
+   * Avance du ralenti final, en temps de jeu : 0,25 s, soit 1 s réelle au ralenti 0,25 ; avec
+   * 0,5 s réelle après le contact, le final dure ~1,5 s réelle (plafond GD). À 0,53 s, le
+   * ralenti finissait avant l'impact (QA ch.3-5, double ralenti).
+   */
+  finalSlowmoLeadSeconds: 0.25,
   idleFirstSeconds: 8,
   idleRepeatSeconds: 12,
 };

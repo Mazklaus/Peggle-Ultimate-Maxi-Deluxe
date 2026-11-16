@@ -92,8 +92,13 @@ const WALL_THICKNESS = 40;
 const RESULTS_DELAY_MS = 1400;
 /** Échec : overlay « Encore » 400 ms après la sortie du dernier orbe (specs UI/UX 6). */
 const FAIL_DELAY_MS = 400;
-/** Final au ralenti (GD) : tout le jeu à 0,25 pendant 1,5 s réelles au maximum. */
-const SLOWMO = { scale: 0.25, maxRealMs: 1500 };
+/**
+ * Final au ralenti (GD) : tout le jeu à 0,25, ~1,5 s réelle. Le ralenti tient jusqu'au contact
+ * du dernier cœur (prévu 0,25 s de jeu avant, ~1 s réelle), puis afterContactMs réelles.
+ * safetyGameMs : filet en temps SIMULÉ si la prédiction se trompe (un délai réel finissait
+ * avant l'impact quand la fréquence d'images baisse, QA ch.3-5).
+ */
+const SLOWMO = { scale: 0.25, afterContactMs: 500, safetyGameMs: 600 };
 /** Gel d'image au contact du dernier cœur non anticipé (cas lent, demande GD), avant le ralenti. */
 const FINAL_HIT_STOP_MS = 80;
 /** Onde de choc de Bourdon : rayon (px) et durée de propagation (s). */
@@ -249,6 +254,8 @@ export class GameScene extends Phaser.Scene {
   private breakdown = new ScoreBreakdown();
   private companion?: CompanionView;
   private slowmoUntil = 0;
+  /** Fin de secours du ralenti prévu, en horloge physique (0 = aucune). */
+  private slowmoSafetyAt = 0;
   /** Fin (horloge réelle) du gel d'image du final ; 0 = pas de gel. */
   private hitStopUntil = 0;
   private gameScale = 1;
@@ -299,6 +306,7 @@ export class GameScene extends Phaser.Scene {
     this.twin = undefined;
     this.ending = false;
     this.slowmoUntil = 0;
+    this.slowmoSafetyAt = 0;
     this.hitStopUntil = 0;
     this.finalShot = false;
     this.finalZonesGfx = undefined;
@@ -972,7 +980,8 @@ export class GameScene extends Phaser.Scene {
     if (this.decor.active && this.decor.mayCross(path, contactStep / 60, heart.id, ORB_RADIUS))
       return null;
     // Un portail sur le trajet : la prédiction s'abstient (le vrai contact relance le ralenti).
-    if (this.decor.touchesPortal(path)) return null;
+    // Marge : rayon de l'orbe, plus autant pour les variantes de robustContactStep.
+    if (this.decor.touchesPortal(path, ORB_RADIUS * 2)) return null;
     return contactStep / 60;
   }
 
@@ -1092,7 +1101,14 @@ export class GameScene extends Phaser.Scene {
   private startSlowmo(): void {
     if (this.slowmoUntil > 0) return;
     // Après un gel d'image, le ralenti dure tout son temps une fois le jeu reparti.
-    this.slowmoUntil = Math.max(this.time.now, this.hitStopUntil) + SLOWMO.maxRealMs;
+    if (isFinalHeartLit(this.level)) {
+      this.slowmoUntil = Math.max(this.time.now, this.hitStopUntil) + SLOWMO.afterContactMs;
+      this.slowmoSafetyAt = 0;
+    } else {
+      // Contact prévu : le ralenti tient jusqu'à l'impact (filet en temps simulé).
+      this.slowmoUntil = Number.MAX_SAFE_INTEGER;
+      this.slowmoSafetyAt = this.physClock() + SLOWMO.safetyGameMs;
+    }
     this.applyGameScale(SLOWMO.scale);
   }
 
@@ -1103,7 +1119,9 @@ export class GameScene extends Phaser.Scene {
   }
 
   private updateSlowmo(now: number): void {
-    if (this.slowmoUntil > 0 && now >= this.slowmoUntil) {
+    const missed = this.slowmoSafetyAt > 0 && this.physClock() >= this.slowmoSafetyAt;
+    if (this.slowmoUntil > 0 && (now >= this.slowmoUntil || missed)) {
+      this.slowmoSafetyAt = 0;
       this.slowmoUntil = -1; // une seule fois par tir
       this.applyGameScale(this.warpUntil > 0 ? HORLOGE.scale : 1);
     }
@@ -1302,6 +1320,7 @@ export class GameScene extends Phaser.Scene {
     this.crazyLeft = 0;
     this.chain = 0;
     this.slowmoUntil = 0;
+    this.slowmoSafetyAt = 0;
     this.stuckRef = { x: start.x, y: start.y, t: this.physClock() };
     this.stuckNudges = 0;
     this.stuckAnnounced = false;
@@ -1353,11 +1372,17 @@ export class GameScene extends Phaser.Scene {
     if (crystal.kind === 'power' && this.companionId === 'bourdon') this.shockwave(crystal);
     if (crystal.kind === 'power' && this.companionId === 'jumelles' && by) this.splitOrb(by);
     if (crystal.kind === 'power' && this.companionId === 'volte') this.startCrazyBounce();
-    if (isFinalHeartLit(this.level)) {
+    // Seulement au contact du dernier cœur lui-même : les cristaux touchés ensuite (le niveau
+    // reste « dernier cœur allumé » jusqu'à la fin du tir) ne relancent ni gel ni final (QA).
+    if (crystal.kind === 'heart' && isFinalHeartLit(this.level)) {
       // Filet de sécurité : le dernier cœur touché sans prédiction préalable.
       // Pas encore de ralenti, ou un ralenti déjà terminé pendant ce tir : petit gel
       // d'image, l'Astre réagit, puis le ralenti part pour le vrai contact.
-      if (this.slowmoUntil <= 0) {
+      if (this.slowmoUntil > 0) {
+        // Ralenti prévu en cours : il tient encore un peu après l'impact, sans 2e final.
+        this.slowmoUntil = this.time.now + SLOWMO.afterContactMs;
+        this.slowmoSafetyAt = 0;
+      } else {
         this.slowmoUntil = 0;
         this.startHitStop();
         this.emitAll(['final_ralenti']);
