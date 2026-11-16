@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { GAME_HEIGHT, GAME_WIDTH } from '../config';
-import { SCENES } from './keys';
+import { markSeen, writeSave, type SaveData } from '../core/save';
+import { REGISTRY, SCENES } from './keys';
 import { PALETTE, textStyle, TEXT } from './theme';
 import { button } from './widgets';
 
@@ -33,7 +34,14 @@ export class TitleScene extends Phaser.Scene {
     this.add
       .text(GAME_WIDTH / 2, 300, 'Rallume le ciel, un rebond à la fois', textStyle(22, TEXT.dim))
       .setOrigin(0.5);
-    const start = () => this.scene.start(SCENES.map);
+    const start = () => {
+      // Intro en vignettes au premier « Jouer » seulement.
+      const save = this.registry.get(REGISTRY.save) as SaveData | undefined;
+      if (save && markSeen(save, 'intro')) {
+        writeSave(save);
+        this.scene.start(SCENES.cutscene, { sequence: 'intro', next: { scene: SCENES.map } });
+      } else this.scene.start(SCENES.map);
+    };
     button(this, GAME_WIDTH / 2, 450, 'Jouer', start, { primary: true, size: 30, width: 260 });
     this.input.keyboard?.once('keydown-SPACE', start);
     this.input.keyboard?.once('keydown-ENTER', start);

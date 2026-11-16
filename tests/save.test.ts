@@ -4,6 +4,7 @@ import {
   failsBeforeFirstWin,
   isUnlocked,
   loadSave,
+  markSeen,
   recordResult,
   SAVE_KEY,
   writeSave,
@@ -84,5 +85,22 @@ describe('starsFor', () => {
     expect(starsFor(50, [100, 200], true)).toBe(1);
     expect(starsFor(100, [100, 200], true)).toBe(2);
     expect(starsFor(200, [100, 200], true)).toBe(3);
+  });
+});
+
+describe('cinématiques vues (seen)', () => {
+  it('une sauvegarde sans champ seen se charge avec seen = {}', () => {
+    const old = { version: 1, levels: {}, options: {}, scoreLog: [] };
+    const storage = { getItem: () => JSON.stringify(old), setItem: () => undefined };
+    expect(loadSave(storage).seen).toEqual({});
+  });
+
+  it('markSeen ne renvoie true que la première fois et survit à la sauvegarde', () => {
+    const save = emptySave();
+    expect(markSeen(save, 'intro')).toBe(true);
+    expect(markSeen(save, 'intro')).toBe(false);
+    let stored = '';
+    writeSave(save, { getItem: () => null, setItem: (_k, v) => (stored = v) });
+    expect(loadSave({ getItem: () => stored, setItem: () => undefined }).seen.intro).toBe(true);
   });
 });
