@@ -36,6 +36,8 @@ export interface SaveData {
   levels: Record<string, LevelRecord>;
   options: Options;
   scoreLog: ScoreLogEntry[];
+  /** Cinématiques déjà vues (intro, reveil_pip, fin_ch1…). */
+  seen: Record<string, boolean>;
 }
 
 export interface KeyValueStorage {
@@ -51,7 +53,13 @@ export const DEFAULT_OPTIONS: Options = {
 };
 
 export function emptySave(): SaveData {
-  return { version: SAVE_VERSION, levels: {}, options: { ...DEFAULT_OPTIONS }, scoreLog: [] };
+  return {
+    version: SAVE_VERSION,
+    levels: {},
+    options: { ...DEFAULT_OPTIONS },
+    scoreLog: [],
+    seen: {},
+  };
 }
 
 /** Stockage du navigateur s'il est utilisable (navigation privée, iframe…), sinon null. */
@@ -76,6 +84,8 @@ export function loadSave(storage: KeyValueStorage | null = browserStorage()): Sa
       levels: typeof data.levels === 'object' && data.levels ? data.levels : {},
       options: { ...DEFAULT_OPTIONS, ...(data.options ?? {}) },
       scoreLog: Array.isArray(data.scoreLog) ? data.scoreLog : [],
+      // Champ ajouté après la v1 : absent des anciennes sauvegardes.
+      seen: typeof data.seen === 'object' && data.seen ? data.seen : {},
     };
   } catch {
     return emptySave();
@@ -118,6 +128,13 @@ export function recordResult(
   if (save.scoreLog.length > SCORE_LOG_MAX)
     save.scoreLog.splice(0, save.scoreLog.length - SCORE_LOG_MAX);
   return rec;
+}
+
+/** Marque une cinématique comme vue ; renvoie true si c'était la première fois. */
+export function markSeen(save: SaveData, id: string): boolean {
+  if (save.seen[id]) return false;
+  save.seen[id] = true;
+  return true;
 }
 
 /** Un niveau est débloqué si c'est le premier de la liste ou si le précédent est fini. */

@@ -4,3 +4,4 @@ coverage
 package-lock.json
 # Niveaux : format canonique de serializeLevel (un peg par ligne)
 public/levels
+public/da

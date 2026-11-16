@@ -20,7 +20,7 @@ import type { LevelData } from '../core/levelFormat';
 import { levelFromData } from '../core/levelSetup';
 import { FINAL_ZONES, finalZoneAt } from '../core/finalZones';
 import { PIP_POWER, RevealCharges } from '../core/powers';
-import type { SaveData } from '../core/save';
+import { markSeen, writeSave, type SaveData } from '../core/save';
 import {
   ShotTracker,
   edgeDistance,
@@ -29,7 +29,7 @@ import {
 } from '../core/shotEvents';
 import { aimGuide, predictPath } from '../core/trajectory';
 import { TUNING } from '../core/tuning';
-import { REGISTRY, SCENES } from './keys';
+import { REGISTRY, SCENES, STORY_LEVELS } from './keys';
 import { CompanionView } from './CompanionView';
 import type { ResultsData } from './ResultsScene';
 import { CRYSTAL_COLORS, CRYSTAL_COLORS_CB, PALETTE, textStyle, TEXT } from './theme';
@@ -100,6 +100,8 @@ export class GameScene extends Phaser.Scene {
   private finalShot = false;
   private finalZonesGfx?: Phaser.GameObjects.Container;
   private debugForceFinal = false;
+  /** create() a lancé une cinématique à la place du niveau. */
+  private redirecting = false;
   private chargeDots?: Phaser.GameObjects.Graphics;
 
   constructor() {
@@ -111,6 +113,23 @@ export class GameScene extends Phaser.Scene {
   }
 
   create(): void {
+    // Réveil de Pip (vignette B0) au tout premier lancement du 1-1.
+    const firstSave = this.registry.get(REGISTRY.save) as SaveData | undefined;
+    if (
+      !this.sceneData.test &&
+      this.sceneData.level.id === STORY_LEVELS.ch1First &&
+      firstSave &&
+      markSeen(firstSave, 'reveil_pip')
+    ) {
+      writeSave(firstSave);
+      this.redirecting = true;
+      this.scene.start(SCENES.cutscene, {
+        sequence: 'reveil_pip',
+        next: { scene: SCENES.game, data: this.sceneData },
+      });
+      return;
+    }
+    this.redirecting = false;
     this.views.clear();
     this.orb = undefined;
     this.ending = false;
@@ -196,6 +215,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   update(time: number, realDelta: number): void {
+    if (this.redirecting) return;
     this.updateSlowmo(time);
     const delta = realDelta * this.gameScale;
     this.moveBucket(delta);
